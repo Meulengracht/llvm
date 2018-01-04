@@ -16,7 +16,7 @@
 
 #include "llvm/ADT/StringMap.h"
 
-#if defined(__linux__) || defined(__GNU__) || defined(__HAIKU__)
+#if defined(__linux__) || defined(__GNU__) || defined(__HAIKU__) || defined(MOLLENOS)
 #include <endian.h>
 #elif defined(_AIX)
 #include <sys/machine.h>
