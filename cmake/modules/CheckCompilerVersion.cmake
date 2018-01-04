@@ -29,6 +29,9 @@ if(NOT DEFINED LLVM_COMPILER_CHECKED)
         set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
         set(OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
         set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++0x")
+        if(MOLLENOS)
+          set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${CMAKE_CXX_FLAGS} -S")
+        endif()
         check_cxx_source_compiles("
 #include <atomic>
 std::atomic<float> x(0.0f);
