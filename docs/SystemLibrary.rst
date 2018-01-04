@@ -223,6 +223,9 @@ functionality needs to include the correct implementation using a set of
   #if defined(_WIN32)
   #include "Win32/File.cpp"
   #endif
+  #if defined(LLVM_ON_VALI)
+  #include "Vali/File.cpp"
+  #endif
 
 The implementation in ``lib/System/Unix/File.cpp`` should handle all Unix
 variants. The implementation in ``lib/System/Win32/File.cpp`` should handle all

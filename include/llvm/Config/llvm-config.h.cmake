@@ -56,6 +56,9 @@
 /* Define if this is Unixish platform */
 #cmakedefine LLVM_ON_UNIX ${LLVM_ON_UNIX}
 
+/* Define if this is Valiish platform */
+#cmakedefine LLVM_ON_VALI ${LLVM_ON_VALI}
+
 /* Define if we have the Intel JIT API runtime support library */
 #cmakedefine01 LLVM_USE_INTEL_JITEVENTS
 

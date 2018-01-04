@@ -296,6 +296,9 @@
 /* Define if zlib compression is available */
 #cmakedefine01 LLVM_ENABLE_ZLIB
 
+/* Define if this is Valish platform */
+#cmakedefine LLVM_ON_VALI ${LLVM_ON_VALI}
+
 /* Define if overriding target triple is enabled */
 #cmakedefine LLVM_TARGET_TRIPLE_ENV "${LLVM_TARGET_TRIPLE_ENV}"
 

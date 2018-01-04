@@ -170,6 +170,13 @@ protected:
   uint32_t LastWriteTimeLow = 0;
   uint32_t FileSizeHigh = 0;
   uint32_t FileSizeLow = 0;
+  #elif defined (LLVM_ON_VALI)
+  uint32_t LastAccessedTimeHigh = 0;
+  uint32_t LastAccessedTimeLow = 0;
+  uint32_t LastWriteTimeHigh = 0;
+  uint32_t LastWriteTimeLow = 0;
+  uint32_t FileSizeHigh = 0;
+  uint32_t FileSizeLow = 0;
   #endif
   file_type Type = file_type::status_error;
   perms Perms = perms_not_known;
@@ -185,6 +192,16 @@ public:
       : fs_st_atime(ATime), fs_st_mtime(MTime), fs_st_uid(UID), fs_st_gid(GID),
         fs_st_size(Size), Type(Type), Perms(Perms) {}
 #elif defined(_WIN32)
+  basic_file_status(file_type Type, perms Perms, uint32_t LastAccessTimeHigh,
+                    uint32_t LastAccessTimeLow, uint32_t LastWriteTimeHigh,
+                    uint32_t LastWriteTimeLow, uint32_t FileSizeHigh,
+                    uint32_t FileSizeLow)
+      : LastAccessedTimeHigh(LastAccessTimeHigh),
+        LastAccessedTimeLow(LastAccessTimeLow),
+        LastWriteTimeHigh(LastWriteTimeHigh),
+        LastWriteTimeLow(LastWriteTimeLow), FileSizeHigh(FileSizeHigh),
+        FileSizeLow(FileSizeLow), Type(Type), Perms(Perms) {}
+#elif defined(LLVM_ON_VALI)
   basic_file_status(file_type Type, perms Perms, uint32_t LastAccessTimeHigh,
                     uint32_t LastAccessTimeLow, uint32_t LastWriteTimeHigh,
                     uint32_t LastWriteTimeLow, uint32_t FileSizeHigh,
@@ -218,6 +235,18 @@ public:
   uint64_t getSize() const {
     return (uint64_t(FileSizeHigh) << 32) + FileSizeLow;
   }
+  #elif defined (LLVM_ON_VALI)
+  uint32_t getUser() const {
+    return 9999; // Not applicable to Windows, so...
+  }
+
+  uint32_t getGroup() const {
+    return 9999; // Not applicable to Windows, so...
+  }
+
+  uint64_t getSize() const {
+    return (uint64_t(FileSizeHigh) << 32) + FileSizeLow;
+  }
   #endif
 
   // setters
@@ -238,6 +267,11 @@ class file_status : public basic_file_status {
   uint32_t VolumeSerialNumber = 0;
   uint32_t FileIndexHigh = 0;
   uint32_t FileIndexLow = 0;
+  #elif defined (LLVM_ON_VALI)
+  uint32_t NumLinks = 0;
+  uint32_t VolumeSerialNumber = 0;
+  uint32_t FileIndexHigh = 0;
+  uint32_t FileIndexLow = 0;
   #endif
 
 public:
@@ -251,6 +285,18 @@ public:
       : basic_file_status(Type, Perms, ATime, MTime, UID, GID, Size),
         fs_st_dev(Dev), fs_st_nlinks(Links), fs_st_ino(Ino) {}
   #elif defined(_WIN32)
+  file_status(file_type Type, perms Perms, uint32_t LinkCount,
+              uint32_t LastAccessTimeHigh, uint32_t LastAccessTimeLow,
+              uint32_t LastWriteTimeHigh, uint32_t LastWriteTimeLow,
+              uint32_t VolumeSerialNumber, uint32_t FileSizeHigh,
+              uint32_t FileSizeLow, uint32_t FileIndexHigh,
+              uint32_t FileIndexLow)
+      : basic_file_status(Type, Perms, LastAccessTimeHigh, LastAccessTimeLow,
+                          LastWriteTimeHigh, LastWriteTimeLow, FileSizeHigh,
+                          FileSizeLow),
+        NumLinks(LinkCount), VolumeSerialNumber(VolumeSerialNumber),
+        FileIndexHigh(FileIndexHigh), FileIndexLow(FileIndexLow) {}
+  #elif defined(LLVM_ON_VALI)
   file_status(file_type Type, perms Perms, uint32_t LinkCount,
               uint32_t LastAccessTimeHigh, uint32_t LastAccessTimeLow,
               uint32_t LastWriteTimeHigh, uint32_t LastWriteTimeLow,
