@@ -33,6 +33,9 @@
 #ifdef LLVM_ON_WIN32
 #include "Windows/Host.inc"
 #endif
+#ifdef LLVM_ON_VALI
+#include "Vali/Host.inc"
+#endif
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif

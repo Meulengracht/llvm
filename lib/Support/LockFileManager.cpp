@@ -30,6 +30,9 @@
 #if LLVM_ON_UNIX
 #include <unistd.h>
 #endif
+#if LLVM_ON_VALI
+#include <threads.h>
+#endif
 
 #if defined(__APPLE__) && defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && (__MAC_OS_X_VERSION_MIN_REQUIRED > 1050)
 #define USE_OSX_GETHOSTUUID 1
@@ -295,6 +298,8 @@ LockFileManager::WaitForUnlockResult LockFileManager::waitForUnlock() {
     // lock file is deleted?
 #if LLVM_ON_WIN32
     Sleep(Interval);
+#elif LLVM_ON_VALI
+    thrd_sleep(&Interval, &Interval);
 #else
     nanosleep(&Interval, nullptr);
 #endif

@@ -43,6 +43,8 @@ void ThreadLocalImpl::removeInstance() {
 #include "Unix/ThreadLocal.inc"
 #elif defined( LLVM_ON_WIN32)
 #include "Windows/ThreadLocal.inc"
+#elif defined(LLVM_ON_VALI)
+#include "Vali/ThreadLocal.inc"
 #else
-#warning Neither LLVM_ON_UNIX nor LLVM_ON_WIN32 set in Support/ThreadLocal.cpp
+#warning Neither LLVM_ON_UNIX nor LLVM_ON_WIN32 or LLVM_ON_VALI set in Support/ThreadLocal.cpp
 #endif

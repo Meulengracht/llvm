@@ -70,3 +70,6 @@ ProcessInfo sys::ExecuteNoWait(StringRef Program, const char **Args,
 #ifdef LLVM_ON_WIN32
 #include "Windows/Program.inc"
 #endif
+#ifdef LLVM_ON_VALI
+#include "Vali/Program.inc"
+#endif

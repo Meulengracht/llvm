@@ -29,12 +29,16 @@ namespace sys {
   const char EnvPathSeparator = ':';
 #elif defined (LLVM_ON_WIN32)
   const char EnvPathSeparator = ';';
+#elif defined (LLVM_ON_VALI)
+  const char EnvPathSeparator = ';';
 #endif
 
 /// @brief This struct encapsulates information about a process.
 struct ProcessInfo {
 #if defined(LLVM_ON_UNIX)
   typedef pid_t ProcessId;
+#if defined(LLVM_ON_VALI)
+  typedef UUId_t ProcessId;
 #elif defined(LLVM_ON_WIN32)
   typedef unsigned long ProcessId; // Must match the type of DWORD on Windows.
   typedef void * HANDLE; // Must match the type of HANDLE on Windows.
