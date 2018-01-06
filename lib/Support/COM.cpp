@@ -20,4 +20,6 @@
 #include "Unix/COM.inc"
 #elif _WIN32
 #include "Windows/COM.inc"
+#elif LLVM_ON_VALI
+#include "Vali/COM.inc"
 #endif

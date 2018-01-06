@@ -33,7 +33,7 @@ static inline struct tm getStructTM(TimePoint<> TP) {
   (void)LT;
 #endif
 
-#if defined(WIN32) || defined(LLVM_ON_VALI)
+#if defined(_WIN32) || defined(LLVM_ON_VALI)
   int Error = ::localtime_s(&Storage, &OurTime);
   assert(!Error);
   (void)Error;

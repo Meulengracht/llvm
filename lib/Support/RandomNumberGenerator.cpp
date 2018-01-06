@@ -19,6 +19,8 @@
 #include "llvm/Support/raw_ostream.h"
 #ifdef _WIN32
 #include "Windows/WindowsSupport.h"
+#elif defined(LLVM_ON_VALI)
+#include <cstdlib>
 #else
 #include "Unix/Unix.h"
 #endif
@@ -70,6 +72,11 @@ std::error_code llvm::getRandomBytes(void *Buffer, size_t Size) {
       return std::error_code();
   }
   return std::error_code(GetLastError(), std::system_category());
+#elif defined(LLVM_ON_VALI)
+  unsigned char *BufferPointer = (unsigned char*)Buffer;
+  for (size_t i = 0; i < Size; i++, BufferPointer++) {
+      BufferPointer[i] = (unsigned char)(::rand() % 256);
+  }
 #else
   int Fd = open("/dev/urandom", O_RDONLY);
   if (Fd != -1) {

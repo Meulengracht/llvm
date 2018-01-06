@@ -37,7 +37,7 @@ bool llvm::llvm_is_multithreaded() {
 }
 
 #if LLVM_ENABLE_THREADS == 0 ||                                                \
-    (!defined(_WIN32) && !defined(HAVE_PTHREAD_H))
+    (!(defined(_WIN32) || defined(LLVM_ON_VALI)) && !defined(HAVE_PTHREAD_H))
 // Support for non-Win32, non-pthread implementation.
 void llvm::llvm_execute_on_thread(void (*Fn)(void *), void *UserData,
                                   unsigned RequestedStackSize) {
@@ -91,6 +91,9 @@ unsigned llvm::hardware_concurrency() {
 #endif
 #ifdef _WIN32
 #include "Windows/Threading.inc"
+#endif
+#ifdef LLVM_ON_VALI
+#include "Vali/Threading.inc"
 #endif
 
 #endif

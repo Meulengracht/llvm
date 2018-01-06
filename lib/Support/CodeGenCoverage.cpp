@@ -24,6 +24,8 @@
 #include <unistd.h>
 #elif _WIN32
 #include <windows.h>
+#elif LLVM_ON_VALI
+#include <os/process.h>
 #endif
 
 using namespace llvm;
@@ -95,6 +97,8 @@ bool CodeGenCoverage::emit(StringRef CoveragePrefix,
         llvm::to_string(::getpid());
 #elif _WIN32
         llvm::to_string(::GetCurrentProcessId());
+#elif LLVM_ON_VALI
+        llvm::to_string(::ProcessGetCurrentId());
 #else
         "";
 #endif

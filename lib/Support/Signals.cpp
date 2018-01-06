@@ -157,7 +157,7 @@ static bool printSymbolizedStackTrace(StringRef Argv0, void **StackTrace,
   Optional<StringRef> Redirects[] = {StringRef(InputFile),
                                      StringRef(OutputFile), llvm::None};
   StringRef Args[] = {"llvm-symbolizer", "--functions=linkage", "--inlining",
-#ifdef _WIN32
+#ifdef _WIN32 || defined(LLVM_ON_VALI)
                       // Pass --relative-address on Windows so that we don't
                       // have to add ImageBase from PE file.
                       // FIXME: Make this the default for llvm-symbolizer.
@@ -215,3 +215,7 @@ static bool printSymbolizedStackTrace(StringRef Argv0, void **StackTrace,
 #ifdef _WIN32
 #include "Windows/Signals.inc"
 #endif
+#ifdef LLVM_ON_VALI
+#include "Vali/Signals.inc"
+#endif
+

@@ -125,6 +125,10 @@ static llvm::ManagedStatic<llvm::sys::SmartMutex<true>> SymbolsMutex;
 
 #include "Windows/DynamicLibrary.inc"
 
+#elif LLVM_ON_VALI
+
+#include "Vali/DynamicLibrary.inc"
+
 #else
 
 #include "Unix/DynamicLibrary.inc"

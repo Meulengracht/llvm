@@ -46,6 +46,10 @@
 #include <io.h>
 #endif
 
+#if defined(MOLLENOS)
+#include <io.h>
+#endif
+
 #if defined(_MSC_VER)
 #include <io.h>
 #ifndef STDIN_FILENO
@@ -677,6 +681,8 @@ uint64_t raw_fd_ostream::seek(uint64_t off) {
   flush();
 #ifdef _WIN32
   pos = ::_lseeki64(FD, off, SEEK_SET);
+#ifdef LLVM_ON_VALI
+  pos = ::_lseeki64(FD, off, SEEK_SET);
 #elif defined(HAVE_LSEEK64)
   pos = ::lseek64(FD, off, SEEK_SET);
 #else
@@ -696,7 +702,7 @@ void raw_fd_ostream::pwrite_impl(const char *Ptr, size_t Size,
 }
 
 size_t raw_fd_ostream::preferred_buffer_size() const {
-#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__minix)
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(__minix) && !defined(MOLLENOS)
   // Windows and Minix have no st_blksize.
   assert(FD >= 0 && "File not yet open!");
   struct stat statbuf;

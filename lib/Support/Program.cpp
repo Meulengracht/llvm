@@ -81,3 +81,6 @@ bool sys::commandLineFitsWithinSystemLimits(StringRef Program,
 #ifdef _WIN32
 #include "Windows/Program.inc"
 #endif
+#ifdef LLVM_ON_VALI
+#include "Vali/Program.inc"
+#endif
