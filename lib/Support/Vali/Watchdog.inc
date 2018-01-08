@@ -1,4 +1,4 @@
-//===--- Unix/Watchdog.inc - Unix Watchdog Implementation -------*- C++ -*-===//
+//===--- Vali/Watchdog.inc - Vali Watchdog Implementation -------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,26 +7,18 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file provides the generic Unix implementation of the Watchdog class.
+// This file provides the generic Vali implementation of the Watchdog class.
 //
 //===----------------------------------------------------------------------===//
-
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
 
 namespace llvm {
   namespace sys {
     Watchdog::Watchdog(unsigned int seconds) {
-#ifdef HAVE_UNISTD_H
-      alarm(seconds);
-#endif
+      //alarm(seconds);
     }
 
     Watchdog::~Watchdog() {
-#ifdef HAVE_UNISTD_H
-      alarm(0);
-#endif
+      //alarm(0);
     }
   }
 }

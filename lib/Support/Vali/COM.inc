@@ -1,4 +1,4 @@
-//===- llvm/Support/Unix/COM.inc - Vali COM Implementation -----*- C++ -*-===//
+//===- llvm/Support/Vali/COM.inc - Vali COM Implementation -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //

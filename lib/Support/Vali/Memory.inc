@@ -1,4 +1,4 @@
-//===- Win32/Memory.cpp - Win32 Memory Implementation -----------*- C++ -*-===//
+//===- Vali/Memory.cpp - Vali Memory Implementation -----------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file provides the Win32 specific implementation of various Memory
+// This file provides the Vali specific implementation of various Memory
 // management utilities
 //
 //===----------------------------------------------------------------------===//
@@ -15,46 +15,31 @@
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Process.h"
-#include "llvm/Support/WindowsError.h"
-
-// The Windows.h header must be the last one included.
-#include "WindowsSupport.h"
+#include <os/mollenos.h>
 
 namespace {
 
-DWORD getWindowsProtectionFlags(unsigned Flags) {
-  switch (Flags) {
-  // Contrary to what you might expect, the Windows page protection flags
-  // are not a bitwise combination of RWX values
-  case llvm::sys::Memory::MF_READ:
-    return PAGE_READONLY;
-  case llvm::sys::Memory::MF_WRITE:
-    // Note: PAGE_WRITE is not supported by VirtualProtect
-    return PAGE_READWRITE;
-  case llvm::sys::Memory::MF_READ|llvm::sys::Memory::MF_WRITE:
-    return PAGE_READWRITE;
-  case llvm::sys::Memory::MF_READ|llvm::sys::Memory::MF_EXEC:
-    return PAGE_EXECUTE_READ;
-  case llvm::sys::Memory::MF_READ |
-         llvm::sys::Memory::MF_WRITE |
-         llvm::sys::Memory::MF_EXEC:
-    return PAGE_EXECUTE_READWRITE;
-  case llvm::sys::Memory::MF_EXEC:
-    return PAGE_EXECUTE;
-  default:
-    llvm_unreachable("Illegal memory protection flag specified!");
-  }
-  // Provide a default return value as required by some compilers.
-  return PAGE_NOACCESS;
+Flags_t getValiProtectionFlags(unsigned Flags) {
+    Flags_t Result = 0;
+    if (Flags & llvm::sys::Memory::MF_READ) {
+        Result |= MEMORY_READ;
+    }
+    if (Flags & llvm::sys::Memory::MF_WRITE) {
+        Result |= MEMORY_WRITE;
+    }
+    if (Flags & llvm::sys::Memory::MF_EXEC) {
+        Result |= MEMORY_EXECUTABLE;
+    }
+    return Result;
 }
 
-size_t getAllocationGranularity() {
-  SYSTEM_INFO  Info;
-  ::GetSystemInfo(&Info);
-  if (Info.dwPageSize > Info.dwAllocationGranularity)
-    return Info.dwPageSize;
-  else
-    return Info.dwAllocationGranularity;
+size_t getPageSize() {
+    MemoryDescriptor_t Descriptor;
+    if (MemoryQuery(&Descriptor) != OsSuccess) {
+        // Default to 0x1000
+        return 0x1000;
+    }
+    return Descriptor.PageSizeBytes;
 }
 
 } // namespace
@@ -83,7 +68,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   static volatile size_t GranularityCached;
   size_t Granularity = GranularityCached;
   if (Granularity == 0) {
-    Granularity = getAllocationGranularity();
+    Granularity = getPageSize();
     GranularityCached = Granularity;
   }
 
@@ -98,17 +83,11 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (Start && Start % Granularity != 0)
     Start += Granularity - Start % Granularity;
 
-  DWORD Protect = getWindowsProtectionFlags(Flags);
+  Flags_t Protect = getValiProtectionFlags(Flags);
 
-  void *PA = ::VirtualAlloc(reinterpret_cast<void*>(Start),
-                            NumBlocks*Granularity,
-                            MEM_RESERVE | MEM_COMMIT, Protect);
-  if (PA == NULL) {
-    if (NearBlock) {
-      // Try again without the NearBlock hint
-      return allocateMappedMemory(NumBytes, NULL, Flags, EC);
-    }
-    EC = mapWindowsError(::GetLastError());
+  if (::MemoryAllocate(reinterpret_cast<void*>(Start),
+                            NumBlocks*Granularity, MEMORY_COMMIT | Protect, 
+                            &PA, NULL) != OsSuccess) {
     return MemoryBlock();
   }
 
@@ -126,8 +105,8 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (M.Address == 0 || M.Size == 0)
     return std::error_code();
 
-  if (!VirtualFree(M.Address, 0, MEM_RELEASE))
-    return mapWindowsError(::GetLastError());
+  if (MemoryFree(M.Address, M.Size) != OsSuccess)
+    return std::error_code();
 
   M.Address = 0;
   M.Size = 0;
@@ -140,11 +119,10 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (M.Address == 0 || M.Size == 0)
     return std::error_code();
 
-  DWORD Protect = getWindowsProtectionFlags(Flags);
-
-  DWORD OldFlags;
-  if (!VirtualProtect(M.Address, M.Size, Protect, &OldFlags))
-    return mapWindowsError(::GetLastError());
+  Flags_t Protect = getValiProtectionFlags(Flags);
+  Flags_t Previous = 0;
+  if (MemoryProtect(M.Address, M.Size, Protect, &OldFlags) != OsSuccess)
+    return std::error_code();
 
   if (Flags & MF_EXEC)
     Memory::InvalidateInstructionCache(M.Address, M.Size);
@@ -155,9 +133,8 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 /// InvalidateInstructionCache - Before the JIT can run a block of code
 /// that has been emitted it must invalidate the instruction cache on some
 /// platforms.
-void Memory::InvalidateInstructionCache(
-    const void *Addr, size_t Len) {
-  FlushInstructionCache(GetCurrentProcess(), Addr, Len);
+void Memory::InvalidateInstructionCache(const void *Addr, size_t Len) {
+  FlushHardwareCache(CACHE_INSTRUCTION, Addr, Len);
 }
 
 } // namespace sys

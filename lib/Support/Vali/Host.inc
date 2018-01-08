@@ -1,4 +1,4 @@
-//===- llvm/Support/Win32/Host.inc ------------------------------*- C++ -*-===//
+//===- llvm/Support/Vali/Host.inc ------------------------------*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,11 +7,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the Win32 Host support.
+// This file implements the Vali Host support.
 //
 //===----------------------------------------------------------------------===//
-
-#include "WindowsSupport.h"
 #include <cstdio>
 #include <string>
 

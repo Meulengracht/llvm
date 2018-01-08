@@ -1,4 +1,4 @@
-//=== llvm/Support/Unix/ThreadLocal.inc - Unix Thread Local Data -*- C++ -*-===//
+//=== llvm/Support/Vali/ThreadLocal.inc - Vali Thread Local Data -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,49 +7,36 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the Unix specific (non-pthread) ThreadLocal class.
+// This file implements the Vali specific ThreadLocal class.
 //
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
-//=== WARNING: Implementation here must contain only generic UNIX code that
-//===          is guaranteed to work on *all* UNIX variants.
-//===----------------------------------------------------------------------===//
-
-#if defined(HAVE_PTHREAD_H) && defined(HAVE_PTHREAD_GETSPECIFIC)
-
 #include <cassert>
-#include <pthread.h>
+#include <threads.h>
 #include <stdlib.h>
 
 namespace llvm {
 using namespace sys;
 
 ThreadLocalImpl::ThreadLocalImpl() : data() {
-  static_assert(sizeof(pthread_key_t) <= sizeof(data), "size too big");
-  pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
-  int errorcode = pthread_key_create(key, nullptr);
-  assert(errorcode == 0);
-  (void) errorcode;
+  static_assert(sizeof(tss_t) <= sizeof(data), "size too big");
+  tss_t* key = reinterpret_cast<tss_t*>(&data);
+  assert(tss_create(key, nullptr) == thrd_success);
 }
 
 ThreadLocalImpl::~ThreadLocalImpl() {
   pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
-  int errorcode = pthread_key_delete(*key);
-  assert(errorcode == 0);
-  (void) errorcode;
+  tss_delete(*key);
 }
 
 void ThreadLocalImpl::setInstance(const void* d) {
   pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
-  int errorcode = pthread_setspecific(*key, d);
-  assert(errorcode == 0);
-  (void) errorcode;
+  assert(tss_set(*key, d) == thrd_success);
 }
 
 void *ThreadLocalImpl::getInstance() {
   pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
-  return pthread_getspecific(*key);
+  return tss_get(*key);
 }
 
 void ThreadLocalImpl::removeInstance() {
@@ -57,13 +44,3 @@ void ThreadLocalImpl::removeInstance() {
 }
 
 }
-#else
-namespace llvm {
-using namespace sys;
-ThreadLocalImpl::ThreadLocalImpl() : data() { }
-ThreadLocalImpl::~ThreadLocalImpl() { }
-void ThreadLocalImpl::setInstance(const void* d) { data = const_cast<void*>(d);}
-void *ThreadLocalImpl::getInstance() { return data; }
-void ThreadLocalImpl::removeInstance() { setInstance(0); }
-}
-#endif
