@@ -477,57 +477,26 @@ ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
   return WaitResult;
 }
 
-std::error_code sys::ChangeStdinToBinary() {
-  int result = _setmode(_fileno(stdin), _O_BINARY);
-  if (result == -1)
-    return std::error_code(errno, std::generic_category());
-  return std::error_code();
+  std::error_code sys::ChangeStdinToBinary(){
+  // Do nothing, as Vali doesn't differentiate between text and binary.
+    return std::error_code();
 }
 
-std::error_code sys::ChangeStdoutToBinary() {
-  int result = _setmode(_fileno(stdout), _O_BINARY);
-  if (result == -1)
-    return std::error_code(errno, std::generic_category());
-  return std::error_code();
+  std::error_code sys::ChangeStdoutToBinary(){
+  // Do nothing, as Vali doesn't differentiate between text and binary.
+    return std::error_code();
 }
 
 std::error_code
 llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
-                                 WindowsEncodingMethod Encoding) {
+                                 WindowsEncodingMethod Encoding /*unused*/) {
   std::error_code EC;
   llvm::raw_fd_ostream OS(FileName, EC, llvm::sys::fs::OpenFlags::F_Text);
+
   if (EC)
     return EC;
 
-  if (Encoding == WEM_UTF8) {
-    OS << Contents;
-  } else if (Encoding == WEM_CurrentCodePage) {
-    SmallVector<wchar_t, 1> ArgsUTF16;
-    SmallVector<char, 1> ArgsCurCP;
-
-    if ((EC = windows::UTF8ToUTF16(Contents, ArgsUTF16)))
-      return EC;
-
-    if ((EC = windows::UTF16ToCurCP(
-             ArgsUTF16.data(), ArgsUTF16.size(), ArgsCurCP)))
-      return EC;
-
-    OS.write(ArgsCurCP.data(), ArgsCurCP.size());
-  } else if (Encoding == WEM_UTF16) {
-    SmallVector<wchar_t, 1> ArgsUTF16;
-
-    if ((EC = windows::UTF8ToUTF16(Contents, ArgsUTF16)))
-      return EC;
-
-    // Endianness guessing
-    char BOM[2];
-    uint16_t src = UNI_UTF16_BYTE_ORDER_MARK_NATIVE;
-    memcpy(BOM, &src, 2);
-    OS.write(BOM, 2);
-    OS.write((char *)ArgsUTF16.data(), ArgsUTF16.size() << 1);
-  } else {
-    llvm_unreachable("Unknown encoding");
-  }
+  OS << Contents;
 
   if (OS.has_error())
     return make_error_code(errc::io_error);

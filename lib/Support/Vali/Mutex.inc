@@ -1,4 +1,4 @@
-//===- llvm/Support/Win32/Mutex.inc - Win32 Mutex Implementation -*- C++ -*-===//
+//===- llvm/Support/Vali/Mutex.inc - Vali Mutex Implementation -*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -7,51 +7,48 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file implements the Win32 specific (non-pthread) Mutex class.
+// This file implements the Vali specific (non-pthread) Mutex class.
 //
 //===----------------------------------------------------------------------===//
 
-//===----------------------------------------------------------------------===//
-//=== WARNING: Implementation here must contain only generic Win32 code that
-//===          is guaranteed to work on *all* Win32 variants.
-//===----------------------------------------------------------------------===//
-
-#include "WindowsSupport.h"
 #include "llvm/Support/Mutex.h"
+#include <threads.h>
 
 namespace llvm {
 
-sys::MutexImpl::MutexImpl(bool /*recursive*/)
+sys::MutexImpl::MutexImpl(bool recursive)
 {
-  data_ = new CRITICAL_SECTION;
-  InitializeCriticalSection((LPCRITICAL_SECTION)data_);
+    mtx_t mtx;
+    if (recursive) mtx_init(&mtx, mtx_recursive);
+    else mtx_init(&mtx, mtx_plain);
+    _data = (void*)mtx;
 }
 
 sys::MutexImpl::~MutexImpl()
 {
-  DeleteCriticalSection((LPCRITICAL_SECTION)data_);
-  delete (LPCRITICAL_SECTION)data_;
-  data_ = 0;
+  mtx_t mtx = (mtx_t)_data;
+  mtx_destroy(&mtx);
 }
 
 bool
 sys::MutexImpl::acquire()
 {
-  EnterCriticalSection((LPCRITICAL_SECTION)data_);
-  return true;
+  mtx_t mtx = (mtx_t)_data;
+  return mtx_lock(&mtx) == thrd_success;
 }
 
 bool
 sys::MutexImpl::release()
-{
-  LeaveCriticalSection((LPCRITICAL_SECTION)data_);
-  return true;
+{ 
+  mtx_t mtx = (mtx_t)_data;
+  return mtx_unlock(&mtx) == thrd_success;
 }
 
 bool
 sys::MutexImpl::tryacquire()
 {
-  return TryEnterCriticalSection((LPCRITICAL_SECTION)data_);
+  mtx_t mtx = (mtx_t)_data;
+  return mtx_trylock(&mtx) == thrd_success;
 }
 
 }
