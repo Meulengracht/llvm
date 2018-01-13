@@ -28,10 +28,20 @@
 #include <new>
 #include <sys/types.h>
 #include <system_error>
-#if !defined(_MSC_VER) && !defined(__MINGW32__)
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(MOLLENOS)
 #include <unistd.h>
 #else
 #include <io.h>
+#if defined(MOLLENOS)
+#define open _open
+#define close _close
+#define read _read
+#define write _write
+#define lseek _lseek
+#define tell _tell
+#define unlink _unlink
+#define isatty _isatty
+#endif
 #endif
 using namespace llvm;
 

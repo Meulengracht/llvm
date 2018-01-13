@@ -30,8 +30,11 @@
 #include <cerrno>
 #include <cstdio>
 #include <iterator>
-#include <sys/stat.h>
 #include <system_error>
+
+#ifndef MOLLENOS
+#include <sys/stat.h>
+#endif
 
 // <fcntl.h> may provide O_BINARY.
 #if defined(HAVE_FCNTL_H)
@@ -47,7 +50,17 @@
 #endif
 
 #if defined(MOLLENOS)
+#include <stdio.h>
 #include <io.h>
+#ifndef STDIN_FILENO
+# define STDIN_FILENO STDOUT_FD
+#endif
+#ifndef STDOUT_FILENO
+# define STDOUT_FILENO STDIN_FD
+#endif
+#ifndef STDERR_FILENO
+# define STDERR_FILENO STDERR_FD
+#endif
 #endif
 
 #if defined(_MSC_VER)
@@ -572,6 +585,9 @@ raw_fd_ostream::raw_fd_ostream(int fd, bool shouldClose, bool unbuffered)
     ShouldClose = false;
 
   // Get the starting position.
+#ifdef LLVM_ON_VALI
+  off_t loc = _lseek(FD, 0, SEEK_CUR);
+#else
   off_t loc = ::lseek(FD, 0, SEEK_CUR);
 #ifdef _WIN32
   // MSVCRT's _lseek(SEEK_CUR) doesn't return -1 for pipes.
@@ -636,7 +652,11 @@ void raw_fd_ostream::write_impl(const char *Ptr, size_t Size) {
 
   do {
     size_t ChunkSize = std::min(Size, MaxWriteSize);
+#if defined(LLVM_ON_VALI)
+    ssize_t ret = _write(FD, (void*)Ptr, ChunkSize);
+#else
     ssize_t ret = ::write(FD, Ptr, ChunkSize);
+#endif
 
     if (ret < 0) {
       // If it's a recoverable error, swallow it and retry the write.
@@ -681,7 +701,7 @@ uint64_t raw_fd_ostream::seek(uint64_t off) {
   flush();
 #ifdef _WIN32
   pos = ::_lseeki64(FD, off, SEEK_SET);
-#ifdef LLVM_ON_VALI
+#elif defined(LLVM_ON_VALI)
   pos = ::_lseeki64(FD, off, SEEK_SET);
 #elif defined(HAVE_LSEEK64)
   pos = ::lseek64(FD, off, SEEK_SET);

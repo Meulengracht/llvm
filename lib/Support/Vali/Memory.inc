@@ -84,7 +84,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
     Start += Granularity - Start % Granularity;
 
   Flags_t Protect = getValiProtectionFlags(Flags);
-
+  void *PA = NULL;
   if (::MemoryAllocate(reinterpret_cast<void*>(Start),
                             NumBlocks*Granularity, MEMORY_COMMIT | Protect, 
                             &PA, NULL) != OsSuccess) {
@@ -121,7 +121,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 
   Flags_t Protect = getValiProtectionFlags(Flags);
   Flags_t Previous = 0;
-  if (MemoryProtect(M.Address, M.Size, Protect, &OldFlags) != OsSuccess)
+  if (MemoryProtect(M.Address, M.Size, Protect, &Previous) != OsSuccess)
     return std::error_code();
 
   if (Flags & MF_EXEC)
@@ -134,7 +134,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 /// that has been emitted it must invalidate the instruction cache on some
 /// platforms.
 void Memory::InvalidateInstructionCache(const void *Addr, size_t Len) {
-  FlushHardwareCache(CACHE_INSTRUCTION, Addr, Len);
+  FlushHardwareCache(CACHE_INSTRUCTION, (void*)Addr, Len);
 }
 
 } // namespace sys

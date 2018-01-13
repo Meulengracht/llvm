@@ -20,7 +20,6 @@
 #include <cerrno>
 #include <ctime>
 #include <memory>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <system_error>
 #include <tuple>
@@ -28,6 +27,7 @@
 #include <windows.h>
 #endif
 #if LLVM_ON_UNIX
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 #if LLVM_ON_VALI

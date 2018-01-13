@@ -38,10 +38,9 @@ namespace sys {
   typedef unsigned long procid_t; // Must match the type of DWORD on Windows.
   typedef void *process_t;        // Must match the type of HANDLE on Windows.
 #elif defined(LLVM_ON_VALI)
-  typedef UUId_t ProcessId;
+  typedef UUId_t  ProcessId;
 #else
-  typedef pid_t procid_t;
-  typedef procid_t process_t;
+  typedef pid_t   ProcessId;
 #endif
 
   /// This struct encapsulates information about a process.

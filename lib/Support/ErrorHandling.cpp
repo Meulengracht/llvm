@@ -32,6 +32,9 @@
 #if defined(HAVE_UNISTD_H)
 # include <unistd.h>
 #endif
+#if defined(LLVM_ON_VALI)
+# include <io.h>
+#endif
 #if defined(_MSC_VER)
 # include <io.h>
 # include <fcntl.h>
@@ -114,7 +117,11 @@ void llvm::report_fatal_error(const Twine &Reason, bool GenCrashDiag) {
     raw_svector_ostream OS(Buffer);
     OS << "LLVM ERROR: " << Reason << "\n";
     StringRef MessageStr = OS.str();
+#if defined(LLVM_ON_VALI)
+    ssize_t written = _write(2, (void*)MessageStr.data(), MessageStr.size());
+#else
     ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
+#endif
     (void)written; // If something went wrong, we deliberately just give up.
   }
 
@@ -169,7 +176,11 @@ void llvm::report_bad_alloc_error(const char *Reason, bool GenCrashDiag) {
   // Don't call the normal error handler. It may allocate memory. Directly write
   // an OOM to stderr and abort.
   char OOMMessage[] = "LLVM ERROR: out of memory\n";
+#if defined(LLVM_ON_VALI)
+  ssize_t written = _write(2, (void*)OOMMessage, strlen(OOMMessage));
+#else
   ssize_t written = ::write(2, OOMMessage, strlen(OOMMessage));
+#endif
   (void)written;
   abort();
 #endif

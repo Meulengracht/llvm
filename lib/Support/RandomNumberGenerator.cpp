@@ -77,6 +77,7 @@ std::error_code llvm::getRandomBytes(void *Buffer, size_t Size) {
   for (size_t i = 0; i < Size; i++, BufferPointer++) {
       BufferPointer[i] = (unsigned char)(::rand() % 256);
   }
+  return std::error_code();
 #else
   int Fd = open("/dev/urandom", O_RDONLY);
   if (Fd != -1) {

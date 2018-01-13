@@ -21,33 +21,33 @@ sys::MutexImpl::MutexImpl(bool recursive)
     mtx_t mtx;
     if (recursive) mtx_init(&mtx, mtx_recursive);
     else mtx_init(&mtx, mtx_plain);
-    _data = (void*)mtx;
+    data_ = (void*)mtx;
 }
 
 sys::MutexImpl::~MutexImpl()
 {
-  mtx_t mtx = (mtx_t)_data;
+  mtx_t mtx = (mtx_t)data_;
   mtx_destroy(&mtx);
 }
 
 bool
 sys::MutexImpl::acquire()
 {
-  mtx_t mtx = (mtx_t)_data;
+  mtx_t mtx = (mtx_t)data_;
   return mtx_lock(&mtx) == thrd_success;
 }
 
 bool
 sys::MutexImpl::release()
 { 
-  mtx_t mtx = (mtx_t)_data;
+  mtx_t mtx = (mtx_t)data_;
   return mtx_unlock(&mtx) == thrd_success;
 }
 
 bool
 sys::MutexImpl::tryacquire()
 {
-  mtx_t mtx = (mtx_t)_data;
+  mtx_t mtx = (mtx_t)data_;
   return mtx_trylock(&mtx) == thrd_success;
 }
 

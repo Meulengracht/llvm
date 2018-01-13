@@ -23,9 +23,9 @@ DynamicLibrary::HandleSet::~HandleSet() {
 }
 
 void *DynamicLibrary::HandleSet::DLOpen(const char *File, std::string *Err) {
-  Handle_t Handle = SharedObjectLoad(FileUnicode.data());
+  Handle_t Handle = SharedObjectLoad(File);
   if (Handle == NULL) {
-    MakeErrMsg(Err, std::string(File) + ": Can't open");
+    Err = new std::string(File);
     return &DynamicLibrary::Invalid;
   }
   return reinterpret_cast<void*>(Handle);
@@ -67,9 +67,9 @@ static void *DoSearch(const char* SymbolName) {
 
 // This macro returns the address of a well-known, explicit symbol
 #define EXPLICIT_SYMBOL(SYM) if (!strcmp(SymbolName, #SYM)) return &SYM
-  EXPLICIT_SYMBOL(stderr);
-  EXPLICIT_SYMBOL(stdout);
-  EXPLICIT_SYMBOL(stdin);
+  //EXPLICIT_SYMBOL(stderr);
+  //EXPLICIT_SYMBOL(stdout);
+  //EXPLICIT_SYMBOL(stdin);
 #undef EXPLICIT_SYMBOL
 
   return nullptr;
