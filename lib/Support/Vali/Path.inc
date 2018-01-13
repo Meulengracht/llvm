@@ -18,23 +18,13 @@
 
 using namespace llvm;
 
-static bool is_separator(const wchar_t value) {
-  switch (value) {
-  case L'\\':
-  case L'/':
-    return true;
-  default:
-    return false;
-  }
-}
-
 namespace llvm {
 namespace sys  {
 namespace fs {
 
 // Implemented
 std::string getMainExecutable(const char *argv0, void *MainExecAddr) {
-  return std::string(argv0.data());
+  return std::string(argv0);
 }
 
 // Implemented
@@ -46,7 +36,7 @@ UniqueID file_status::getUniqueID() const {
 ErrorOr<space_info> disk_space(const Twine &Path) {
   vStorageDescriptor_t Descriptor;
   if (!::GetStorageInformationFromPath(Path.str().c_str(), &Descriptor))
-    return make_error_code(no_such_file_or_directory);
+    return make_error_code(errc::no_such_file_or_directory);
   space_info SpaceInfo;
   SpaceInfo.capacity = (static_cast<uint64_t>(Descriptor.BytesTotal.u.HighPart) << 32) + Descriptor.BytesTotal.u.LowPart;
   SpaceInfo.free = (static_cast<uint64_t>(Descriptor.BytesFree.u.HighPart) << 32) + Descriptor.BytesFree.u.LowPart;
@@ -71,9 +61,9 @@ uint32_t file_status::getLinkCount() const {
 
 // Implemented
 std::error_code current_path(SmallVectorImpl<char> &result) {
-  SmallVector<char, MAX_PATH> cur_path;
-  if (GetWorkingDirectory(cur_path.data(), MAX_PATH) != OsSuccess) {
-      return make_error_code(invalid_argument);
+  SmallVector<char, _MAXPATH> cur_path;
+  if (GetWorkingDirectory(cur_path.data(), _MAXPATH) != OsSuccess) {
+      return make_error_code(errc::invalid_argument);
   }
   cur_path.set_size(strlen(cur_path.data()) + 1);
   result.clear();
@@ -83,8 +73,10 @@ std::error_code current_path(SmallVectorImpl<char> &result) {
 
 // Implemented
 std::error_code set_current_path(const Twine &path) {
-  if (SetWorkingDirectory(path.begin()) != OsSuccess) {
-      return make_error_code(no_such_file_or_directory);
+  SmallString<_MAXPATH> path_storage;
+  StringRef f = path.toNullTerminatedStringRef(path_storage);
+  if (SetWorkingDirectory(f.begin()) != OsSuccess) {
+      return make_error_code(errc::no_such_file_or_directory);
   }
   return std::error_code();
 }
@@ -92,23 +84,31 @@ std::error_code set_current_path(const Twine &path) {
 // Implemented
 std::error_code create_directory(const Twine &path, bool IgnoreExisting,
                                  perms Perms) {
-  int ec = ::_opendir(path.begin(), _O_CREAT | _O_RDWR);
-  if (fd == -1) {
+  SmallString<_MAXPATH> path_storage;
+  struct DIR *dhandle = NULL;
+  StringRef f = path.toNullTerminatedStringRef(path_storage);
+  int ec = ::_opendir(f.begin(), _O_CREAT | _O_EXCL, &dhandle);
+  if (ec == -1) {
       if (errno == EACCES) {
-          return make_error_code(permission_denied);
+          return make_error_code(errc::permission_denied);
       }
       if (errno == EEXIST) {
-          return IgnoreExisting ? std::error_code() : make_error_code(file_exists);
+          return IgnoreExisting ? std::error_code() : make_error_code(errc::file_exists);
       }
       return std::error_code(errno, std::generic_category());
   }
-  ::_closedir(fd);
+  ::_closedir(dhandle);
   return std::error_code();
 }
 
 // Implemented
 std::error_code create_link(const Twine &to, const Twine &from) {
-  if (::_link(from.begin(), to.begin(), 1) != 0) {
+  // Get arguments.
+  SmallString<256> from_storage;
+  SmallString<256> to_storage;
+  StringRef f = from.toNullTerminatedStringRef(from_storage);
+  StringRef t = to.toNullTerminatedStringRef(to_storage);
+  if (::_link(f.begin(), t.begin(), 1) != 0) {
       return std::error_code(errno, std::generic_category());
   }
   return std::error_code();
@@ -116,7 +116,12 @@ std::error_code create_link(const Twine &to, const Twine &from) {
 
 // Implemented
 std::error_code create_hard_link(const Twine &to, const Twine &from) {
-  if (::_link(from.begin(), to.begin(), 0) != 0) {
+  // Get arguments.
+  SmallString<256> from_storage;
+  SmallString<256> to_storage;
+  StringRef f = from.toNullTerminatedStringRef(from_storage);
+  StringRef t = to.toNullTerminatedStringRef(to_storage);
+  if (::_link(f.begin(), t.begin(), 0) != 0) {
       return std::error_code(errno, std::generic_category());
   }
   return std::error_code();
@@ -124,7 +129,9 @@ std::error_code create_hard_link(const Twine &to, const Twine &from) {
 
 // Implemented
 std::error_code remove(const Twine &path, bool IgnoreNonExisting) {
-    if (!::remove(path.begin())) {
+  SmallString<_MAXPATH> path_storage;
+  StringRef f = path.toNullTerminatedStringRef(path_storage);
+    if (!::remove(f.begin())) {
         return std::error_code();
     }
     if (IgnoreNonExisting && errno == ENOENT) {
@@ -138,7 +145,9 @@ std::error_code is_local(const Twine &path, bool &result) {
   if (!llvm::sys::fs::exists(path) || !llvm::sys::path::has_root_path(path))
     return make_error_code(errc::no_such_file_or_directory);
   vStorageDescriptor_t Descriptor;
-  if (GetStorageInformationFromPath(path.begin(), &Descriptor) != OsSuccess) {
+  SmallString<_MAXPATH> path_storage;
+  StringRef f = path.toNullTerminatedStringRef(path_storage);
+  if (GetStorageInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
     return make_error_code(errc::no_such_file_or_directory);
   }
   if (Descriptor.Flags & STORAGE_STATIC) {
@@ -156,10 +165,10 @@ std::error_code is_local(int FD, bool &Result) {
     return make_error_code(errc::no_such_file_or_directory);
   }
   if (Descriptor.Flags & STORAGE_STATIC) {
-    result = true;
+    Result = true;
     return std::error_code();
   }
-  result = false;
+  Result = false;
   return std::error_code();
 }
 
@@ -178,7 +187,7 @@ std::error_code rename(const Twine &From, const Twine &To) {
 // Implemented
 std::error_code resize_file(int FD, uint64_t Size) {
   ::_chsize(FD, Size);
-  return std::error_code(error, std::generic_category());
+  return std::error_code(errno, std::generic_category());
 }
 
 // Implemented
@@ -226,19 +235,21 @@ std::error_code equivalent(const Twine &A, const Twine &B, bool &result) {
   return std::error_code();
 }
 
-// @todo
-static bool isReservedName(StringRef path) {
-  return false;
-}
-
 // Implemented
 static file_type file_type_from_flags(Flags_t Flags) {
-    return (Attrs & FILE_FLAG_DIRECTORY) ? file_type::directory_file : file_type::regular_file;
+    return (Flags & FILE_FLAG_DIRECTORY) ? file_type::directory_file : file_type::regular_file;
 }
 
 // Implemented
 static perms perms_from_flags(Flags_t Permissions) {
-    return (Attrs & FILE_ATTRIBUTE_READONLY) ? (all_read | all_exe) : all_all;
+    perms result;
+    if (Permissions & FILE_PERMISSION_READ) {
+        result = all_read | all_exe;
+    }
+    if (Permissions & (FILE_PERMISSION_WRITE | FILE_PERMISSION_EXECUTE)) {
+        result = all_all;
+    }
+    return result;
 }
 
 // Implemented
@@ -252,8 +263,8 @@ std::error_code status(const Twine &path, file_status &result, bool Follow) {
     result = file_status(
         file_type_from_flags(Descriptor.Flags), perms_from_flags(Descriptor.Permissions), 
         1, Descriptor.AccessedAt.tv_sec, Descriptor.ModifiedAt.tv_sec,
-        Descriptor.StorageId, Descriptor.Id, Info.nFileSizeHigh, Info.nFileSizeLow);
-    return std:error_code();
+        Descriptor.StorageId, Descriptor.Id, Descriptor.Size.u.HighPart, Descriptor.Size.u.LowPart);
+    return std::error_code();
 }
 
 // Implemented
@@ -262,11 +273,11 @@ std::error_code status(int FD, file_status &Result) {
     if (GetFileInformationFromFd(FD, &Descriptor) != OsSuccess) {
         return errc::no_such_file_or_directory;
     }
-    result = file_status(
+    Result = file_status(
         file_type_from_flags(Descriptor.Flags), perms_from_flags(Descriptor.Permissions), 
         1, Descriptor.AccessedAt.tv_sec, Descriptor.ModifiedAt.tv_sec,
-        Descriptor.StorageId, Descriptor.Id, Info.nFileSizeHigh, Info.nFileSizeLow);
-    return std:error_code();
+        Descriptor.StorageId, Descriptor.Id, Descriptor.Size.u.HighPart, Descriptor.Size.u.LowPart);
+    return std::error_code();
 }
 
 // @todo
@@ -331,7 +342,7 @@ std::error_code detail::directory_iterator_construct(detail::DirIterState &it,
                                                      StringRef path,
                                                      bool follow_symlinks) {
   SmallString<128> path_null(path);
-  struct directory_handle *directory = nullptr; 
+  struct DIR *directory = nullptr; 
   int ec = ::_opendir(path_null.c_str(), _O_RDONLY, &directory);
   if (!directory || ec) {
       return std::error_code(ec, std::generic_category());
@@ -347,7 +358,7 @@ std::error_code detail::directory_iterator_construct(detail::DirIterState &it,
 // Implemented
 std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
   if (it.IterationHandle)
-    ::_closedir(reinterpret_cast<struct directory_handle*>(it.IterationHandle));
+    ::_closedir(reinterpret_cast<struct DIR*>(it.IterationHandle));
   it.IterationHandle = 0;
   it.CurrentEntry = directory_entry();
   return std::error_code();
@@ -355,9 +366,9 @@ std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
 
 // Implemented
 std::error_code detail::directory_iterator_increment(detail::DirIterState &it) {
-  struct directory_entry dentry;
+  struct DIRENT dentry;
   errno = 0;
-  int ec = ::_readdir(reinterpret_cast<struct directory_handle*>(it.IterationHandle), &dentry);
+  int ec = ::_readdir(reinterpret_cast<struct DIR*>(it.IterationHandle), &dentry);
   if (ec != EOK && ec != EOF) {
     return std::error_code(ec, std::generic_category());
   } else if (ec != EOF) {
@@ -388,13 +399,13 @@ std::error_code openFileForRead(const Twine &Name, int &ResultFD, SmallVectorImp
     ResultFD = fd;
     if (RealPath) {
         RealPath->clear();
-        RealPath->reserve(MAXPATH);
-        if (GetFilePathFromFd(fd, (char*)this->begin(), MAXPATH) != OsSuccess) {
+        RealPath->reserve(_MAXPATH);
+        if (GetFilePathFromFd(fd, (char*)RealPath->begin(), _MAXPATH) != OsSuccess) {
             return std::error_code(errno, std::generic_category());
         }
-        RealPath->set_size(strlen(this->begin()) + 1);
+        RealPath->set_size(strlen(RealPath->begin()) + 1);
     }
-    return std:error_code();
+    return std::error_code();
 }
 
 // Implemented
@@ -514,8 +525,20 @@ std::error_code real_path(const Twine &path, SmallVectorImpl<char> &dest,
     return real_path(Storage, dest, false);
   }
 
-  if (is_directory(path))
-    return directoryRealPath(path, dest);
+  if (is_directory(path)) {
+    SmallString<256> path_storage;
+    struct DIR *dhandle = NULL;
+    StringRef f = path.toNullTerminatedStringRef(path_storage);
+    dest.reserve(_MAXPATH);
+    if (::_opendir(f.begin(), _O_RDONLY, &dhandle) == -1) {
+        return std::error_code(errno, std::generic_category());
+    }
+    //@todo
+    //GetFilePathFromHandle(dhandle->d_handle, (const char*)dest.begin(), _MAXPATH);
+    dest.set_size(strlen((const char*)dest.begin()) + 1);
+    ::_closedir(dhandle);
+    return std::error_code();
+  }
 
   int fd;
   if (std::error_code EC = llvm::sys::fs::openFileForRead(path, fd, &dest))
@@ -530,27 +553,27 @@ std::error_code real_path(const Twine &path, SmallVectorImpl<char> &dest,
 // Implemented
 namespace path {
 bool getUserCacheDir(SmallVectorImpl<char> &Result) {
-    SmallVector<char, MAXPATH> Buf;
+    SmallVector<char, _MAXPATH> Buf;
     if (GetUserCacheDirectory(Buf.data(), Buf.capacity()) != OsSuccess) {
         return false;
     }
     Buf.set_size(strlen(Buf.data()) + 1);
-    result.append(Buf.data(), strlen(Buf.data()) + 1);
+    Result.append(Buf.begin(), Buf.end());
     return true;
 }
 
 bool home_directory(SmallVectorImpl<char> &result) {
-    SmallVector<char, MAXPATH> Buf;
+    SmallVector<char, _MAXPATH> Buf;
     if (GetUserDirectory(Buf.data(), Buf.capacity()) != OsSuccess) {
         return false;
     }
     Buf.set_size(strlen(Buf.data()) + 1);
-    result.append(Buf.data(), strlen(Buf.data()) + 1);
+    result.append(Buf.begin(), Buf.end());
     return true;
 }
 
 void system_temp_directory(bool ErasedOnReboot, SmallVectorImpl<char> &Result) {
-    SmallVector<char, MAXPATH> Buf;
+    SmallVector<char, _MAXPATH> Buf;
     Result.clear();
     if (ErasedOnReboot) {
         if (GetApplicationTemporaryDirectory(Buf.data(), Buf.capacity()) != OsSuccess) {
@@ -563,7 +586,7 @@ void system_temp_directory(bool ErasedOnReboot, SmallVectorImpl<char> &Result) {
         }
     }
     Buf.set_size(strlen(Buf.data()) + 1);
-    result.append(Buf.data(), strlen(Buf.data()) + 1);
+    Result.append(Buf.begin(), Buf.end());
 }
 } // end namespace path
 } // end namespace sys

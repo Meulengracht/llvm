@@ -37,7 +37,7 @@ namespace sys {
 struct ProcessInfo {
 #if defined(LLVM_ON_UNIX)
   typedef pid_t ProcessId;
-#if defined(LLVM_ON_VALI)
+#elif defined(LLVM_ON_VALI)
   typedef UUId_t ProcessId;
 #elif defined(LLVM_ON_WIN32)
   typedef unsigned long ProcessId; // Must match the type of DWORD on Windows.

@@ -14,8 +14,11 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <os/mollenos.h>
+#include <os/process.h>
 #include <malloc.h>
 #include <time.h>
+#include <stdio.h>
+#include <io.h>
 #include <chrono>
 
 using namespace llvm;
@@ -49,8 +52,8 @@ void Process::GetTimeUsage(TimePoint<> &elapsed, std::chrono::nanoseconds &user_
   timespec_get(&ptime, TIME_PROCESS);
   timespec_get(&stime, TIME_MONOTONIC);
   elapsed = std::chrono::system_clock::now();
-  user_time = ptime.tv_sec * NSEC_PER_SEC + ptime.tv_nsec;
-  sys_time = stime.tv_sec * NSEC_PER_SEC + stime.tv_nsec;
+  user_time = std::chrono::nanoseconds(ptime.tv_sec * NSEC_PER_SEC + ptime.tv_nsec);
+  sys_time = std::chrono::nanoseconds(stime.tv_sec * NSEC_PER_SEC + stime.tv_nsec);
 }
 
 // Some LLVM programs such as bugpoint produce core files as a normal part of
@@ -71,8 +74,8 @@ Optional<std::string> Process::GetEnv(StringRef Name) {
 }
 
 std::error_code
-Process::GetArgumentVector(SmallVectorImpl<const char *> &Args,
-                           ArrayRef<const char *>,
+Process::GetArgumentVector(SmallVectorImpl<const char *> &ArgsOut,
+                           ArrayRef<const char *> ArgsIn,
                            SpecificBumpPtrAllocator<char> &ArgAllocator) {
   ArgsOut.append(ArgsIn.begin(), ArgsIn.end());
   return std::error_code();
@@ -83,30 +86,25 @@ std::error_code Process::FixupStandardFileDescriptors() {
 }
 
 std::error_code Process::SafelyCloseFileDescriptor(int FD) {
-  if (::close(FD) < 0)
+  if (::_close(FD) < 0)
     return std::error_code(errno, std::generic_category());
   return std::error_code();
 }
 
 bool Process::StandardInIsUserInput() {
-  return FileDescriptorIsDisplayed(STDIN_FILENO);
+  return FileDescriptorIsDisplayed(STDIN_FD);
 }
 
 bool Process::StandardOutIsDisplayed() {
-  return FileDescriptorIsDisplayed(STDOUT_FILENO);
+  return FileDescriptorIsDisplayed(STDOUT_FD);
 }
 
 bool Process::StandardErrIsDisplayed() {
-  return FileDescriptorIsDisplayed(STDERR_FILENO);
+  return FileDescriptorIsDisplayed(STDERR_FD);
 }
 
 bool Process::FileDescriptorIsDisplayed(int fd) {
-#if HAVE_ISATTY
-  return isatty(fd);
-#else
-  // If we don't have isatty, just return false.
-  return false;
-#endif
+  return _isatty(fd);
 }
 
 static unsigned getColumns(int FileID) {
@@ -145,11 +143,11 @@ bool Process::FileDescriptorHasColors(int fd) {
 }
 
 bool Process::StandardOutHasColors() {
-  return FileDescriptorHasColors(STDOUT_FILENO);
+  return FileDescriptorHasColors(STDOUT_FD);
 }
 
 bool Process::StandardErrHasColors() {
-  return FileDescriptorHasColors(STDERR_FILENO);
+  return FileDescriptorHasColors(STDERR_FD);
 }
 
 void Process::UseANSIEscapeCodes(bool /*enable*/) {
@@ -177,16 +175,9 @@ const char *Process::ResetColor() {
   return "\033[0m";
 }
 
-// Include GetLastError() in a fatal error message.
-static void ReportLastErrorFatal(const char *Msg) {
-  std::string ErrMsg;
-  MakeErrMsg(&ErrMsg, Msg);
-  report_fatal_error(ErrMsg);
-}
-
 unsigned Process::GetRandomNumber() {
   const auto Now = std::chrono::high_resolution_clock::now();
-  auto Seed = hash_combine(Now.time_since_epoch().count(), ::GetCurrentProcessId());
+  auto Seed = hash_combine(Now.time_since_epoch().count(), ::ProcessGetCurrentId());
   static int x = (static_cast<void>(::srand(Seed)), 0);
   (void)x;
   return ::rand();
