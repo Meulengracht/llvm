@@ -119,6 +119,8 @@ RWMutexImpl::writer_release()
 #include "Unix/RWMutex.inc"
 #elif defined( _WIN32)
 #include "Windows/RWMutex.inc"
+#elif defined(LLVM_ON_VALI)
+#include "Vali/RWMutex.inc"
 #else
 #warning Neither LLVM_ON_UNIX nor _WIN32 was set in Support/Mutex.cpp
 #endif

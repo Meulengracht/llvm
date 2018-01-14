@@ -21,21 +21,25 @@ using namespace sys;
 ThreadLocalImpl::ThreadLocalImpl() : data() {
   static_assert(sizeof(tss_t) <= sizeof(data), "size too big");
   tss_t* key = reinterpret_cast<tss_t*>(&data);
-  assert(tss_create(key, nullptr) == thrd_success);
+  if (tss_create(key, nullptr) != thrd_success) {
+      // @todo
+  }
 }
 
 ThreadLocalImpl::~ThreadLocalImpl() {
-  pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
+  tss_t* key = reinterpret_cast<tss_t*>(&data);
   tss_delete(*key);
 }
 
 void ThreadLocalImpl::setInstance(const void* d) {
-  pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
-  assert(tss_set(*key, d) == thrd_success);
+  tss_t* key = reinterpret_cast<tss_t*>(&data);
+  if (tss_set(*key, (void*)d) != thrd_success) {
+      // @todo
+  }
 }
 
 void *ThreadLocalImpl::getInstance() {
-  pthread_key_t* key = reinterpret_cast<pthread_key_t*>(&data);
+  tss_t* key = reinterpret_cast<tss_t*>(&data);
   return tss_get(*key);
 }
 

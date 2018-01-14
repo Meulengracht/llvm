@@ -15,6 +15,7 @@
 #include "llvm/Support/ConvertUTF.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cstdio>
 #include <io.h>
@@ -24,7 +25,7 @@
 
 namespace llvm {
 
-ProcessInfo::ProcessInfo() : ProcessHandle(0), Pid(0), ReturnCode(0) {}
+ProcessInfo::ProcessInfo() : Pid(UUID_INVALID) {}
 
 ErrorOr<std::string> sys::findProgramByName(StringRef Name,
                                             ArrayRef<StringRef> Paths) {
@@ -185,8 +186,8 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **Args,
   // process.  We have to concatenate them all, while quoting the args that
   // have embedded spaces (or are empty).
   std::unique_ptr<char[]> command = flattenArgs(Args);
-  PI.ProcessId = ProcessSpawn(Program.begin(), command.get(), 0);
-  if (PI.ProcessId == UUID_INVALID) {
+  PI.Pid = ProcessSpawn(Program.begin(), command.get(), 0);
+  if (PI.Pid == UUID_INVALID) {
       return false;
   }
   return true;
@@ -205,12 +206,14 @@ ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
     milliSecondsToWait = SecondsToWait * 1000;
 
   // Wait for process
-  if (ProcessJoin(PI.ProcessId, milliSecondsToWait, &WaitResult.ReturnCode) != OsSuccess) {
+  if (ProcessJoin(PI.Pid, milliSecondsToWait, &WaitResult.ReturnCode) != OsSuccess) {
       // Timeout occurred
       if (SecondsToWait) {
           // Kill it
-          if (ProcessKill(PI.ProcessId) != OsSuccess) {
-              ErrMsg = std::string("Failed to kill the process after wait timeout.");
+          if (ProcessKill(PI.Pid) != OsSuccess) {
+              if (ErrMsg) {
+                  *ErrMsg = "Failed to kill the process after wait timeout.";
+              }
           }
           return WaitResult;
       }

@@ -163,7 +163,11 @@ if(APPLE)
 elseif(NOT WIN32)
   # Detect what linker we have here
   if( LLVM_USE_LINKER )
-    set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
+    if (MOLLENOS)
+      set(command ${CMAKE_LINKER} --version)
+    else()
+      set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
+    endif()
   else()
     separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
     set(command ${CMAKE_C_COMPILER} ${flags} -Wl,--version)
@@ -196,7 +200,7 @@ endif()
 function(add_link_opts target_name)
   # Don't use linker optimizations in debug builds since it slows down the
   # linker in a context where the optimizations are not important.
-  if (NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+  if (NOT uppercase_CMAKE_BUILD_TYPE STREQUAL "DEBUG" AND NOT MOLLENOS)
 
     # Pass -O3 to the linker. This enabled different optimizations on different
     # linkers.
