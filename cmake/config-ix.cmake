@@ -24,10 +24,6 @@ if( CMAKE_SYSTEM MATCHES "FreeBSD-9.2-RELEASE" AND
     CMAKE_SIZEOF_VOID_P EQUAL 8 )
   list(APPEND CMAKE_REQUIRED_LIBRARIES "cxxrt")
 endif()
-# Vali uses a very custom way of doing things
-if(MOLLENOS)
-  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} ${CMAKE_CXX_FLAGS} -S")
-endif()
 
 # Helper macros and functions
 macro(add_cxx_include result files)

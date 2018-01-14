@@ -15,7 +15,7 @@
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/FileSystem.h"
 
-#if !defined(_MSC_VER) && !defined(__MINGW32__)
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(MOLLENOS)
 #include <unistd.h>
 #else
 #include <io.h>
@@ -208,9 +208,15 @@ std::error_code llvm::identify_magic(const Twine &Path, file_magic &Result) {
     return EC;
 
   char Buffer[32];
+#if defined(LLVM_ON_VALI)
+  int Length = _read(FD, Buffer, sizeof(Buffer));
+  if (_close(FD) != 0 || Length < 0)
+    return std::error_code(errno, std::generic_category());
+#else
   int Length = read(FD, Buffer, sizeof(Buffer));
   if (close(FD) != 0 || Length < 0)
     return std::error_code(errno, std::generic_category());
+#endif
 
   Result = identify_magic(StringRef(Buffer, Length));
   return std::error_code();

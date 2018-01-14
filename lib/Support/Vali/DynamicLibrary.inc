@@ -25,7 +25,9 @@ DynamicLibrary::HandleSet::~HandleSet() {
 void *DynamicLibrary::HandleSet::DLOpen(const char *File, std::string *Err) {
   Handle_t Handle = SharedObjectLoad(File);
   if (Handle == NULL) {
-    Err = new std::string(File);
+    if (Err) {
+      *Err = File;
+    }
     return &DynamicLibrary::Invalid;
   }
   return reinterpret_cast<void*>(Handle);
