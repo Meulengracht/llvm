@@ -245,7 +245,7 @@ function(set_output_directory target)
 
   # module_dir -- corresponding to LIBRARY_OUTPUT_DIRECTORY.
   # It affects output of add_library(MODULE).
-  if(WIN32 OR CYGWIN)
+  if(WIN32 OR CYGWIN OR MOLLENOS)
     # DLL platform
     set(module_dir ${ARG_BINARY_DIR})
   else()
@@ -538,7 +538,7 @@ function(llvm_add_library name)
     endif()
   endif()
 
-  if(ARG_MODULE AND LLVM_EXPORT_SYMBOLS_FOR_PLUGINS AND ARG_PLUGIN_TOOL AND (WIN32 OR CYGWIN))
+  if(ARG_MODULE AND LLVM_EXPORT_SYMBOLS_FOR_PLUGINS AND ARG_PLUGIN_TOOL AND (WIN32 OR CYGWIN OR MOLLENOS))
     # On DLL platforms symbols are imported from the tool by linking against it.
     set(llvm_libs ${ARG_PLUGIN_TOOL})
   elseif (DEFINED LLVM_LINK_COMPONENTS OR DEFINED ARG_LINK_COMPONENTS)
@@ -684,7 +684,7 @@ macro(add_llvm_loadable_module name)
       set_target_properties( ${name} PROPERTIES EXCLUDE_FROM_ALL ON)
     else()
       if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-        if(WIN32 OR CYGWIN)
+        if(WIN32 OR CYGWIN OR MOLLENOS)
           # DLL platform
           set(dlldir "bin")
         else()
@@ -853,7 +853,7 @@ function(export_executable_symbols target)
     if(CYGWIN OR MINGW)
       set_target_properties(${target} PROPERTIES IMPORT_SUFFIX ".exe.a")
     endif()
-  elseif(NOT (WIN32 OR CYGWIN))
+  elseif(NOT (WIN32 OR CYGWIN OR MOLLENOS))
     # On Windows auto-exporting everything doesn't work because of the limit on
     # the size of the exported symbol table, but on other platforms we can do
     # it without any trouble.

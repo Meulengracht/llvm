@@ -28,10 +28,16 @@ set(MOLLENOS True)
 set(VERBOSE 1)
 
 # Setup cmake rules, we do not care for default stuff
-# CMAKE_C_CREATE_SHARED_LIBRARY && CMAKE_CXX_CREATE_SHARED_LIBRARY
 # CMAKE_C_ARCHIVE_CREATE && CMAKE_CXX_ARCHIVE_CREATE (CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS)
-set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_LINKER> <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
-set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_LINKER> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
+
+set(CMAKE_C_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
+set(CMAKE_CXX_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
+
+set(CMAKE_C_CREATE_SHARED_MODULE ${CMAKE_C_CREATE_SHARED_LIBRARY})
+set(CMAKE_CXX_CREATE_SHARED_MODULE ${CMAKE_CXX_CREATE_SHARED_LIBRARY})
+
+set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
+set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
 
 # Must have a local host llvm-tblgen in path
 set(LLVM_TABLEGEN "$ENV{CROSS}/bin/llvm-tblgen" CACHE FILEPATH "")
@@ -39,6 +45,7 @@ set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
 set(LLVM_ENABLE_EH True)
 set(LLVM_ENABLE_RTTI True)
 set(LLVM_USE_LINKER lld)
+set(LLVM_ENABLE_PIC False)
 
 # Disable tests and examples to speedup build process
 set(LLVM_INCLUDE_TESTS Off)
@@ -75,7 +82,8 @@ set(CMAKE_CXX_FLAGS "${_CMAKE_CXX_FLAGS_INITIAL} ${COMPILE_FLAGS}" CACHE STRING 
 set(LINK_FLAGS
     /nodefaultlib
     /machine:X86 
-    /subsystem:native,
+    /subsystem:native
+    /lldmap
     $ENV{LIBRARIES}/libclang.lib
     $ENV{LIBRARIES}/libm.lib
     $ENV{LIBRARIES}/libc.lib
