@@ -33,7 +33,7 @@ ThreadLocalImpl::~ThreadLocalImpl() {
 
 void ThreadLocalImpl::setInstance(const void* d) {
   tss_t* key = reinterpret_cast<tss_t*>(&data);
-  if (tss_set(*key, (void*)d) != thrd_success) {
+  if (tss_set(*key, const_cast<void*>(d)) != thrd_success) {
       // @todo
   }
 }

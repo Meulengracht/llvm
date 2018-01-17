@@ -19,17 +19,38 @@
 #   containing clang's system resource directory.
 #
 
+# Make sure all the proper env are set
+if(NOT DEFINED ENV{CROSS})
+    message(FATAL_ERROR "CROSS environmental variable is not undefined")
+endif()
+if(NOT DEFINED ENV{INCLUDES})
+    message(FATAL_ERROR "INCLUDES environmental variable is not undefined")
+endif()
+if(NOT DEFINED ENV{LIBRARIES})
+    message(FATAL_ERROR "LIBRARIES environmental variable is not undefined")
+endif()
+
 # Setup environment stuff for cmake configuration
-set(CMAKE_CROSSCOMPILING True)
+set(CMAKE_CROSSCOMPILING ON CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
 set(CMAKE_LINKER "$ENV{CROSS}/bin/lld-link" CACHE FILEPATH "")
-set(MOLLENOS True)
+set(MOLLENOS ON CACHE BOOL "")
 set(VERBOSE 1)
 
-# Setup cmake rules, we do not care for default stuff
-# CMAKE_C_ARCHIVE_CREATE && CMAKE_CXX_ARCHIVE_CREATE (CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS)
+##################################################
+# Setup platform environment
+##################################################
 
+# No -fPIC on Vali
+set(CMAKE_C_COMPILE_OPTIONS_PIC "" CACHE STRING "" FORCE)
+set(CMAKE_CXX_COMPILE_OPTIONS_PIC "" CACHE STRING "" FORCE)
+set(CMAKE_C_COMPILE_OPTIONS_PIE "" CACHE STRING "" FORCE)
+set(CMAKE_CXX_COMPILE_OPTIONS_PIE "" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LIBRARY_C_FLAGS "" CACHE STRING "" FORCE)
+set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "" CACHE STRING "" FORCE)
+
+# Setup cmake rules, we do not care for default stuff
 set(CMAKE_C_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
 set(CMAKE_CXX_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
 
@@ -39,29 +60,37 @@ set(CMAKE_CXX_CREATE_SHARED_MODULE ${CMAKE_CXX_CREATE_SHARED_LIBRARY})
 set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
 set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
 
+##################################################
+# Setup LLVM custom options
+##################################################
+
 # Must have a local host llvm-tblgen in path
 set(LLVM_TABLEGEN "$ENV{CROSS}/bin/llvm-tblgen" CACHE FILEPATH "")
+
+set(LLVM_BUILD_32_BITS ON CACHE BOOL "")
+set(LLVM_TARGET_ARCH "X86" CACHE STRING "")
+set(LLVM_TARGETS_TO_BUILD "X86" CACHE STRING "") 
 set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
-set(LLVM_ENABLE_EH True)
-set(LLVM_ENABLE_RTTI True)
+
+set(LLVM_ENABLE_EH ON CACHE BOOL "")
+set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
 set(LLVM_USE_LINKER lld)
-set(LLVM_ENABLE_PIC False)
 
 # Disable tests and examples to speedup build process
-set(LLVM_INCLUDE_TESTS Off)
-set(LLVM_INCLUDE_EXAMPLES Off)
+set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
+set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 
 # Setup shared compile flags to make compilation succeed
 set(COMPILE_FLAGS
     -U_WIN32
     -DMOLLENOS
     -Di386
+    -D__i386__
     -m32
     -fms-extensions
     -Wall
     -nostdlib
     -nostdinc
-    -O3
     -I$ENV{INCLUDES}/cxx
     -I$ENV{INCLUDES})
 
@@ -93,7 +122,7 @@ string(REPLACE ";" " " LINK_FLAGS "${LINK_FLAGS}")
 
 # See explanation for compiler flags above for the _INITIAL variables.
 set(_CMAKE_EXE_LINKER_FLAGS_INITIAL "${CMAKE_EXE_LINKER_FLAGS}" CACHE STRING "")
-set(CMAKE_EXE_LINKER_FLAGS "${_CMAKE_EXE_LINKER_FLAGS_INITIAL} ${LINK_FLAGS}" CACHE STRING "" FORCE)
+set(CMAKE_EXE_LINKER_FLAGS "${LINK_FLAGS}" CACHE STRING "" FORCE)
 
 set(_CMAKE_MODULE_LINKER_FLAGS_INITIAL "${CMAKE_MODULE_LINKER_FLAGS}" CACHE STRING "")
 set(CMAKE_MODULE_LINKER_FLAGS "${_CMAKE_MODULE_LINKER_FLAGS_INITIAL} ${LINK_FLAGS}" CACHE STRING "" FORCE)

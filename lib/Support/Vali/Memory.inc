@@ -134,7 +134,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
 /// that has been emitted it must invalidate the instruction cache on some
 /// platforms.
 void Memory::InvalidateInstructionCache(const void *Addr, size_t Len) {
-  FlushHardwareCache(CACHE_INSTRUCTION, (void*)Addr, Len);
+  FlushHardwareCache(CACHE_INSTRUCTION, const_cast<void*>(Addr), Len);
 }
 
 } // namespace sys
