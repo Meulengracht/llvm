@@ -48,7 +48,9 @@ public:
     Weak = 1U << 1,
     Common = 1U << 2,
     Absolute = 1U << 3,
-    Exported = 1U << 4
+    Exported = 1U << 4,
+    NotMaterialized = 1U << 5,
+    Materializing = 1U << 6
   };
 
   /// @brief Default-construct a JITSymbolFlags instance.
@@ -67,6 +69,15 @@ public:
     return (Flags & HasError) == HasError;
   }
 
+  /// @brief Returns true if this symbol has been fully materialized (i.e. is
+  ///        callable).
+  bool isMaterialized() const { return !(Flags & NotMaterialized); }
+
+  /// @brief Returns true if this symbol is in the process of being
+  ///        materialized. This is generally only of interest as an
+  ///        implementation detail to JIT infrastructure.
+  bool isMaterializing() const { return Flags & Materializing; }
+
   /// @brief Returns true if the Weak flag is set.
   bool isWeak() const {
     return (Flags & Weak) == Weak;
@@ -78,7 +89,7 @@ public:
   }
 
   /// @brief Returns true if the symbol isn't weak or common.
-  bool isStrongDefinition() const {
+  bool isStrong() const {
     return !isWeak() && !isCommon();
   }
 
@@ -134,6 +145,8 @@ private:
 /// @brief Represents a symbol that has been evaluated to an address already.
 class JITEvaluatedSymbol {
 public:
+  JITEvaluatedSymbol() = default;
+
   /// @brief Create a 'null' symbol.
   JITEvaluatedSymbol(std::nullptr_t) {}
 
