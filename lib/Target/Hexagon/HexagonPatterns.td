@@ -892,40 +892,34 @@ let AddedComplexity = 100, Predicates = [HasV5T] in {
 def SDTHexagonINSERT:
   SDTypeProfile<1, 4, [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
                        SDTCisInt<0>, SDTCisVT<3, i32>, SDTCisVT<4, i32>]>;
-def SDTHexagonINSERTRP:
-  SDTypeProfile<1, 3, [SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>,
-                       SDTCisInt<0>, SDTCisVT<3, i64>]>;
-
 def HexagonINSERT:    SDNode<"HexagonISD::INSERT",   SDTHexagonINSERT>;
-def HexagonINSERTRP:  SDNode<"HexagonISD::INSERTRP", SDTHexagonINSERTRP>;
 
-def: Pat<(HexagonINSERT I32:$Rs, I32:$Rt, u5_0ImmPred:$u1, u5_0ImmPred:$u2),
-         (S2_insert I32:$Rs, I32:$Rt, imm:$u1, imm:$u2)>;
-def: Pat<(HexagonINSERT I64:$Rs, I64:$Rt, u6_0ImmPred:$u1, u6_0ImmPred:$u2),
-         (S2_insertp I64:$Rs, I64:$Rt, imm:$u1, imm:$u2)>;
-def: Pat<(HexagonINSERTRP I32:$Rs, I32:$Rt, I64:$Ru),
-         (S2_insert_rp I32:$Rs, I32:$Rt, I64:$Ru)>;
-def: Pat<(HexagonINSERTRP I64:$Rs, I64:$Rt, I64:$Ru),
-         (S2_insertp_rp I64:$Rs, I64:$Rt, I64:$Ru)>;
+let AddedComplexity = 10 in {
+  def: Pat<(HexagonINSERT I32:$Rs, I32:$Rt, u5_0ImmPred:$u1, u5_0ImmPred:$u2),
+           (S2_insert I32:$Rs, I32:$Rt, imm:$u1, imm:$u2)>;
+  def: Pat<(HexagonINSERT I64:$Rs, I64:$Rt, u6_0ImmPred:$u1, u6_0ImmPred:$u2),
+           (S2_insertp I64:$Rs, I64:$Rt, imm:$u1, imm:$u2)>;
+}
+def: Pat<(HexagonINSERT I32:$Rs, I32:$Rt, I32:$Width, I32:$Off),
+         (S2_insert_rp I32:$Rs, I32:$Rt, (Combinew $Width, $Off))>;
+def: Pat<(HexagonINSERT I64:$Rs, I64:$Rt, I32:$Width, I32:$Off),
+         (S2_insertp_rp I64:$Rs, I64:$Rt, (Combinew $Width, $Off))>;
 
 def SDTHexagonEXTRACTU
   : SDTypeProfile<1, 3, [SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<1>,
                   SDTCisVT<2, i32>, SDTCisVT<3, i32>]>;
-def SDTHexagonEXTRACTURP
-  : SDTypeProfile<1, 2, [SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<1>,
-                  SDTCisVT<2, i64>]>;
-
 def HexagonEXTRACTU:   SDNode<"HexagonISD::EXTRACTU",   SDTHexagonEXTRACTU>;
-def HexagonEXTRACTURP: SDNode<"HexagonISD::EXTRACTURP", SDTHexagonEXTRACTURP>;
 
-def: Pat<(HexagonEXTRACTU I32:$Rs, u5_0ImmPred:$u5, u5_0ImmPred:$U5),
-         (S2_extractu I32:$Rs, imm:$u5, imm:$U5)>;
-def: Pat<(HexagonEXTRACTU I64:$Rs, u6_0ImmPred:$u6, u6_0ImmPred:$U6),
-         (S2_extractup I64:$Rs, imm:$u6, imm:$U6)>;
-def: Pat<(HexagonEXTRACTURP I32:$Rs, I64:$Rt),
-         (S2_extractu_rp I32:$Rs, I64:$Rt)>;
-def: Pat<(HexagonEXTRACTURP I64:$Rs, I64:$Rt),
-         (S2_extractup_rp I64:$Rs, I64:$Rt)>;
+let AddedComplexity = 10 in {
+  def: Pat<(HexagonEXTRACTU I32:$Rs, u5_0ImmPred:$u5, u5_0ImmPred:$U5),
+           (S2_extractu I32:$Rs, imm:$u5, imm:$U5)>;
+  def: Pat<(HexagonEXTRACTU I64:$Rs, u6_0ImmPred:$u6, u6_0ImmPred:$U6),
+           (S2_extractup I64:$Rs, imm:$u6, imm:$U6)>;
+}
+def: Pat<(HexagonEXTRACTU I32:$Rs, I32:$Width, I32:$Off),
+         (S2_extractu_rp I32:$Rs, (Combinew $Width, $Off))>;
+def: Pat<(HexagonEXTRACTU I64:$Rs, I32:$Width, I32:$Off),
+         (S2_extractup_rp I64:$Rs, (Combinew $Width, $Off))>;
 
 def SDTHexagonVSPLAT:
   SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVT<1, i32>]>;
@@ -938,6 +932,11 @@ def: Pat<(v2i32 (HexagonVSPLAT s8_0ImmPred:$s8)),
          (A2_combineii imm:$s8, imm:$s8)>;
 def: Pat<(v2i32 (HexagonVSPLAT I32:$Rs)), (Combinew I32:$Rs, I32:$Rs)>;
 
+let AddedComplexity = 10 in
+def: Pat<(v8i8 (HexagonVSPLAT I32:$Rs)), (S6_vsplatrbp I32:$Rs)>,
+     Requires<[HasV62T]>;
+def: Pat<(v8i8 (HexagonVSPLAT I32:$Rs)),
+         (Combinew (S2_vsplatrb I32:$Rs), (S2_vsplatrb I32:$Rs))>;
 
 // --(8) Shift/permute ---------------------------------------------------
 //
@@ -1274,6 +1273,56 @@ let AddedComplexity = 10 in {
 def: AccRRI_pat<M2_naccii,    Sub, Su<Add>, I32, s32_0ImmPred>;
 def: AccRRI_pat<M2_accii,     Add, Su<Add>, I32, s32_0ImmPred>;
 def: AccRRR_pat<M2_acci,      Add, Su<Add>, I32, I32>;
+
+// Mulh for vectors
+//
+def: Pat<(v2i32 (mulhu V2I32:$Rss, V2I32:$Rtt)),
+         (Combinew (M2_mpyu_up (HiReg $Rss), (HiReg $Rtt)),
+                   (M2_mpyu_up (LoReg $Rss), (LoReg $Rtt)))>;
+
+def: Pat<(v2i32 (mulhs V2I32:$Rs, V2I32:$Rt)),
+         (Combinew (M2_mpy_up (HiReg $Rs), (HiReg $Rt)),
+                   (M2_mpy_up (LoReg $Rt), (LoReg $Rt)))>;
+
+def Mulhub:
+  OutPatFrag<(ops node:$Rss, node:$Rtt),
+             (Combinew (S2_vtrunohb (M5_vmpybuu (HiReg $Rss), (HiReg $Rtt))),
+                       (S2_vtrunohb (M5_vmpybuu (LoReg $Rss), (LoReg $Rtt))))>;
+
+// Equivalent of byte-wise arithmetic shift right by 7 in v8i8.
+def Asr7:
+  OutPatFrag<(ops node:$Rss), (C2_mask (C2_not (A4_vcmpbgti $Rss, 0)))>;
+
+def: Pat<(v8i8 (mulhu V8I8:$Rss, V8I8:$Rtt)),
+         (Mulhub $Rss, $Rtt)>;
+
+def: Pat<(v8i8 (mulhs V8I8:$Rss, V8I8:$Rtt)),
+         (A2_vsubub
+           (Mulhub $Rss, $Rtt),
+           (A2_vaddub (A2_andp V8I8:$Rss, (Asr7 $Rtt)),
+                      (A2_andp V8I8:$Rtt, (Asr7 $Rss))))>;
+
+def Mpysh:
+  OutPatFrag<(ops node:$Rs, node:$Rt), (M2_vmpy2s_s0 $Rs, $Rt)>;
+def Mpyshh:
+  OutPatFrag<(ops node:$Rss, node:$Rtt), (Mpysh (HiReg $Rss), (HiReg $Rtt))>;
+def Mpyshl:
+  OutPatFrag<(ops node:$Rss, node:$Rtt), (Mpysh (LoReg $Rss), (LoReg $Rtt))>;
+
+def Mulhsh:
+  OutPatFrag<(ops node:$Rss, node:$Rtt),
+             (Combinew (A2_combine_hh (HiReg (Mpyshh $Rss, $Rtt)),
+                                      (LoReg (Mpyshh $Rss, $Rtt))),
+                       (A2_combine_hh (HiReg (Mpyshl $Rss, $Rtt)),
+                                      (LoReg (Mpyshl $Rss, $Rtt))))>;
+
+def: Pat<(v4i16 (mulhs V4I16:$Rss, V4I16:$Rtt)), (Mulhsh $Rss, $Rtt)>;
+
+def: Pat<(v4i16 (mulhu V4I16:$Rss, V4I16:$Rtt)),
+         (A2_vaddh
+           (Mulhsh $Rss, $Rtt),
+           (A2_vaddh (A2_andp V4I16:$Rss, (S2_asr_i_vh $Rtt, 15)),
+                     (A2_andp V4I16:$Rtt, (S2_asr_i_vh $Rss, 15))))>;
 
 
 def: Pat<(ineg (mul I32:$Rs, u8_0ImmPred:$u8)),
@@ -2925,22 +2974,10 @@ let Predicates = [UseHVX] in {
 def HexagonVZERO: SDNode<"HexagonISD::VZERO", SDTVecLeaf>;
 def vzero: PatFrag<(ops), (HexagonVZERO)>;
 
-def VSxtb: OutPatFrag<(ops node:$Vs),
-           (V6_vshuffvdd (HiVec (V6_vsb $Vs)),
-                         (LoVec (V6_vsb $Vs)),
-                         (A2_tfrsi -2))>;
-def VSxth: OutPatFrag<(ops node:$Vs),
-           (V6_vshuffvdd (HiVec (V6_vsh $Vs)),
-                         (LoVec (V6_vsh $Vs)),
-                         (A2_tfrsi -4))>;
-def VZxtb: OutPatFrag<(ops node:$Vs),
-           (V6_vshuffvdd (HiVec (V6_vzb $Vs)),
-                         (LoVec (V6_vzb $Vs)),
-                         (A2_tfrsi -2))>;
-def VZxth: OutPatFrag<(ops node:$Vs),
-           (V6_vshuffvdd (HiVec (V6_vzh $Vs)),
-                         (LoVec (V6_vzh $Vs)),
-                         (A2_tfrsi -4))>;
+def VSxtb: OutPatFrag<(ops node:$Vs), (V6_vunpackb  $Vs)>;
+def VSxth: OutPatFrag<(ops node:$Vs), (V6_vunpackh  $Vs)>;
+def VZxtb: OutPatFrag<(ops node:$Vs), (V6_vunpackub $Vs)>;
+def VZxth: OutPatFrag<(ops node:$Vs), (V6_vunpackuh $Vs)>;
 
 let Predicates = [UseHVX] in {
   def: Pat<(VecI8  vzero), (V6_vd0)>;
@@ -3001,4 +3038,9 @@ let Predicates = [UseHVX] in {
   def: Pat<(VecI32 (zext_invec HVI16:$Vs)), (LoVec (VZxth $Vs))>;
   def: Pat<(VecI32 (zext_invec HVI8:$Vs)),
            (LoVec (VZxth (LoVec (VZxtb $Vs))))>;
+
+  def: Pat<(VecI8 (trunc HWI16:$Vss)),
+           (V6_vpackeb (HiVec $Vss), (LoVec $Vss))>;
+  def: Pat<(VecI16 (trunc HWI32:$Vss)),
+           (V6_vpackeh (HiVec $Vss), (LoVec $Vss))>;
 }

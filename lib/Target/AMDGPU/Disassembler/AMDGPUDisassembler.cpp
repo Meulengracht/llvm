@@ -690,9 +690,8 @@ MCOperand AMDGPUDisassembler::decodeSpecialReg32(unsigned Val) const {
   switch (Val) {
   case 102: return createRegOperand(FLAT_SCR_LO);
   case 103: return createRegOperand(FLAT_SCR_HI);
-    // ToDo: no support for xnack_mask_lo/_hi register
-  case 104:
-  case 105: break;
+  case 104: return createRegOperand(XNACK_MASK_LO);
+  case 105: return createRegOperand(XNACK_MASK_HI);
   case 106: return createRegOperand(VCC_LO);
   case 107: return createRegOperand(VCC_HI);
   case 108: assert(!isGFX9()); return createRegOperand(TBA_LO);
@@ -722,6 +721,7 @@ MCOperand AMDGPUDisassembler::decodeSpecialReg64(unsigned Val) const {
 
   switch (Val) {
   case 102: return createRegOperand(FLAT_SCR);
+  case 104: return createRegOperand(XNACK_MASK);
   case 106: return createRegOperand(VCC);
   case 108: assert(!isGFX9()); return createRegOperand(TBA);
   case 110: assert(!isGFX9()); return createRegOperand(TMA);
@@ -732,8 +732,9 @@ MCOperand AMDGPUDisassembler::decodeSpecialReg64(unsigned Val) const {
 }
 
 MCOperand AMDGPUDisassembler::decodeSDWASrc(const OpWidthTy Width,
-                                            unsigned Val) const {
+                                            const unsigned Val) const {
   using namespace AMDGPU::SDWA;
+  using namespace AMDGPU::EncValues;
 
   if (STI.getFeatureBits()[AMDGPU::FeatureGFX9]) {
     // XXX: static_cast<int> is needed to avoid stupid warning:
@@ -754,7 +755,15 @@ MCOperand AMDGPUDisassembler::decodeSDWASrc(const OpWidthTy Width,
                                Val - SDWA9EncValues::SRC_TTMP_MIN);
     }
 
-    return decodeSpecialReg32(Val - SDWA9EncValues::SRC_SGPR_MIN);
+    const unsigned SVal = Val - SDWA9EncValues::SRC_SGPR_MIN;
+
+    if (INLINE_INTEGER_C_MIN <= SVal && SVal <= INLINE_INTEGER_C_MAX)
+      return decodeIntImmed(SVal);
+
+    if (INLINE_FLOATING_C_MIN <= SVal && SVal <= INLINE_FLOATING_C_MAX)
+      return decodeFPImmed(Width, SVal);
+
+    return decodeSpecialReg32(SVal);
   } else if (STI.getFeatureBits()[AMDGPU::FeatureVolcanicIslands]) {
     return createRegOperand(getVgprClassId(Width), Val);
   }
