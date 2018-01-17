@@ -18,7 +18,7 @@
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include <mutex>
 
-#if !defined(_MSC_VER) && !defined(__MINGW32__)
+#if !defined(_MSC_VER) && !defined(__MINGW32__) && !defined(MOLLENOS)
 #include <unistd.h>
 #else
 #include <io.h>
@@ -33,7 +33,11 @@ public:
     assert(Dst && "Attempt to read into null.");
     ssize_t Completed = 0;
     while (Completed < static_cast<ssize_t>(Size)) {
+#if defined(LLVM_ON_VALI)
+      ssize_t Read = ::_read(InFD, (void*)(Dst + Completed), Size - Completed);
+#else
       ssize_t Read = ::read(InFD, Dst + Completed, Size - Completed);
+#endif
       if (Read <= 0) {
         auto ErrNo = errno;
         if (ErrNo == EAGAIN || ErrNo == EINTR)
@@ -51,7 +55,11 @@ public:
     assert(Src && "Attempt to append from null.");
     ssize_t Completed = 0;
     while (Completed < static_cast<ssize_t>(Size)) {
+#if defined(LLVM_ON_VALI)
+      ssize_t Written = ::_write(OutFD, (void*)(Src + Completed), Size - Completed);
+#else
       ssize_t Written = ::write(OutFD, Src + Completed, Size - Completed);
+#endif
       if (Written < 0) {
         auto ErrNo = errno;
         if (ErrNo == EAGAIN || ErrNo == EINTR)

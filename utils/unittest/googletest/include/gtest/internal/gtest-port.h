@@ -263,7 +263,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#ifndef _WIN32_WCE
+#if !defined(_WIN32_WCE) && !defined(MOLLENOS) 
 # include <sys/types.h>
 # include <sys/stat.h>
 #endif  // !_WIN32_WCE
