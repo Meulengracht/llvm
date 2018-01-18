@@ -204,7 +204,7 @@ function(add_link_opts target_name)
 
     # Pass -O3 to the linker. This enabled different optimizations on different
     # linkers.
-    if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Darwin|SunOS|AIX" OR WIN32))
+    if(NOT (${CMAKE_SYSTEM_NAME} MATCHES "Darwin|SunOS|AIX" OR WIN32 OR MOLLENOS))
       set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                    LINK_FLAGS " -Wl,-O3")
     endif()
@@ -225,7 +225,7 @@ function(add_link_opts target_name)
       elseif(${CMAKE_SYSTEM_NAME} MATCHES "SunOS")
         set_property(TARGET ${target_name} APPEND_STRING PROPERTY
                      LINK_FLAGS " -Wl,-z -Wl,discard-unused=sections")
-      elseif(NOT WIN32 AND NOT LLVM_LINKER_IS_GOLD AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD")
+      elseif(NOT WIN32 AND NOT MOLLENOS AND NOT LLVM_LINKER_IS_GOLD AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD")
         # Object files are compiled with -ffunction-data-sections.
         # Versions of bfd ld < 2.23.1 have a bug in --gc-sections that breaks
         # tools that use plugins. Always pass --gc-sections once we require

@@ -94,6 +94,8 @@
 # define GTEST_OS_HAIKU 1
 #elif defined(_MINIX)
 # define GTEST_OS_MINIX 1
+#elif defined(MOLLENOS)
+# define GTEST_OS_VALI 1
 #endif  // __CYGWIN__
 
 #endif  // GTEST_INCLUDE_GTEST_INTERNAL_GTEST_PORT_ARCH_H_

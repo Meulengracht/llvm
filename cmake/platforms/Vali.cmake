@@ -31,34 +31,12 @@ if(NOT DEFINED ENV{LIBRARIES})
 endif()
 
 # Setup environment stuff for cmake configuration
+set(CMAKE_SYSTEM_NAME Vali)
 set(CMAKE_CROSSCOMPILING ON CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
 set(CMAKE_LINKER "$ENV{CROSS}/bin/lld-link" CACHE FILEPATH "")
-set(MOLLENOS ON CACHE BOOL "")
 set(VERBOSE 1)
-
-##################################################
-# Setup platform environment
-##################################################
-
-# No -fPIC on Vali
-set(CMAKE_C_COMPILE_OPTIONS_PIC "" CACHE STRING "" FORCE)
-set(CMAKE_CXX_COMPILE_OPTIONS_PIC "" CACHE STRING "" FORCE)
-set(CMAKE_C_COMPILE_OPTIONS_PIE "" CACHE STRING "" FORCE)
-set(CMAKE_CXX_COMPILE_OPTIONS_PIE "" CACHE STRING "" FORCE)
-set(CMAKE_SHARED_LIBRARY_C_FLAGS "" CACHE STRING "" FORCE)
-set(CMAKE_SHARED_LIBRARY_CXX_FLAGS "" CACHE STRING "" FORCE)
-
-# Setup cmake rules, we do not care for default stuff
-set(CMAKE_C_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
-set(CMAKE_CXX_CREATE_SHARED_LIBRARY "<CMAKE_LINKER> <LINK_FLAGS> /dll $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtLibraryEntry <LINK_LIBRARIES>")
-
-set(CMAKE_C_CREATE_SHARED_MODULE ${CMAKE_C_CREATE_SHARED_LIBRARY})
-set(CMAKE_CXX_CREATE_SHARED_MODULE ${CMAKE_CXX_CREATE_SHARED_LIBRARY})
-
-set(CMAKE_C_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcrt.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
-set(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_LINKER> <LINK_FLAGS> $ENV{LIBRARIES}/libcxx.lib <OBJECTS> /out:<TARGET> /entry:__CrtConsoleEntry <LINK_LIBRARIES>")
 
 ##################################################
 # Setup LLVM custom options
@@ -72,8 +50,8 @@ set(LLVM_TARGET_ARCH "X86" CACHE STRING "")
 set(LLVM_TARGETS_TO_BUILD "X86" CACHE STRING "") 
 set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
 
-set(LLVM_ENABLE_EH ON CACHE BOOL "")
-set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
+set(LLVM_ENABLE_EH ON)
+set(LLVM_ENABLE_RTTI ON)
 set(LLVM_USE_LINKER lld)
 
 # Disable tests and examples to speedup build process
@@ -91,6 +69,7 @@ set(COMPILE_FLAGS
     -Wall
     -nostdlib
     -nostdinc
+    -O3
     -I$ENV{INCLUDES}/cxx
     -I$ENV{INCLUDES})
 
@@ -133,5 +112,5 @@ set(CMAKE_SHARED_LINKER_FLAGS "${_CMAKE_SHARED_LINKER_FLAGS_INITIAL} ${LINK_FLAG
 # CMake populates these with a bunch of unnecessary libraries, which requires
 # extra case-correcting symlinks and what not. Instead, let projects explicitly
 # control which libraries they require.
-set(CMAKE_C_STANDARD_LIBRARIES "" CACHE STRING "" FORCE)
-set(CMAKE_CXX_STANDARD_LIBRARIES "" CACHE STRING "" FORCE)
+set(CMAKE_C_STANDARD_LIBRARIES "")
+set(CMAKE_CXX_STANDARD_LIBRARIES "")
