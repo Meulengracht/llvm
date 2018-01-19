@@ -80,11 +80,8 @@ string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
 # The assignments to the _INITIAL cache variables don't use FORCE, so they'll
 # only be populated on the initial configure, and their values won't change
 # afterward.
-set(_CMAKE_C_FLAGS_INITIAL "${CMAKE_C_FLAGS}" CACHE STRING "")
-set(CMAKE_C_FLAGS "${_CMAKE_C_FLAGS_INITIAL} -std=c11 ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
-
-set(_CMAKE_CXX_FLAGS_INITIAL "${CMAKE_CXX_FLAGS}" CACHE STRING "")
-set(CMAKE_CXX_FLAGS "${_CMAKE_CXX_FLAGS_INITIAL} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
 
 set(LINK_FLAGS
     /nodefaultlib
