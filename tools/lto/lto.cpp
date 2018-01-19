@@ -625,3 +625,9 @@ lto_bool_t thinlto_codegen_set_pic_model(thinlto_code_gen_t cg,
   sLastErrorString = "Unknown PIC model";
   return true;
 }
+
+#ifdef LLVM_ON_VALI
+void dllmain(int action) {
+    (void)action;
+}
+#endif
