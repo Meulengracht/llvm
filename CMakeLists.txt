@@ -806,9 +806,9 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 include_directories( ${LLVM_INCLUDE_DIR} ${LLVM_MAIN_INCLUDE_DIR})
 
 # when crosscompiling import the executable targets from a file
-if(LLVM_USE_HOST_TOOLS)
+if(LLVM_USE_HOST_TOOLS AND NOT MOLLENOS)
   include(CrossCompile)
-endif(LLVM_USE_HOST_TOOLS)
+endif(LLVM_USE_HOST_TOOLS AND NOT MOLLENOS)
 if(LLVM_TARGET_IS_CROSSCOMPILE_HOST)
 # Dummy use to avoid CMake Warning: Manually-specified variables were not used
 # (this is a variable that CrossCompile sets on recursive invocations)

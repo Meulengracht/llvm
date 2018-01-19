@@ -163,14 +163,14 @@ if(APPLE)
 elseif(NOT WIN32)
   # Detect what linker we have here
   if( LLVM_USE_LINKER )
+    set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
+  else()
     if (MOLLENOS)
       set(command ${CMAKE_LINKER} --version)
     else()
-      set(command ${CMAKE_C_COMPILER} -fuse-ld=${LLVM_USE_LINKER} -Wl,--version)
+      separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
+      set(command ${CMAKE_C_COMPILER} ${flags} -Wl,--version)
     endif()
-  else()
-    separate_arguments(flags UNIX_COMMAND "${CMAKE_EXE_LINKER_FLAGS}")
-    set(command ${CMAKE_C_COMPILER} ${flags} -Wl,--version)
   endif()
   execute_process(
     COMMAND ${command}
