@@ -61,6 +61,7 @@ set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 set(COMPILE_FLAGS
     -U_WIN32
     -DMOLLENOS
+    -DZLIB_DLL
     -Di386
     -D__i386__
     -m32
@@ -91,6 +92,7 @@ set(LINK_FLAGS
     $ENV{LIBRARIES}/libclang.lib
     $ENV{LIBRARIES}/libm.lib
     $ENV{LIBRARIES}/libc.lib
+    $ENV{LIBRARIES}/zlib.lib
     $ENV{LIBRARIES}/libunwind.lib)
 
 string(REPLACE ";" " " LINK_FLAGS "${LINK_FLAGS}")
