@@ -208,6 +208,8 @@ void AbstractInterpreter::anchor() {}
 const char EXESuffix[] = "";
 #elif defined(LLVM_ON_WIN32)
 const char EXESuffix[] = "exe";
+#elif defined(LLVM_ON_VALI)
+const char EXESuffix[] = "app";
 #endif
 
 /// Prepend the path to the program being executed

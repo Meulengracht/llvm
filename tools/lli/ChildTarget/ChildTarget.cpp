@@ -60,8 +60,13 @@ int main(int argc, char *argv[]) {
   while (!Server.receivedTerminate())
     ExitOnErr(Server.handleOne());
 
+#if defined(MOLLENOS)
+  _close(InFD);
+  _close(OutFD);
+#else
   close(InFD);
   close(OutFD);
+#endif
 
   return 0;
 }
