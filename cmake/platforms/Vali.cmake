@@ -32,7 +32,6 @@ endif()
 
 # Setup environment stuff for cmake configuration
 set(CMAKE_SYSTEM_NAME Vali)
-set(CMAKE_CROSSCOMPILING ON CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
 set(CMAKE_LINKER "$ENV{CROSS}/bin/lld-link" CACHE FILEPATH "")
@@ -52,7 +51,6 @@ set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
 
 set(LLVM_ENABLE_EH ON)
 set(LLVM_ENABLE_RTTI ON)
-set(LLVM_USE_LINKER lld)
 
 # Disable tests and examples to speedup build process
 set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
