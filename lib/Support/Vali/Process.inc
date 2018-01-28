@@ -104,7 +104,7 @@ bool Process::StandardErrIsDisplayed() {
 }
 
 bool Process::FileDescriptorIsDisplayed(int fd) {
-  return _isatty(fd);
+  return isatty(fd);
 }
 
 static unsigned getColumns(int FileID) {

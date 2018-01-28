@@ -2350,8 +2350,8 @@ inline bool IsDir(const StatStruct& st) {
 
 typedef vFileDescriptor_t StatStruct;
 
-inline int IsATTY(int fd) { return _isatty(fd); }
-inline int FileNo(FILE* file) { return _fileno(file); }
+inline int IsATTY(int fd) { return isatty(fd); }
+inline int FileNo(FILE* file) { return fileno(file); }
 inline int Stat(const char* path, StatStruct* buf) { return GetFileInformationFromPath(path, buf) == OsSuccess ? 0 : -1; }
 inline int StrCaseCmp(const char* s1, const char* s2) { return strcasecmp(s1, s2); }
 inline char* StrDup(const char* src) { return strdup(src); }
