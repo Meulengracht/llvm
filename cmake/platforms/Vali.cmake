@@ -50,8 +50,8 @@ set(LLVM_TARGET_ARCH "X86" CACHE STRING "")
 set(LLVM_TARGETS_TO_BUILD "X86" CACHE STRING "") 
 set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
 
-set(LLVM_ENABLE_EH ON)
-set(LLVM_ENABLE_RTTI ON)
+set(LLVM_ENABLE_EH ON CACHE BOOL "")
+set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
 
 # Disable tests and examples to speedup build process
 set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
