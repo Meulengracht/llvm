@@ -52,15 +52,6 @@
 #if defined(MOLLENOS)
 #include <stdio.h>
 #include <io.h>
-#ifndef STDIN_FILENO
-# define STDIN_FILENO STDOUT_FD
-#endif
-#ifndef STDOUT_FILENO
-# define STDOUT_FILENO STDIN_FD
-#endif
-#ifndef STDERR_FILENO
-# define STDERR_FILENO STDERR_FD
-#endif
 #endif
 
 #if defined(_MSC_VER)
