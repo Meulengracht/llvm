@@ -92,15 +92,15 @@ std::error_code Process::SafelyCloseFileDescriptor(int FD) {
 }
 
 bool Process::StandardInIsUserInput() {
-  return FileDescriptorIsDisplayed(STDIN_FD);
+  return FileDescriptorIsDisplayed(STDIN_FILENO);
 }
 
 bool Process::StandardOutIsDisplayed() {
-  return FileDescriptorIsDisplayed(STDOUT_FD);
+  return FileDescriptorIsDisplayed(STDOUT_FILENO);
 }
 
 bool Process::StandardErrIsDisplayed() {
-  return FileDescriptorIsDisplayed(STDERR_FD);
+  return FileDescriptorIsDisplayed(STDERR_FILENO);
 }
 
 bool Process::FileDescriptorIsDisplayed(int fd) {
@@ -143,11 +143,11 @@ bool Process::FileDescriptorHasColors(int fd) {
 }
 
 bool Process::StandardOutHasColors() {
-  return FileDescriptorHasColors(STDOUT_FD);
+  return FileDescriptorHasColors(STDOUT_FILENO);
 }
 
 bool Process::StandardErrHasColors() {
-  return FileDescriptorHasColors(STDERR_FD);
+  return FileDescriptorHasColors(STDERR_FILENO);
 }
 
 void Process::UseANSIEscapeCodes(bool /*enable*/) {
