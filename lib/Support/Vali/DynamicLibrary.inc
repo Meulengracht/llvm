@@ -23,14 +23,19 @@ DynamicLibrary::HandleSet::~HandleSet() {
 }
 
 void *DynamicLibrary::HandleSet::DLOpen(const char *File, std::string *Err) {
-  Handle_t Handle = SharedObjectLoad(File);
-  if (Handle == NULL) {
-    if (Err) {
-      *Err = File;
+    Handle_t Handle = SharedObjectLoad(File);
+    if (Handle == HANDLE_INVALID) {
+        if (Err) {
+            if (File) {
+                *Err = File;
+            }
+            else {
+                *Err = "Failed to open handle on current library library(NULL)";
+            }
+        }
+        return &DynamicLibrary::Invalid;
     }
-    return &DynamicLibrary::Invalid;
-  }
-  return reinterpret_cast<void*>(Handle);
+    return reinterpret_cast<void*>(Handle);
 }
 
 void DynamicLibrary::HandleSet::DLClose(void *Handle) {
