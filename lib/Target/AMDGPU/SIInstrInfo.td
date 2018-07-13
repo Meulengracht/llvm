@@ -7,15 +7,20 @@
 //
 //===----------------------------------------------------------------------===//
 def isCI : Predicate<"Subtarget->getGeneration() "
-                      ">= SISubtarget::SEA_ISLANDS">;
+                      ">= AMDGPUSubtarget::SEA_ISLANDS">;
 def isCIOnly : Predicate<"Subtarget->getGeneration() =="
-                         "SISubtarget::SEA_ISLANDS">,
+                         "AMDGPUSubtarget::SEA_ISLANDS">,
   AssemblerPredicate <"FeatureSeaIslands">;
 def isVIOnly : Predicate<"Subtarget->getGeneration() =="
-                         "SISubtarget::VOLCANIC_ISLANDS">,
+                         "AMDGPUSubtarget::VOLCANIC_ISLANDS">,
   AssemblerPredicate <"FeatureVolcanicIslands">;
 
 def DisableInst : Predicate <"false">, AssemblerPredicate<"FeatureDisable">;
+
+class GCNPredicateControl : PredicateControl {
+  Predicate SIAssemblerPredicate = isSICI;
+  Predicate VIAssemblerPredicate = isVI;
+}
 
 // Execpt for the NONE field, this must be kept in sync with the
 // SIEncodingFamily enum in AMDGPUInstrInfo.cpp
@@ -32,6 +37,8 @@ def SIEncodingFamily {
 //===----------------------------------------------------------------------===//
 // SI DAG Nodes
 //===----------------------------------------------------------------------===//
+
+def AMDGPUclamp : SDNode<"AMDGPUISD::CLAMP", SDTFPUnaryOp>;
 
 def SIload_constant : SDNode<"AMDGPUISD::LOAD_CONSTANT",
   SDTypeProfile<1, 2, [SDTCisVT<0, f32>, SDTCisVT<1, v4i32>, SDTCisVT<2, i32>]>,
@@ -170,16 +177,6 @@ def SIbuffer_atomic_cmpswap : SDNode <"AMDGPUISD::BUFFER_ATOMIC_CMPSWAP",
   [SDNPMemOperand, SDNPHasChain, SDNPMayLoad, SDNPMayStore]
 >;
 
-class SDSample<string opcode> : SDNode <opcode,
-  SDTypeProfile<1, 4, [SDTCisVT<0, v4f32>, SDTCisVT<2, v8i32>,
-                       SDTCisVT<3, v4i32>, SDTCisVT<4, i32>]>
->;
-
-def SIsample : SDSample<"AMDGPUISD::SAMPLE">;
-def SIsampleb : SDSample<"AMDGPUISD::SAMPLEB">;
-def SIsampled : SDSample<"AMDGPUISD::SAMPLED">;
-def SIsamplel : SDSample<"AMDGPUISD::SAMPLEL">;
-
 def SIpc_add_rel_offset : SDNode<"AMDGPUISD::PC_ADD_REL_OFFSET",
   SDTypeProfile<1, 2, [SDTCisVT<0, iPTR>, SDTCisSameAs<0,1>, SDTCisSameAs<0,2>]>
 >;
@@ -241,6 +238,10 @@ def AMDGPUld_glue : SDNode <"ISD::LOAD", SDTLoad,
   [SDNPHasChain, SDNPMayLoad, SDNPMemOperand, SDNPInGlue]
 >;
 
+def AMDGPUatomic_ld_glue : SDNode <"ISD::ATOMIC_LOAD", SDTAtomicLoad,
+  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand, SDNPInGlue]
+>;
+
 def unindexedload_glue : PatFrag <(ops node:$ptr), (AMDGPUld_glue node:$ptr), [{
   return cast<LoadSDNode>(N)->getAddressingMode() == ISD::UNINDEXED;
 }]>;
@@ -248,6 +249,18 @@ def unindexedload_glue : PatFrag <(ops node:$ptr), (AMDGPUld_glue node:$ptr), [{
 def load_glue : PatFrag <(ops node:$ptr), (unindexedload_glue node:$ptr), [{
   return cast<LoadSDNode>(N)->getExtensionType() == ISD::NON_EXTLOAD;
 }]>;
+
+def atomic_load_32_glue : PatFrag<(ops node:$ptr),
+  (AMDGPUatomic_ld_glue node:$ptr)> {
+  let IsAtomic = 1;
+  let MemoryVT = i32;
+}
+
+def atomic_load_64_glue : PatFrag<(ops node:$ptr),
+  (AMDGPUatomic_ld_glue node:$ptr)> {
+  let IsAtomic = 1;
+  let MemoryVT = i64;
+}
 
 def extload_glue : PatFrag<(ops node:$ptr), (load_glue node:$ptr), [{
   return cast<LoadSDNode>(N)->getExtensionType() == ISD::EXTLOAD;
@@ -282,6 +295,9 @@ def sextloadi16_glue : PatFrag<(ops node:$ptr), (sextload_glue node:$ptr), [{
 def load_glue_align8 : Aligned8Bytes <
   (ops node:$ptr), (load_glue node:$ptr)
 >;
+def load_glue_align16 : Aligned16Bytes <
+  (ops node:$ptr), (load_glue node:$ptr)
+>;
 
 
 def load_local_m0 : LoadFrag<load_glue>, LocalAddress;
@@ -290,11 +306,22 @@ def sextloadi16_local_m0 : LoadFrag<sextloadi16_glue>, LocalAddress;
 def az_extloadi8_local_m0 : LoadFrag<az_extloadi8_glue>, LocalAddress;
 def az_extloadi16_local_m0 : LoadFrag<az_extloadi16_glue>, LocalAddress;
 def load_align8_local_m0 : LoadFrag <load_glue_align8>, LocalAddress;
+def load_align16_local_m0 : LoadFrag <load_glue_align16>, LocalAddress;
+def atomic_load_32_local_m0 : LoadFrag<atomic_load_32_glue>, LocalAddress;
+def atomic_load_64_local_m0 : LoadFrag<atomic_load_64_glue>, LocalAddress;
 
 
 def AMDGPUst_glue : SDNode <"ISD::STORE", SDTStore,
   [SDNPHasChain, SDNPMayStore, SDNPMemOperand, SDNPInGlue]
 >;
+
+def AMDGPUatomic_st_glue : SDNode <"ISD::ATOMIC_STORE", SDTAtomicStore,
+  [SDNPHasChain, SDNPMayStore, SDNPMemOperand, SDNPInGlue]
+>;
+
+def atomic_store_glue : PatFrag<(ops node:$ptr, node:$val),
+  (AMDGPUatomic_st_glue node:$ptr, node:$val)> {
+}
 
 def unindexedstore_glue : PatFrag<(ops node:$val, node:$ptr),
                                    (AMDGPUst_glue node:$val, node:$ptr), [{
@@ -325,11 +352,17 @@ def store_glue_align8 : Aligned8Bytes <
   (ops node:$value, node:$ptr), (store_glue node:$value, node:$ptr)
 >;
 
+def store_glue_align16 : Aligned16Bytes <
+  (ops node:$value, node:$ptr), (store_glue node:$value, node:$ptr)
+>;
+
 def store_local_m0 : StoreFrag<store_glue>, LocalAddress;
 def truncstorei8_local_m0 : StoreFrag<truncstorei8_glue>, LocalAddress;
 def truncstorei16_local_m0 : StoreFrag<truncstorei16_glue>, LocalAddress;
+def atomic_store_local_m0 : StoreFrag<AMDGPUatomic_st_glue>, LocalAddress;
 
 def store_align8_local_m0 : StoreFrag<store_glue_align8>, LocalAddress;
+def store_align16_local_m0 : StoreFrag<store_glue_align16>, LocalAddress;
 
 def si_setcc_uniform : PatFrag <
   (ops node:$lhs, node:$rhs, node:$cond),
@@ -435,6 +468,12 @@ return CurDAG->getTargetConstant(
   N->getValueAPF().bitcastToAPInt().getZExtValue(), SDLoc(N), MVT::i64);
 }]>;
 
+class bitextract_imm<int bitnum> : SDNodeXForm<imm, [{
+  uint64_t Imm = N->getZExtValue();
+  unsigned Bit = (Imm >> }] # bitnum # [{ ) & 1;
+  return CurDAG->getTargetConstant(Bit, SDLoc(N), MVT::i1);
+}]>;
+
 def SIMM16bit : PatLeaf <(imm),
   [{return isInt<16>(N->getSExtValue());}]
 >;
@@ -448,7 +487,7 @@ class InlineFPImm <ValueType vt> : PatLeaf <(vt fpimm), [{
 }]>;
 
 class VGPRImm <dag frag> : PatLeaf<frag, [{
-  if (Subtarget->getGeneration() < SISubtarget::SOUTHERN_ISLANDS) {
+  if (Subtarget->getGeneration() < AMDGPUSubtarget::SOUTHERN_ISLANDS) {
     return false;
   }
   const SIRegisterInfo *SIRI =
@@ -703,19 +742,20 @@ def clampmod : NamedOperandBit<"ClampSI", NamedMatchClass<"ClampSI">>;
 def highmod : NamedOperandBit<"High", NamedMatchClass<"High">>;
 
 def GLC : NamedOperandBit<"GLC", NamedMatchClass<"GLC">>;
-def slc : NamedOperandBit<"SLC", NamedMatchClass<"SLC">>;
-def tfe : NamedOperandBit<"TFE", NamedMatchClass<"TFE">>;
-def unorm : NamedOperandBit<"UNorm", NamedMatchClass<"UNorm">>;
-def da : NamedOperandBit<"DA", NamedMatchClass<"DA">>;
-def r128 : NamedOperandBit<"R128", NamedMatchClass<"R128">>;
-def lwe : NamedOperandBit<"LWE", NamedMatchClass<"LWE">>;
+def SLC : NamedOperandBit<"SLC", NamedMatchClass<"SLC">>;
+def TFE : NamedOperandBit<"TFE", NamedMatchClass<"TFE">>;
+def UNorm : NamedOperandBit<"UNorm", NamedMatchClass<"UNorm">>;
+def DA : NamedOperandBit<"DA", NamedMatchClass<"DA">>;
+def R128 : NamedOperandBit<"R128", NamedMatchClass<"R128">>;
+def D16 : NamedOperandBit<"D16", NamedMatchClass<"D16">>;
+def LWE : NamedOperandBit<"LWE", NamedMatchClass<"LWE">>;
 def exp_compr : NamedOperandBit<"ExpCompr", NamedMatchClass<"ExpCompr">>;
 def exp_vm : NamedOperandBit<"ExpVM", NamedMatchClass<"ExpVM">>;
 
 def DFMT : NamedOperandU8<"DFMT", NamedMatchClass<"DFMT">>;
 def NFMT : NamedOperandU8<"NFMT", NamedMatchClass<"NFMT">>;
 
-def dmask : NamedOperandU16<"DMask", NamedMatchClass<"DMask">>;
+def DMask : NamedOperandU16<"DMask", NamedMatchClass<"DMask">>;
 
 def dpp_ctrl : NamedOperandU32<"DPPCtrl", NamedMatchClass<"DPPCtrl", 0>>;
 def row_mask : NamedOperandU32<"RowMask", NamedMatchClass<"RowMask">>;
@@ -1790,6 +1830,9 @@ def VOP_I32_F32_I32_I32 : VOPProfile <[i32, f32, i32, i32]>;
 def VOP_I64_I64_I32_I64 : VOPProfile <[i64, i64, i32, i64]>;
 def VOP_V4I32_I64_I32_V4I32 : VOPProfile <[v4i32, i64, i32, v4i32]>;
 
+def VOP_F32_V2F16_V2F16_F32 : VOPProfile <[f32, v2f16, v2f16, f32]>;
+def VOP_I32_V2I16_V2I16_I32 : VOPProfile <[i32, v2i16, v2i16, i32]>;
+
 class Commutable_REV <string revOp, bit isOrig> {
   string RevOp = revOp;
   bit IsOrig = isOrig;
@@ -1803,6 +1846,8 @@ class AtomicNoRet <string noRetOp, bit isRet> {
 //===----------------------------------------------------------------------===//
 // Interpolation opcodes
 //===----------------------------------------------------------------------===//
+
+class VINTRPDstOperand <RegisterClass rc> : RegisterOperand <rc, "printVINTRPDst">;
 
 class VINTRP_Pseudo <string opName, dag outs, dag ins, list<dag> pattern> :
   VINTRPCommon <outs, ins, "", pattern>,
@@ -1880,38 +1925,6 @@ def getBasicFromSDWAOp : InstrMapping {
   let ValueCols = [["Default"]];
 }
 
-def getMaskedMIMGOp1 : InstrMapping {
-  let FilterClass = "MIMG_Mask";
-  let RowFields = ["Op"];
-  let ColFields = ["Channels"];
-  let KeyCol = ["1"];
-  let ValueCols = [["2"], ["3"], ["4"] ];
-}
-
-def getMaskedMIMGOp2 : InstrMapping {
-  let FilterClass = "MIMG_Mask";
-  let RowFields = ["Op"];
-  let ColFields = ["Channels"];
-  let KeyCol = ["2"];
-  let ValueCols = [["1"], ["3"], ["4"] ];
-}
-
-def getMaskedMIMGOp3 : InstrMapping {
-  let FilterClass = "MIMG_Mask";
-  let RowFields = ["Op"];
-  let ColFields = ["Channels"];
-  let KeyCol = ["3"];
-  let ValueCols = [["1"], ["2"], ["4"] ];
-}
-
-def getMaskedMIMGOp4 : InstrMapping {
-  let FilterClass = "MIMG_Mask";
-  let RowFields = ["Op"];
-  let ColFields = ["Channels"];
-  let KeyCol = ["4"];
-  let ValueCols = [["1"], ["2"], ["3"] ];
-}
-
 // Maps an commuted opcode to its original version
 def getCommuteOrig : InstrMapping {
   let FilterClass = "Commutable_REV";
@@ -1962,6 +1975,14 @@ def getAddr64Inst : InstrMapping {
   let ColFields = ["IsAddr64"];
   let KeyCol = ["0"];
   let ValueCols = [["1"]];
+}
+
+def getMUBUFNoLdsInst : InstrMapping {
+  let FilterClass = "MUBUFLdsTable";
+  let RowFields = ["OpName"];
+  let ColFields = ["IsLds"];
+  let KeyCol = ["1"];
+  let ValueCols = [["0"]];
 }
 
 // Maps an atomic opcode to its version with a return value.

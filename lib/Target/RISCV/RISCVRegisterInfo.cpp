@@ -50,6 +50,10 @@ BitVector RISCVRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
+bool RISCVRegisterInfo::isConstantPhysReg(unsigned PhysReg) const {
+  return PhysReg == RISCV::X0;
+}
+
 const uint32_t *RISCVRegisterInfo::getNoPreservedMask() const {
   return CSR_NoRegs_RegMask;
 }
@@ -70,9 +74,6 @@ void RISCVRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   int Offset =
       getFrameLowering(MF)->getFrameIndexReference(MF, FrameIndex, FrameReg) +
       MI.getOperand(FIOperandNum + 1).getImm();
-
-  assert(MF.getSubtarget().getFrameLowering()->hasFP(MF) &&
-         "eliminateFrameIndex currently requires hasFP");
 
   if (!isInt<32>(Offset)) {
     report_fatal_error(
@@ -102,7 +103,8 @@ void RISCVRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 }
 
 unsigned RISCVRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  return RISCV::X8;
+  const TargetFrameLowering *TFI = getFrameLowering(MF);
+  return TFI->hasFP(MF) ? RISCV::X8 : RISCV::X2;
 }
 
 const uint32_t *

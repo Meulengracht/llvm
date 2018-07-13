@@ -7,7 +7,8 @@
 ; RUN: opt -function-import -stats -print-imports -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIMDEF
 ; Try again with new pass manager
 ; RUN: opt -passes='function-import' -stats -print-imports -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=CHECK --check-prefix=INSTLIMDEF
-; "-stats" requires +Asserts.
+; RUN: opt -passes='function-import' -debug-only=function-import -enable-import-metadata -summary-file %t3.thinlto.bc %t.bc -S 2>&1 | FileCheck %s --check-prefix=DUMP
+; "-stats" and "-debug-only" require +Asserts.
 ; REQUIRES: asserts
 
 ; Test import with smaller instruction limit
@@ -55,7 +56,7 @@ declare i32 @referencestatics(...) #1
 ; Ensure that the call is to the properly-renamed function.
 ; INSTLIMDEF-DAG: Import staticfunc
 ; INSTLIMDEF-DAG: %call = call i32 @staticfunc.llvm.
-; INSTLIMDEF-DAG: define available_externally dso_local hidden i32 @staticfunc.llvm.{{.*}} !thinlto_src_module !0 {
+; INSTLIMDEF-DAG: define available_externally hidden i32 @staticfunc.llvm.{{.*}} !thinlto_src_module !0 {
 
 ; INSTLIMDEF-DAG: Import referenceglobals
 ; CHECK-DAG: define available_externally i32 @referenceglobals(i32 %i) !thinlto_src_module !0 {
@@ -80,7 +81,7 @@ declare void @callfuncptr(...) #1
 
 ; Ensure that all uses of local variable @P which has used in setfuncptr
 ; and callfuncptr are to the same promoted/renamed global.
-; CHECK-DAG: @P.llvm.{{.*}} = external dso_local hidden global void ()*
+; CHECK-DAG: @P.llvm.{{.*}} = available_externally hidden global void ()* null
 ; CHECK-DAG: %0 = load void ()*, void ()** @P.llvm.
 ; CHECK-DAG: store void ()* @staticfunc2.llvm.{{.*}}, void ()** @P.llvm.
 
@@ -99,14 +100,16 @@ declare void @weakfunc(...) #1
 declare void @linkoncefunc2(...) #1
 
 ; INSTLIMDEF-DAG: Import funcwithpersonality
-; INSTLIMDEF-DAG: define available_externally dso_local hidden void @funcwithpersonality.llvm.{{.*}}() personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) !thinlto_src_module !0 {
-; INSTLIM5-DAG: declare dso_local hidden void @funcwithpersonality.llvm.{{.*}}()
+; INSTLIMDEF-DAG: define available_externally hidden void @funcwithpersonality.llvm.{{.*}}() personality i8* bitcast (i32 (...)* @__gxx_personality_v0 to i8*) !thinlto_src_module !0 {
+; INSTLIM5-DAG: declare hidden void @funcwithpersonality.llvm.{{.*}}()
 
 ; CHECK-DAG: declare void @variadic(...)
 declare void @variadic(...)
 
 ; INSTLIMDEF-DAG: Import globalfunc2
 ; INSTLIMDEF-DAG: 13 function-import - Number of functions imported
+; INSTLIMDEF-DAG: 4 function-import - Number of global variables imported
+
 ; CHECK-DAG: !0 = !{!"{{.*}}/Inputs/funcimport.ll"}
 
 ; The actual GUID values will depend on path to test.
@@ -142,3 +145,9 @@ declare void @variadic(...)
 ; GUID-DAG: GUID {{.*}} is linkoncealias
 ; GUID-DAG: GUID {{.*}} is callfuncptr
 ; GUID-DAG: GUID {{.*}} is linkoncefunc
+
+; DUMP:       Module [[M1:.*]] imports from 1 module
+; DUMP-NEXT:  13 functions imported from [[M2:.*]]
+; DUMP-NEXT:  4 vars imported from [[M2]]
+; DUMP:       Imported 13 functions for Module [[M1]]
+; DUMP-NEXT:  Imported 4 global variables for Module [[M1]]

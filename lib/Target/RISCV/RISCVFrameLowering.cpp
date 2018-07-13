@@ -22,7 +22,14 @@
 
 using namespace llvm;
 
-bool RISCVFrameLowering::hasFP(const MachineFunction &MF) const { return true; }
+bool RISCVFrameLowering::hasFP(const MachineFunction &MF) const {
+  const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+         RegInfo->needsStackRealignment(MF) || MFI.hasVarSizedObjects() ||
+         MFI.isFrameAddressTaken();
+}
 
 // Determines the size of the frame and maximum call frame size.
 void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
@@ -35,21 +42,6 @@ void RISCVFrameLowering::determineFrameLayout(MachineFunction &MF) const {
   // Get the alignment.
   uint64_t StackAlign = RI->needsStackRealignment(MF) ? MFI.getMaxAlignment()
                                                       : getStackAlignment();
-
-  // Get the maximum call frame size of all the calls.
-  uint64_t MaxCallFrameSize = MFI.getMaxCallFrameSize();
-
-  // If we have dynamic alloca then MaxCallFrameSize needs to be aligned so
-  // that allocations will be aligned.
-  if (MFI.hasVarSizedObjects())
-    MaxCallFrameSize = alignTo(MaxCallFrameSize, StackAlign);
-
-  // Update maximum call frame size.
-  MFI.setMaxCallFrameSize(MaxCallFrameSize);
-
-  // Include call frame size in total.
-  if (!(hasReservedCallFrame(MF) && MFI.adjustsStack()))
-    FrameSize += MaxCallFrameSize;
 
   // Make sure the frame is aligned.
   FrameSize = alignTo(FrameSize, StackAlign);
@@ -103,11 +95,6 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
   assert(&MF.front() == &MBB && "Shrink-wrapping not yet supported");
 
-  if (!hasFP(MF)) {
-    report_fatal_error(
-        "emitPrologue doesn't support framepointer-less functions");
-  }
-
   MachineFrameInfo &MFI = MF.getFrameInfo();
   auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
   MachineBasicBlock::iterator MBBI = MBB.begin();
@@ -143,17 +130,13 @@ void RISCVFrameLowering::emitPrologue(MachineFunction &MF,
   std::advance(MBBI, CSI.size());
 
   // Generate new FP.
-  adjustReg(MBB, MBBI, DL, FPReg, SPReg, StackSize - RVFI->getVarArgsSaveSize(),
-            MachineInstr::FrameSetup);
+  if (hasFP(MF))
+    adjustReg(MBB, MBBI, DL, FPReg, SPReg,
+              StackSize - RVFI->getVarArgsSaveSize(), MachineInstr::FrameSetup);
 }
 
 void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
                                       MachineBasicBlock &MBB) const {
-  if (!hasFP(MF)) {
-    report_fatal_error(
-        "emitEpilogue doesn't support framepointer-less functions");
-  }
-
   MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
   const RISCVRegisterInfo *RI = STI.getRegisterInfo();
   MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -174,6 +157,7 @@ void RISCVFrameLowering::emitEpilogue(MachineFunction &MF,
   // necessary if the stack pointer was modified, meaning the stack size is
   // unknown.
   if (RI->needsStackRealignment(MF) || MFI.hasVarSizedObjects()) {
+    assert(hasFP(MF) && "frame pointer should not have been eliminated");
     adjustReg(MBB, LastFrameDestroy, DL, SPReg, FPReg,
               -StackSize + RVFI->getVarArgsSaveSize(),
               MachineInstr::FrameDestroy);
@@ -210,8 +194,10 @@ int RISCVFrameLowering::getFrameIndexReference(const MachineFunction &MF,
     Offset += MF.getFrameInfo().getStackSize();
   } else {
     FrameReg = RI->getFrameRegister(MF);
-    assert(hasFP(MF) && "Offset calculation incorrect if !hasFP");
-    Offset += RVFI->getVarArgsSaveSize();
+    if (hasFP(MF))
+      Offset += RVFI->getVarArgsSaveSize();
+    else
+      Offset += MF.getFrameInfo().getStackSize();
   }
   return Offset;
 }
@@ -220,10 +206,12 @@ void RISCVFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                               BitVector &SavedRegs,
                                               RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
-  // TODO: Once frame pointer elimination is implemented, don't
-  // unconditionally spill the frame pointer and return address.
-  SavedRegs.set(RISCV::X1);
-  SavedRegs.set(RISCV::X8);
+  // Unconditionally spill RA and FP only if the function uses a frame
+  // pointer.
+  if (hasFP(MF)) {
+    SavedRegs.set(RISCV::X1);
+    SavedRegs.set(RISCV::X8);
+  }
 }
 
 void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
@@ -242,4 +230,40 @@ void RISCVFrameLowering::processFunctionBeforeFrameFinalized(
         RegInfo->getSpillSize(*RC), RegInfo->getSpillAlignment(*RC), false);
     RS->addScavengingFrameIndex(RegScavFI);
   }
+}
+
+// Not preserve stack space within prologue for outgoing variables when the
+// function contains variable size objects and let eliminateCallFramePseudoInstr
+// preserve stack space for it.
+bool RISCVFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
+  return !MF.getFrameInfo().hasVarSizedObjects();
+}
+
+// Eliminate ADJCALLSTACKDOWN, ADJCALLSTACKUP pseudo instructions.
+MachineBasicBlock::iterator RISCVFrameLowering::eliminateCallFramePseudoInstr(
+    MachineFunction &MF, MachineBasicBlock &MBB,
+    MachineBasicBlock::iterator MI) const {
+  unsigned SPReg = RISCV::X2;
+  DebugLoc DL = MI->getDebugLoc();
+
+  if (!hasReservedCallFrame(MF)) {
+    // If space has not been reserved for a call frame, ADJCALLSTACKDOWN and
+    // ADJCALLSTACKUP must be converted to instructions manipulating the stack
+    // pointer. This is necessary when there is a variable length stack
+    // allocation (e.g. alloca), which means it's not possible to allocate
+    // space for outgoing arguments from within the function prologue.
+    int64_t Amount = MI->getOperand(0).getImm();
+
+    if (Amount != 0) {
+      // Ensure the stack remains aligned after adjustment.
+      Amount = alignSPAdjust(Amount);
+
+      if (MI->getOpcode() == RISCV::ADJCALLSTACKDOWN)
+        Amount = -Amount;
+
+      adjustReg(MBB, MI, DL, SPReg, SPReg, Amount, MachineInstr::NoFlags);
+    }
+  }
+
+  return MBB.erase(MI);
 }

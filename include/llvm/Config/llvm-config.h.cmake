@@ -56,8 +56,8 @@
 /* Define if this is Unixish platform */
 #cmakedefine LLVM_ON_UNIX ${LLVM_ON_UNIX}
 
-/* Define if this is Win32ish platform */
-#cmakedefine LLVM_ON_WIN32 ${LLVM_ON_WIN32}
+/* Define if this is Valiish platform */
+#cmakedefine LLVM_ON_VALI ${LLVM_ON_VALI}
 
 /* Define if this is Valiish platform */
 #cmakedefine LLVM_ON_VALI ${LLVM_ON_VALI}
@@ -79,5 +79,10 @@
 
 /* LLVM version string */
 #define LLVM_VERSION_STRING "${PACKAGE_VERSION}"
+
+/* Whether LLVM records statistics for use with GetStatistics(),
+ * PrintStatistics() or PrintStatisticsJSON()
+ */
+#cmakedefine01 LLVM_FORCE_ENABLE_STATS
 
 #endif

@@ -98,6 +98,8 @@ template <> struct ScalarEnumerationTraits<WholeProgramDevirtResolution::Kind> {
   static void enumeration(IO &io, WholeProgramDevirtResolution::Kind &value) {
     io.enumCase(value, "Indir", WholeProgramDevirtResolution::Indir);
     io.enumCase(value, "SingleImpl", WholeProgramDevirtResolution::SingleImpl);
+    io.enumCase(value, "BranchFunnel",
+                WholeProgramDevirtResolution::BranchFunnel);
   }
 };
 
@@ -207,7 +209,8 @@ template <> struct CustomMappingTraits<GlobalValueSummaryMapTy> {
       io.setError("key not an integer");
       return;
     }
-    auto &Elem = V[KeyInt];
+    auto P = V.emplace(KeyInt, /*IsAnalysis=*/false);
+    auto &Elem = (*P.first).second;
     for (auto &FSum : FSums) {
       Elem.SummaryList.push_back(llvm::make_unique<FunctionSummary>(
           GlobalValueSummary::GVFlags(

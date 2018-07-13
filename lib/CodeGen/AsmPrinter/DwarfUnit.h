@@ -112,6 +112,8 @@ public:
   uint16_t getLanguage() const { return CUNode->getSourceLanguage(); }
   const DICompileUnit *getCUNode() const { return CUNode; }
 
+  uint16_t getDwarfVersion() const { return DD->getDwarfVersion(); }
+
   /// Return true if this compile unit has something to write out.
   bool hasContent() const { return getUnitDie().hasChildren(); }
 
@@ -273,6 +275,10 @@ public:
   /// call insertDIE if MD is not null.
   DIE &createAndAddDIE(unsigned Tag, DIE &Parent, const DINode *N = nullptr);
 
+  bool useSegmentedStringOffsetsTable() const {
+    return DD->useSegmentedStringOffsetsTable();
+  }
+
   /// Compute the size of a header for this unit, not including the initial
   /// length field.
   virtual unsigned getHeaderSize() const {
@@ -285,6 +291,12 @@ public:
 
   /// Emit the header for this unit, not including the initial length field.
   virtual void emitHeader(bool UseOffsets) = 0;
+
+  /// Add the DW_AT_str_offsets_base attribute to the unit DIE.
+  void addStringOffsetsStart();
+
+  /// Add the DW_AT_rnglists_base attribute to the unit DIE.
+  void addRnglistsBase();
 
   virtual DwarfCompileUnit &getCU() = 0;
 
@@ -299,6 +311,10 @@ public:
                                       const MCSymbol *Label,
                                       const MCSymbol *Sec);
 
+  /// If the \p File has an MD5 checksum, return it as an MD5Result
+  /// allocated in the MCContext.
+  MD5::MD5Result *getMD5AsBytes(const DIFile *File) const;
+
 protected:
   ~DwarfUnit();
 
@@ -308,10 +324,6 @@ protected:
   /// Look up the source ID for the given file. If none currently exists,
   /// create a new ID and insert it in the line table.
   virtual unsigned getOrCreateSourceID(const DIFile *File) = 0;
-
-  /// If the \p File has an MD5 checksum, return it as an MD5Result
-  /// allocated in the MCContext.
-  MD5::MD5Result *getMD5AsBytes(const DIFile *File);
 
   /// Look in the DwarfDebug map for the MDNode that corresponds to the
   /// reference.
@@ -334,7 +346,7 @@ private:
   void constructSubrangeDIE(DIE &Buffer, const DISubrange *SR, DIE *IndexTy);
   void constructArrayTypeDIE(DIE &Buffer, const DICompositeType *CTy);
   void constructEnumTypeDIE(DIE &Buffer, const DICompositeType *CTy);
-  void constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
+  DIE &constructMemberDIE(DIE &Buffer, const DIDerivedType *DT);
   void constructTemplateTypeParameterDIE(DIE &Buffer,
                                          const DITemplateTypeParameter *TP);
   void constructTemplateValueParameterDIE(DIE &Buffer,
@@ -360,6 +372,7 @@ class DwarfTypeUnit final : public DwarfUnit {
   const DIE *Ty;
   DwarfCompileUnit &CU;
   MCDwarfDwoLineTable *SplitLineTable;
+  bool UsedLineTable = false;
 
   unsigned getOrCreateSourceID(const DIFile *File) override;
   bool isDwoUnit() const override;

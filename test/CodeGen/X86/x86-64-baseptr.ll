@@ -21,16 +21,15 @@ define void @base() #0 {
 ; CHECK-NEXT:    subq $32, %rsp
 ; CHECK-NEXT:    movq %rsp, %rbx
 ; CHECK-NEXT:    callq helper
+; CHECK-NEXT:    movq %rsp, %rcx
 ; CHECK-NEXT:    movl %eax, %eax
 ; CHECK-NEXT:    leaq 31(,%rax,4), %rax
-; CHECK-NEXT:    movabsq $34359738336, %rcx # imm = 0x7FFFFFFE0
-; CHECK-NEXT:    andq %rax, %rcx
-; CHECK-NEXT:    movq %rsp, %rax
-; CHECK-NEXT:    movq %rax, %rdx
-; CHECK-NEXT:    subq %rcx, %rdx
-; CHECK-NEXT:    negq %rcx
+; CHECK-NEXT:    andq $-32, %rax
+; CHECK-NEXT:    movq %rcx, %rdx
+; CHECK-NEXT:    subq %rax, %rdx
 ; CHECK-NEXT:    movq %rdx, %rsp
-; CHECK-NEXT:    movl $0, (%rax,%rcx)
+; CHECK-NEXT:    negq %rax
+; CHECK-NEXT:    movl $0, (%rcx,%rax)
 ; CHECK-NEXT:    leaq -8(%rbp), %rsp
 ; CHECK-NEXT:    popq %rbx
 ; CHECK-NEXT:    popq %rbp
@@ -40,11 +39,12 @@ define void @base() #0 {
 ; X32ABI:       # %bb.0: # %entry
 ; X32ABI-NEXT:    pushq %rbp
 ; X32ABI-NEXT:    movl %esp, %ebp
+; X32ABI-NEXT:    pushq  %rbx
 ; X32ABI-NEXT:    andl $-32, %esp
 ; X32ABI-NEXT:    subl $32, %esp
 ; X32ABI-NEXT:    movl %esp, %ebx
 ; X32ABI-NEXT:    callq helper
-; X32ABI-NEXT:    # kill: def %eax killed %eax def %rax
+; X32ABI-NEXT:    # kill: def $eax killed $eax def $rax
 ; X32ABI-NEXT:    movl %esp, %ecx
 ; X32ABI-NEXT:    leal 31(,%rax,4), %eax
 ; X32ABI-NEXT:    andl $-32, %eax
@@ -53,7 +53,8 @@ define void @base() #0 {
 ; X32ABI-NEXT:    movl %edx, %esp
 ; X32ABI-NEXT:    negl %eax
 ; X32ABI-NEXT:    movl $0, (%ecx,%eax)
-; X32ABI-NEXT:    movl %ebp, %esp
+; X32ABI-NEXT:    leal -8(%ebp), %esp
+; X32ABI-NEXT:    popq %rbx
 ; X32ABI-NEXT:    popq %rbp
 ; X32ABI-NEXT:    retq
 entry:

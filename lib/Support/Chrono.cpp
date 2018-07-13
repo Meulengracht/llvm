@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Chrono.h"
-#include "llvm/Config/config.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -32,12 +32,8 @@ static inline struct tm getStructTM(TimePoint<> TP) {
   assert(LT);
   (void)LT;
 #endif
-#if defined(LLVM_ON_VALI)
-  int Error = ::localtime_s(&Storage, &OurTime);
-  assert(!Error);
-  (void)Error;
-#endif
-#if defined(LLVM_ON_WIN32)
+
+#if defined(_WIN32) || defined(LLVM_ON_VALI)
   int Error = ::localtime_s(&Storage, &OurTime);
   assert(!Error);
   (void)Error;

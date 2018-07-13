@@ -39,26 +39,18 @@ static_assert(
 // std::is_assignable and actually writing such an assignment.
 #if !defined(_MSC_VER)
 static_assert(
-    !std::is_assignable<ArrayRef<int *>, int *>::value,
+    !std::is_assignable<ArrayRef<int *>&, int *>::value,
     "Assigning from single prvalue element");
 static_assert(
-    !std::is_assignable<ArrayRef<int *>, int * &&>::value,
+    !std::is_assignable<ArrayRef<int *>&, int * &&>::value,
     "Assigning from single xvalue element");
 static_assert(
-    std::is_assignable<ArrayRef<int *>, int * &>::value,
+    std::is_assignable<ArrayRef<int *>&, int * &>::value,
     "Assigning from single lvalue element");
 static_assert(
-    !std::is_assignable<ArrayRef<int *>, std::initializer_list<int *>>::value,
+    !std::is_assignable<ArrayRef<int *>&, std::initializer_list<int *>>::value,
     "Assigning from an initializer list");
 #endif
-
-// Check Typedefs.
-static_assert(
-    std::is_same<ArrayRef<int>::value_type, int>::value,
-    "erroneous value_type");
-static_assert(
-    std::is_same<ArrayRef<const int>::value_type, int>::value,
-    "erroneous value_type");
 
 namespace {
 

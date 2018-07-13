@@ -175,15 +175,20 @@ const RegisterBank &ARMRegisterBankInfo::getRegBankFromRegClass(
 
   switch (RC.getID()) {
   case GPRRegClassID:
+  case GPRwithAPSRRegClassID:
   case GPRnopcRegClassID:
+  case rGPRRegClassID:
   case GPRspRegClassID:
   case tGPR_and_tcGPRRegClassID:
+  case tcGPRRegClassID:
   case tGPRRegClassID:
     return getRegBank(ARM::GPRRegBankID);
+  case HPRRegClassID:
   case SPR_8RegClassID:
   case SPRRegClassID:
   case DPR_8RegClassID:
   case DPRRegClassID:
+  case QPRRegClassID:
     return getRegBank(ARM::FPRRegBankID);
   default:
     llvm_unreachable("Unsupported register kind");
@@ -301,6 +306,34 @@ ARMRegisterBankInfo::getInstrMapping(const MachineInstr &MI) const {
       OperandsMapping =
           getOperandsMapping({&ARM::ValueMappings[ARM::SPR3OpsIdx],
                               &ARM::ValueMappings[ARM::DPR3OpsIdx]});
+    break;
+  }
+  case G_FPTOSI:
+  case G_FPTOUI: {
+    LLT ToTy = MRI.getType(MI.getOperand(0).getReg());
+    LLT FromTy = MRI.getType(MI.getOperand(1).getReg());
+    if ((FromTy.getSizeInBits() == 32 || FromTy.getSizeInBits() == 64) &&
+        ToTy.getSizeInBits() == 32)
+      OperandsMapping =
+          FromTy.getSizeInBits() == 64
+              ? getOperandsMapping({&ARM::ValueMappings[ARM::GPR3OpsIdx],
+                                    &ARM::ValueMappings[ARM::DPR3OpsIdx]})
+              : getOperandsMapping({&ARM::ValueMappings[ARM::GPR3OpsIdx],
+                                    &ARM::ValueMappings[ARM::SPR3OpsIdx]});
+    break;
+  }
+  case G_SITOFP:
+  case G_UITOFP: {
+    LLT ToTy = MRI.getType(MI.getOperand(0).getReg());
+    LLT FromTy = MRI.getType(MI.getOperand(1).getReg());
+    if (FromTy.getSizeInBits() == 32 &&
+        (ToTy.getSizeInBits() == 32 || ToTy.getSizeInBits() == 64))
+      OperandsMapping =
+          ToTy.getSizeInBits() == 64
+              ? getOperandsMapping({&ARM::ValueMappings[ARM::DPR3OpsIdx],
+                                    &ARM::ValueMappings[ARM::GPR3OpsIdx]})
+              : getOperandsMapping({&ARM::ValueMappings[ARM::SPR3OpsIdx],
+                                    &ARM::ValueMappings[ARM::GPR3OpsIdx]});
     break;
   }
   case G_CONSTANT:

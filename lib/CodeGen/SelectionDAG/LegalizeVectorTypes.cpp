@@ -33,9 +33,8 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 void DAGTypeLegalizer::ScalarizeVectorResult(SDNode *N, unsigned ResNo) {
-  DEBUG(dbgs() << "Scalarize node result " << ResNo << ": ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Scalarize node result " << ResNo << ": "; N->dump(&DAG);
+             dbgs() << "\n");
   SDValue R = SDValue();
 
   switch (N->getOpcode()) {
@@ -171,10 +170,9 @@ SDValue DAGTypeLegalizer::ScalarizeVecRes_MERGE_VALUES(SDNode *N,
 SDValue DAGTypeLegalizer::ScalarizeVecRes_BITCAST(SDNode *N) {
   SDValue Op = N->getOperand(0);
   if (Op.getValueType().isVector()
-      && Op.getValueType().getVectorNumElements() == 1) {
-    assert(!isSimpleLegalType(Op.getValueType()));
+      && Op.getValueType().getVectorNumElements() == 1
+      && !isSimpleLegalType(Op.getValueType()))
     Op = GetScalarizedVector(Op);
-  }
   EVT NewVT = N->getValueType(0).getVectorElementType();
   return DAG.getNode(ISD::BITCAST, SDLoc(N),
                      NewVT, Op);
@@ -344,8 +342,8 @@ SDValue DAGTypeLegalizer::ScalarizeVecRes_VSELECT(SDNode *N) {
       ScalarBool = TargetLowering::UndefinedBooleanContent;
   }
 
+  EVT CondVT = Cond.getValueType();
   if (ScalarBool != VecBool) {
-    EVT CondVT = Cond.getValueType();
     switch (ScalarBool) {
       case TargetLowering::UndefinedBooleanContent:
         break;
@@ -365,6 +363,11 @@ SDValue DAGTypeLegalizer::ScalarizeVecRes_VSELECT(SDNode *N) {
         break;
     }
   }
+
+  // Truncate the condition if needed
+  auto BoolVT = getSetCCResultType(CondVT);
+  if (BoolVT.bitsLT(CondVT))
+    Cond = DAG.getNode(ISD::TRUNCATE, SDLoc(N), BoolVT, Cond);
 
   return DAG.getSelect(SDLoc(N),
                        LHS.getValueType(), Cond, LHS,
@@ -439,9 +442,8 @@ SDValue DAGTypeLegalizer::ScalarizeVecRes_SETCC(SDNode *N) {
 //===----------------------------------------------------------------------===//
 
 bool DAGTypeLegalizer::ScalarizeVectorOperand(SDNode *N, unsigned OpNo) {
-  DEBUG(dbgs() << "Scalarize node operand " << OpNo << ": ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Scalarize node operand " << OpNo << ": "; N->dump(&DAG);
+             dbgs() << "\n");
   SDValue Res = SDValue();
 
   if (!Res.getNode()) {
@@ -521,7 +523,7 @@ SDValue DAGTypeLegalizer::ScalarizeVecOp_UnaryOp(SDNode *N) {
                            N->getValueType(0).getScalarType(), Elt);
   // Revectorize the result so the types line up with what the uses of this
   // expression expect.
-  return DAG.getBuildVector(N->getValueType(0), SDLoc(N), Op);
+  return DAG.getNode(ISD::SCALAR_TO_VECTOR, SDLoc(N), N->getValueType(0), Op);
 }
 
 /// The vectors to concatenate have length one - use a BUILD_VECTOR instead.
@@ -624,9 +626,7 @@ SDValue DAGTypeLegalizer::ScalarizeVecOp_FP_ROUND(SDNode *N, unsigned OpNo) {
 /// invalid operands or may have other results that need legalization, we just
 /// know that (at least) one result needs vector splitting.
 void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
-  DEBUG(dbgs() << "Split node result: ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Split node result: "; N->dump(&DAG); dbgs() << "\n");
   SDValue Lo, Hi;
 
   // See if the target wants to custom expand this node.
@@ -1206,15 +1206,15 @@ void DAGTypeLegalizer::SplitVecRes_MLOAD(MaskedLoadSDNode *MLD,
 
   Ptr = TLI.IncrementMemoryAddress(Ptr, MaskLo, dl, LoMemVT, DAG,
                                    MLD->isExpandingLoad());
+  unsigned HiOffset = LoMemVT.getStoreSize();
 
-  MMO = DAG.getMachineFunction().
-    getMachineMemOperand(MLD->getPointerInfo(),
-                         MachineMemOperand::MOLoad,  HiMemVT.getStoreSize(),
-                         SecondHalfAlignment, MLD->getAAInfo(), MLD->getRanges());
+  MMO = DAG.getMachineFunction().getMachineMemOperand(
+      MLD->getPointerInfo().getWithOffset(HiOffset), MachineMemOperand::MOLoad,
+      HiMemVT.getStoreSize(), SecondHalfAlignment, MLD->getAAInfo(),
+      MLD->getRanges());
 
   Hi = DAG.getMaskedLoad(HiVT, dl, Ch, Ptr, MaskHi, Src0Hi, HiMemVT, MMO,
                          ExtType, MLD->isExpandingLoad());
-
 
   // Build a factor node to remember that this load is independent of the
   // other one.
@@ -1372,8 +1372,8 @@ void DAGTypeLegalizer::SplitVecRes_ExtendOp(SDNode *N, SDValue &Lo,
     std::tie(SplitLoVT, SplitHiVT) = DAG.GetSplitDestVTs(NewSrcVT);
     if (TLI.isTypeLegal(SrcVT) && !TLI.isTypeLegal(SplitSrcVT) &&
         TLI.isTypeLegal(NewSrcVT) && TLI.isTypeLegal(SplitLoVT)) {
-      DEBUG(dbgs() << "Split vector extend via incremental extend:";
-            N->dump(&DAG); dbgs() << "\n");
+      LLVM_DEBUG(dbgs() << "Split vector extend via incremental extend:";
+                 N->dump(&DAG); dbgs() << "\n");
       // Extend the source vector by one step.
       SDValue NewSrc =
           DAG.getNode(N->getOpcode(), dl, NewSrcVT, N->getOperand(0));
@@ -1508,9 +1508,7 @@ void DAGTypeLegalizer::SplitVecRes_VECTOR_SHUFFLE(ShuffleVectorSDNode *N,
 /// the node are known to be legal, but other operands of the node may need
 /// legalization as well as the specified one.
 bool DAGTypeLegalizer::SplitVectorOperand(SDNode *N, unsigned OpNo) {
-  DEBUG(dbgs() << "Split node operand: ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Split node operand: "; N->dump(&DAG); dbgs() << "\n");
   SDValue Res = SDValue();
 
   // See if the target wants to custom split this node.
@@ -1690,8 +1688,8 @@ SDValue DAGTypeLegalizer::SplitVecOp_VECREDUCE(SDNode *N, unsigned OpNo) {
 
   // Use the appropriate scalar instruction on the split subvectors before
   // reducing the now partially reduced smaller vector.
-  SDValue Partial = DAG.getNode(CombineOpc, dl, LoOpVT, Lo, Hi);
-  return DAG.getNode(N->getOpcode(), dl, ResVT, Partial);
+  SDValue Partial = DAG.getNode(CombineOpc, dl, LoOpVT, Lo, Hi, N->getFlags());
+  return DAG.getNode(N->getOpcode(), dl, ResVT, Partial, N->getFlags());
 }
 
 SDValue DAGTypeLegalizer::SplitVecOp_UnaryOp(SDNode *N) {
@@ -1924,10 +1922,12 @@ SDValue DAGTypeLegalizer::SplitVecOp_MSTORE(MaskedStoreSDNode *N,
 
   Ptr = TLI.IncrementMemoryAddress(Ptr, MaskLo, DL, LoMemVT, DAG,
                                    N->isCompressingStore());
-  MMO = DAG.getMachineFunction().
-    getMachineMemOperand(N->getPointerInfo(),
-                         MachineMemOperand::MOStore,  HiMemVT.getStoreSize(),
-                         SecondHalfAlignment, N->getAAInfo(), N->getRanges());
+  unsigned HiOffset = LoMemVT.getStoreSize();
+
+  MMO = DAG.getMachineFunction().getMachineMemOperand(
+      N->getPointerInfo().getWithOffset(HiOffset), MachineMemOperand::MOStore,
+      HiMemVT.getStoreSize(), SecondHalfAlignment, N->getAAInfo(),
+      N->getRanges());
 
   Hi = DAG.getMaskedStore(Ch, DL, DataHi, Ptr, MaskHi, HiMemVT, MMO,
                           N->isTruncatingStore(), N->isCompressingStore());
@@ -2014,6 +2014,10 @@ SDValue DAGTypeLegalizer::SplitVecOp_STORE(StoreSDNode *N, unsigned OpNo) {
   EVT LoMemVT, HiMemVT;
   std::tie(LoMemVT, HiMemVT) = DAG.GetSplitDestVTs(MemoryVT);
 
+  // Scalarize if the split halves are not byte-sized.
+  if (!LoMemVT.isByteSized() || !HiMemVT.isByteSized())
+    return TLI.scalarizeVectorStore(N, DAG);
+
   unsigned IncrementSize = LoMemVT.getSizeInBits()/8;
 
   if (isTruncating)
@@ -2098,9 +2102,9 @@ SDValue DAGTypeLegalizer::SplitVecOp_TruncateHelper(SDNode *N) {
     return SplitVecOp_UnaryOp(N);
   SDLoc DL(N);
 
-  // Extract the halves of the input via extract_subvector.
+  // Get the split input vector.
   SDValue InLoVec, InHiVec;
-  std::tie(InLoVec, InHiVec) = DAG.SplitVector(InVec, DL);
+  GetSplitVector(InVec, InLoVec, InHiVec);
   // Truncate them to 1/2 the element size.
   EVT HalfElementVT = IsFloat ?
     EVT::getFloatingPointVT(InElementSize/2) :
@@ -2173,9 +2177,8 @@ SDValue DAGTypeLegalizer::SplitVecOp_FCOPYSIGN(SDNode *N) {
 //===----------------------------------------------------------------------===//
 
 void DAGTypeLegalizer::WidenVectorResult(SDNode *N, unsigned ResNo) {
-  DEBUG(dbgs() << "Widen node result " << ResNo << ": ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Widen node result " << ResNo << ": "; N->dump(&DAG);
+             dbgs() << "\n");
 
   // See if the target wants to custom widen this node.
   if (CustomWidenLowerNode(N, N->getValueType(ResNo)))
@@ -3319,9 +3322,8 @@ SDValue DAGTypeLegalizer::WidenVecRes_SETCC(SDNode *N) {
 // Widen Vector Operand
 //===----------------------------------------------------------------------===//
 bool DAGTypeLegalizer::WidenVectorOperand(SDNode *N, unsigned OpNo) {
-  DEBUG(dbgs() << "Widen node operand " << OpNo << ": ";
-        N->dump(&DAG);
-        dbgs() << "\n");
+  LLVM_DEBUG(dbgs() << "Widen node operand " << OpNo << ": "; N->dump(&DAG);
+             dbgs() << "\n");
   SDValue Res = SDValue();
 
   // See if the target wants to custom widen this node.
@@ -3430,7 +3432,7 @@ SDValue DAGTypeLegalizer::WidenVecOp_EXTEND(SDNode *N) {
   // low lanes.
   switch (N->getOpcode()) {
   default:
-    llvm_unreachable("Extend legalization on on extend operation!");
+    llvm_unreachable("Extend legalization on extend operation!");
   case ISD::ANY_EXTEND:
     return DAG.getAnyExtendVectorInReg(InOp, DL, VT);
   case ISD::SIGN_EXTEND:
@@ -3553,6 +3555,9 @@ SDValue DAGTypeLegalizer::WidenVecOp_STORE(SDNode *N) {
   // We have to widen the value, but we want only to store the original
   // vector type.
   StoreSDNode *ST = cast<StoreSDNode>(N);
+
+  if (!ST->getMemoryVT().getScalarType().isByteSized())
+    return TLI.scalarizeVectorStore(ST, DAG);
 
   SmallVector<SDValue, 16> StChain;
   if (ST->isTruncatingStore())
