@@ -65,111 +65,67 @@ ErrorOr<std::string> sys::findProgramByName(StringRef Name,
 
 /// ArgNeedsQuotes - Check whether argument needs to be quoted when calling
 /// CreateProcess.
-static bool ArgNeedsQuotes(const char *Str) {
-  return Str[0] == '\0' || strpbrk(Str, "\t \"&\'()*<>\\`^|") != 0;
+static bool argNeedsQuotes(StringRef Arg) {
+  if (Arg.empty())
+    return true;
+  return StringRef::npos != Arg.find_first_of("\t \"&\'()*<>\\`^|");
 }
 
-/// CountPrecedingBackslashes - Returns the number of backslashes preceding Cur
-/// in the C string Start.
-static unsigned int CountPrecedingBackslashes(const char *Start,
-                                              const char *Cur) {
-  unsigned int Count = 0;
-  --Cur;
-  while (Cur >= Start && *Cur == '\\') {
-    ++Count;
-    --Cur;
-  }
-  return Count;
-}
+static std::string quoteSingleArg(StringRef Arg) {
+  std::string Result;
+  Result.push_back('"');
 
-/// EscapePrecedingEscapes - Append a backslash to Dst for every backslash
-/// preceding Cur in the Start string.  Assumes Dst has enough space.
-static char *EscapePrecedingEscapes(char *Dst, const char *Start,
-                                    const char *Cur) {
-  unsigned PrecedingEscapes = CountPrecedingBackslashes(Start, Cur);
-  while (PrecedingEscapes > 0) {
-    *Dst++ = '\\';
-    --PrecedingEscapes;
-  }
-  return Dst;
-}
-
-/// ArgLenWithQuotes - Check whether argument needs to be quoted when calling
-/// CreateProcess and returns length of quoted arg with escaped quotes
-static unsigned int ArgLenWithQuotes(const char *Str) {
-  const char *Start = Str;
-  bool Quoted = ArgNeedsQuotes(Str);
-  unsigned int len = Quoted ? 2 : 0;
-
-  while (*Str != '\0') {
-    if (*Str == '\"') {
-      // We need to add a backslash, but ensure that it isn't escaped.
-      unsigned PrecedingEscapes = CountPrecedingBackslashes(Start, Str);
-      len += PrecedingEscapes + 1;
-    }
-    // Note that we *don't* need to escape runs of backslashes that don't
-    // precede a double quote!  See MSDN:
-    // http://msdn.microsoft.com/en-us/library/17w5ykft%28v=vs.85%29.aspx
-
-    ++len;
-    ++Str;
-  }
-
-  if (Quoted) {
-    // Make sure the closing quote doesn't get escaped by a trailing backslash.
-    unsigned PrecedingEscapes = CountPrecedingBackslashes(Start, Str);
-    len += PrecedingEscapes + 1;
-  }
-
-  return len;
-}
-
-}
-
-static std::unique_ptr<char[]> flattenArgs(const char **Args) {
-  // First, determine the length of the command line.
-  unsigned len = 0;
-  for (unsigned i = 0; Args[i]; i++) {
-    len += ArgLenWithQuotes(Args[i]) + 1;
-  }
-
-  // Now build the command line.
-  std::unique_ptr<char[]> command(new char[len+1]);
-  char *p = command.get();
-
-  for (unsigned i = 0; Args[i]; i++) {
-    const char *arg = Args[i];
-    const char *start = arg;
-
-    bool needsQuoting = ArgNeedsQuotes(arg);
-    if (needsQuoting)
-      *p++ = '"';
-
-    while (*arg != '\0') {
-      if (*arg == '\"') {
-        // Escape all preceding escapes (if any), and then escape the quote.
-        p = EscapePrecedingEscapes(p, start, arg);
-        *p++ = '\\';
-      }
-
-      *p++ = *arg++;
+  while (!Arg.empty()) {
+    size_t FirstNonBackslash = Arg.find_first_not_of('\\');
+    size_t BackslashCount = FirstNonBackslash;
+    if (FirstNonBackslash == StringRef::npos) {
+      // The entire remainder of the argument is backslashes.  Escape all of
+      // them and just early out.
+      BackslashCount = Arg.size();
+      Result.append(BackslashCount * 2, '\\');
+      break;
     }
 
-    if (needsQuoting) {
-      // Make sure our quote doesn't get escaped by a trailing backslash.
-      p = EscapePrecedingEscapes(p, start, arg);
-      *p++ = '"';
+    if (Arg[FirstNonBackslash] == '\"') {
+      // This is an embedded quote.  Escape all preceding backslashes, then
+      // add one additional backslash to escape the quote.
+      Result.append(BackslashCount * 2 + 1, '\\');
+      Result.push_back('\"');
+    } else {
+      // This is just a normal character.  Don't escape any of the preceding
+      // backslashes, just append them as they are and then append the
+      // character.
+      Result.append(BackslashCount, '\\');
+      Result.push_back(Arg[FirstNonBackslash]);
     }
-    *p++ = ' ';
+
+    // Drop all the backslashes, plus the following character.
+    Arg = Arg.drop_front(FirstNonBackslash + 1);
   }
 
-  *p = 0;
-  return command;
+  Result.push_back('"');
+  return Result;
+}
+
+std::string sys::flattenArgs(ArrayRef<StringRef> Args) {
+  std::string Command;
+  for (StringRef Arg : Args) {
+    if (argNeedsQuotes(Arg))
+      Command += quoteSingleArg(Arg);
+    else
+      Command += Arg;
+
+    Command.push_back(' ');
+  }
+
+  return Command;
+}
 }
 
 // Implemented
-static bool Execute(ProcessInfo &PI, StringRef Program, const char **Args,
-                    const char **Envp, ArrayRef<Optional<StringRef>> Redirects,
+static bool Execute(ProcessInfo &PI, StringRef Program,
+                    ArrayRef<StringRef> Args, Optional<ArrayRef<StringRef>> Env,
+                    ArrayRef<Optional<StringRef>> Redirects,
                     unsigned MemoryLimit, std::string *ErrMsg) {
   if (!sys::fs::can_execute(Program)) {
     if (ErrMsg)
@@ -185,8 +141,8 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **Args,
   // Vali wants a command line, not an array of args, to pass to the new
   // process.  We have to concatenate them all, while quoting the args that
   // have embedded spaces (or are empty).
-  std::unique_ptr<char[]> command = flattenArgs(Args);
-  PI.Pid = ProcessSpawn(Program.begin(), command.get(), 0);
+  std::string Command = flattenArgs(Args);
+  PI.Pid = ProcessSpawn(Program.begin(), Command.c_str(), 0);
   if (PI.Pid == UUID_INVALID) {
       return false;
   }
@@ -254,21 +210,15 @@ llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
   return EC;
 }
 
-// Implemented
 bool llvm::sys::commandLineFitsWithinSystemLimits(StringRef Program,
-                                                  ArrayRef<const char *> Args) {
+                                                  ArrayRef<StringRef> Args) {
   // The documented max length of the command line passed to CreateProcess.
   static const size_t MaxCommandStringLength = 32768;
-  // Account for the trailing space for the program path and the
-  // trailing NULL of the last argument.
-  size_t ArgLength = ArgLenWithQuotes(Program.str().c_str()) + 2;
-  for (const char* Arg : Args) {
-    // Account for the trailing space for every arg
-    ArgLength += ArgLenWithQuotes(Arg) + 1;
-    if (ArgLength > MaxCommandStringLength) {
-      return false;
-    }
-  }
-  return true;
+  SmallVector<StringRef, 8> FullArgs;
+  FullArgs.push_back(Program);
+  FullArgs.append(Args.begin(), Args.end());
+  std::string Result = flattenArgs(FullArgs);
+  return (Result.size() + 1) <= MaxCommandStringLength;
 }
+
 }

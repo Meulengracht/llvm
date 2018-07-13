@@ -272,7 +272,7 @@ static void uninstallExceptionOrSignalHandlers() {
   }
 }
 
-#elif defined(LLVM_ON_VALI) // !LLVM_ON_WIN32
+#elif defined(LLVM_ON_VALI) // !_WIN32
 
 #include <signal.h>
 

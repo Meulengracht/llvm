@@ -73,14 +73,6 @@ Optional<std::string> Process::GetEnv(StringRef Name) {
   return std::string(Val);
 }
 
-std::error_code
-Process::GetArgumentVector(SmallVectorImpl<const char *> &ArgsOut,
-                           ArrayRef<const char *> ArgsIn,
-                           SpecificBumpPtrAllocator<char> &ArgAllocator) {
-  ArgsOut.append(ArgsIn.begin(), ArgsIn.end());
-  return std::error_code();
-}
-
 std::error_code Process::FixupStandardFileDescriptors() {
   return std::error_code();
 }

@@ -241,18 +241,6 @@ public:
   uint64_t getSize() const {
     return (uint64_t(FileSizeHigh) << 32) + FileSizeLow;
   }
-  #elif defined (LLVM_ON_VALI)
-  uint32_t getUser() const {
-    return 9999; // Not applicable to Windows, so...
-  }
-
-  uint32_t getGroup() const {
-    return 9999; // Not applicable to Windows, so...
-  }
-
-  uint64_t getSize() const {
-    return (uint64_t(FileSizeHigh) << 32) + FileSizeLow;
-  }
   #endif
 
   // setters

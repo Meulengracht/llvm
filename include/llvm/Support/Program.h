@@ -209,6 +209,12 @@ namespace sys {
   /// on
   /// Windows.
   std::string flattenWindowsCommandLine(ArrayRef<StringRef> Args);
+#elif defined(LLVM_ON_VALI)
+  /// Given a list of command line arguments, quote and escape them as necessary
+  /// to build a single flat command line appropriate for calling CreateProcess
+  /// on
+  /// Windows.
+  std::string flattenArgs(ArrayRef<StringRef> Args);
 #endif
   }
 }

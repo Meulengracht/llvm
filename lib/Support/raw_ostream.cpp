@@ -580,6 +580,7 @@ raw_fd_ostream::raw_fd_ostream(int fd, bool shouldClose, bool unbuffered)
   off_t loc = _lseek(FD, 0, SEEK_CUR);
 #else
   off_t loc = ::lseek(FD, 0, SEEK_CUR);
+#endif
 #ifdef _WIN32
   // MSVCRT's _lseek(SEEK_CUR) doesn't return -1 for pipes.
   sys::fs::file_status Status;
@@ -691,8 +692,6 @@ uint64_t raw_fd_ostream::seek(uint64_t off) {
   assert(SupportsSeeking && "Stream does not support seeking!");
   flush();
 #ifdef _WIN32
-  pos = ::_lseeki64(FD, off, SEEK_SET);
-#elif defined(LLVM_ON_VALI)
   pos = ::_lseeki64(FD, off, SEEK_SET);
 #elif defined(LLVM_ON_VALI)
   pos = ::_lseeki64(FD, off, SEEK_SET);

@@ -23,25 +23,13 @@ namespace sys  {
 namespace fs {
 
 // Implemented
-std::string getMainExecutable(const char *argv0, void *MainExecAddr) {
+std::string getMainExecutable(const char *argv0, void *MainAddr) {
   return std::string(argv0);
 }
 
 // Implemented
 UniqueID file_status::getUniqueID() const {
   return UniqueID((uint64_t)VolumeSerialNumber, (uint64_t)FileSerialNumber);
-}
-
-// Implemented
-ErrorOr<space_info> disk_space(const Twine &Path) {
-  vStorageDescriptor_t Descriptor;
-  if (!::GetStorageInformationFromPath(Path.str().c_str(), &Descriptor))
-    return make_error_code(errc::no_such_file_or_directory);
-  space_info SpaceInfo;
-  SpaceInfo.capacity = (static_cast<uint64_t>(Descriptor.BytesTotal.u.HighPart) << 32) + Descriptor.BytesTotal.u.LowPart;
-  SpaceInfo.free = (static_cast<uint64_t>(Descriptor.BytesFree.u.HighPart) << 32) + Descriptor.BytesFree.u.LowPart;
-  SpaceInfo.available = (static_cast<uint64_t>(Descriptor.BytesAvailable.u.HighPart) << 32) + Descriptor.BytesAvailable.u.LowPart;
-  return SpaceInfo;
 }
 
 // Implemented
@@ -57,6 +45,18 @@ TimePoint<> basic_file_status::getLastModificationTime() const {
 // Implemented
 uint32_t file_status::getLinkCount() const {
   return NumLinks;
+}
+
+// Implemented
+ErrorOr<space_info> disk_space(const Twine &Path) {
+  vStorageDescriptor_t Descriptor;
+  if (!::GetStorageInformationFromPath(Path.str().c_str(), &Descriptor))
+    return make_error_code(errc::no_such_file_or_directory);
+  space_info SpaceInfo;
+  SpaceInfo.capacity = (static_cast<uint64_t>(Descriptor.BytesTotal.u.HighPart) << 32) + Descriptor.BytesTotal.u.LowPart;
+  SpaceInfo.free = (static_cast<uint64_t>(Descriptor.BytesFree.u.HighPart) << 32) + Descriptor.BytesFree.u.LowPart;
+  SpaceInfo.available = (static_cast<uint64_t>(Descriptor.BytesAvailable.u.HighPart) << 32) + Descriptor.BytesAvailable.u.LowPart;
+  return SpaceInfo;
 }
 
 // Implemented
@@ -293,6 +293,7 @@ std::error_code setLastModificationAndAccessTime(int FD, TimePoint<> Time) {
 // Implemented
 std::error_code mapped_file_region::init(int FD, uint64_t Offset, mapmode Mode) {
   int Flags = (Mode == readonly) ? FILE_MAPPING_READ : (FILE_MAPPING_READ | FILE_MAPPING_WRITE);
+  this->Mode = Mode;
   assert(Size != 0);
   if (::CreateFileMapping(FD, Flags, Offset, Size, &Mapping) != OsSuccess)
     return std::error_code(errno, std::generic_category());
@@ -388,10 +389,86 @@ ErrorOr<basic_file_status> directory_entry::status() const {
   return Status;
 }
 
+static int nativeOpenFlags(CreationDisposition Disp, OpenFlags Flags,
+                           FileAccess Access) {
+  int Result = 0;
+  if (Access == FA_Read)
+    Result |= _O_RDONLY;
+  else if (Access == FA_Write)
+    Result |= _O_WRONLY;
+  else if (Access == (FA_Read | FA_Write))
+    Result |= _O_RDWR;
+
+  // This is for compatibility with old code that assumed F_Append implied
+  // would open an existing file.  See Windows/Path.inc for a longer comment.
+  if (Flags & F_Append)
+    Disp = CD_OpenAlways;
+
+  if (Disp == CD_CreateNew) {
+    Result |= _O_CREAT; // Create if it doesn't exist.
+    Result |= _O_EXCL;  // Fail if it does.
+  } else if (Disp == CD_CreateAlways) {
+    Result |= _O_CREAT; // Create if it doesn't exist.
+    Result |= _O_TRUNC; // Truncate if it does.
+  } else if (Disp == CD_OpenAlways) {
+    Result |= _O_CREAT; // Create if it doesn't exist.
+  } else if (Disp == CD_OpenExisting) {
+    // Nothing special, just don't add O_CREAT and we get these semantics.
+  }
+
+  if (Flags & F_Append)
+    Result |= _O_APPEND;
+
+  return Result;
+}
+
 // Implemented
-std::error_code openFileForRead(const Twine &Name, int &ResultFD, SmallVectorImpl<char> *RealPath) {
+std::error_code openFile(const Twine &Name, int &ResultFD,
+                         CreationDisposition Disp, FileAccess Access,
+                         OpenFlags Flags, unsigned Mode) {
+  int OpenFlags = nativeOpenFlags(Disp, Flags, Access);
+
+  SmallString<128> Storage;
+  StringRef P = Name.toNullTerminatedStringRef(Storage);
+  if ((ResultFD = ::_open(P.begin(), OpenFlags, Mode) < 0))
+    return std::error_code(errno, std::generic_category());
+  return std::error_code();
+}
+
+// Implemented
+Expected<int> openNativeFile(const Twine &Name, CreationDisposition Disp,
+                             FileAccess Access, OpenFlags Flags,
+                             unsigned Mode) {
+
+  int FD;
+  std::error_code EC = openFile(Name, FD, Disp, Access, Flags, Mode);
+  if (EC)
+    return errorCodeToError(EC);
+  return FD;
+}
+
+Expected<file_t> openNativeFileForRead(const Twine &Name, OpenFlags Flags,
+                                       SmallVectorImpl<char> *RealPath) {
+  file_t ResultFD;
+  std::error_code EC = openFileForRead(Name, ResultFD, Flags, RealPath);
+  if (EC)
+    return errorCodeToError(EC);
+  return ResultFD;
+}
+
+void closeFile(file_t &F) {
+  ::close(F);
+  F = -1;
+}
+
+// Implemented
+std::error_code openFileForRead(const Twine &Name, int &ResultFD,
+                                OpenFlags Flags,
+                                SmallVectorImpl<char> *RealPath) {
     SmallString<256> name_storage;
     StringRef f = Name.toNullTerminatedStringRef(name_storage);
+    // @todo handle openflags
+
     int fd = _open(f.begin(), _O_RDONLY);
     if (fd == -1) {
         return std::error_code(errno, std::generic_category());
@@ -411,29 +488,18 @@ std::error_code openFileForRead(const Twine &Name, int &ResultFD, SmallVectorImp
 // Implemented
 std::error_code openFileForWrite(const Twine &Name, int &ResultFD,
                             sys::fs::OpenFlags Flags, unsigned Mode) {
-  // Verify that we don't have both "append" and "excl".
-  assert((!(Flags & sys::fs::F_Excl) || !(Flags & sys::fs::F_Append)) &&
-         "Cannot specify both 'excl' and 'append' file creation flags!");
+  // Verify that we don't have both "append" and "excl". @todo
   SmallString<256> name_storage;
   StringRef f = Name.toNullTerminatedStringRef(name_storage);
   int oflags = _O_RDWR;
 
+  // Resolve Mode flags @todo
+
   // Resolve creation flags
-  if (Flags & F_Excl) {
-    oflags |= _O_EXCL;
-  }
-  else if (Flags & F_Append) {
-    oflags |= _O_APPEND;      
-  }
-  else {
-    oflags |= _O_CREAT;
-  }
-  if (Flags & F_Delete) {
-    oflags |= _O_TEMPORARY;
-  }
-  if (Flags & F_Text) {
-    oflags |= _O_TEXT;
-  }
+  if (Flags & OF_Append) { oflags |= _O_APPEND; }
+  else                   { oflags |= _O_CREAT;  }
+  if (Flags & OF_Delete) { oflags |= _O_TEMPORARY; }
+  if (Flags & OF_Text)   { oflags |= _O_TEXT; }
 
   // open
   int fd = _open(f.begin(), oflags);
@@ -541,7 +607,7 @@ std::error_code real_path(const Twine &path, SmallVectorImpl<char> &dest,
   }
 
   int fd;
-  if (std::error_code EC = llvm::sys::fs::openFileForRead(path, fd, &dest))
+  if (std::error_code EC = llvm::sys::fs::openFileForRead(path, fd, OF_None, &dest))
     return EC;
   ::close(fd);
   return std::error_code();

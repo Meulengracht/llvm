@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/Config/config.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Demangle/Demangle.h"
 #include "llvm/Support/FileSystem.h"
@@ -23,12 +24,11 @@
 #include "llvm/Support/UniqueLock.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
-#include <string>
 #include <unwind.h>
-#include <io.h>
-#if HAVE_SIGNAL_H
 #include <signal.h>
-#endif
+#include <assert.h>
+#include <string>
+#include <io.h>
 
 using namespace llvm;
 
@@ -195,7 +195,7 @@ void llvm::sys::DontRemoveFileOnSignal(StringRef Filename) {
 /// to the process.  The handler can have a cookie passed to it to identify
 /// what instance of the handler it is.
 void llvm::sys::AddSignalHandler(void (*FnPtr)(void *), void *Cookie) {
-  CallBacksToRun->push_back(std::make_pair(FnPtr, Cookie));
+  insertSignalHandler(FnPtr, Cookie);
   RegisterHandlers();
 }
 
