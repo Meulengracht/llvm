@@ -87,7 +87,7 @@ std::error_code create_directory(const Twine &path, bool IgnoreExisting,
   SmallString<_MAXPATH> path_storage;
   struct DIR *dhandle = NULL;
   StringRef f = path.toNullTerminatedStringRef(path_storage);
-  int ec = ::_opendir(f.begin(), _O_CREAT | _O_EXCL, &dhandle);
+  int ec = ::opendir(f.begin(), O_CREAT | O_EXCL, &dhandle);
   if (ec == -1) {
       if (errno == EACCES) {
           return make_error_code(errc::permission_denied);
@@ -97,7 +97,7 @@ std::error_code create_directory(const Twine &path, bool IgnoreExisting,
       }
       return std::error_code(errno, std::generic_category());
   }
-  ::_closedir(dhandle);
+  ::closedir(dhandle);
   return std::error_code();
 }
 
@@ -108,7 +108,7 @@ std::error_code create_link(const Twine &to, const Twine &from) {
   SmallString<256> to_storage;
   StringRef f = from.toNullTerminatedStringRef(from_storage);
   StringRef t = to.toNullTerminatedStringRef(to_storage);
-  if (::_link(f.begin(), t.begin(), 1) != 0) {
+  if (::link(f.begin(), t.begin(), 1) != 0) {
       return std::error_code(errno, std::generic_category());
   }
   return std::error_code();
@@ -121,7 +121,7 @@ std::error_code create_hard_link(const Twine &to, const Twine &from) {
   SmallString<256> to_storage;
   StringRef f = from.toNullTerminatedStringRef(from_storage);
   StringRef t = to.toNullTerminatedStringRef(to_storage);
-  if (::_link(f.begin(), t.begin(), 0) != 0) {
+  if (::link(f.begin(), t.begin(), 0) != 0) {
       return std::error_code(errno, std::generic_category());
   }
   return std::error_code();
@@ -186,7 +186,7 @@ std::error_code rename(const Twine &From, const Twine &To) {
 
 // Implemented
 std::error_code resize_file(int FD, uint64_t Size) {
-  ::_chsize(FD, Size);
+  ::chsize(FD, Size);
   return std::error_code(errno, std::generic_category());
 }
 
@@ -344,7 +344,7 @@ std::error_code detail::directory_iterator_construct(detail::DirIterState &it,
                                                      bool follow_symlinks) {
   SmallString<128> path_null(path);
   struct DIR *directory = nullptr; 
-  int ec = ::_opendir(path_null.c_str(), _O_RDONLY, &directory);
+  int ec = ::opendir(path_null.c_str(), O_RDONLY, &directory);
   if (!directory || ec) {
       return std::error_code(ec, std::generic_category());
   }
@@ -359,7 +359,7 @@ std::error_code detail::directory_iterator_construct(detail::DirIterState &it,
 // Implemented
 std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
   if (it.IterationHandle)
-    ::_closedir(reinterpret_cast<struct DIR*>(it.IterationHandle));
+    ::closedir(reinterpret_cast<struct DIR*>(it.IterationHandle));
   it.IterationHandle = 0;
   it.CurrentEntry = directory_entry();
   return std::error_code();
@@ -369,7 +369,7 @@ std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
 std::error_code detail::directory_iterator_increment(detail::DirIterState &it) {
   struct DIRENT dentry;
   errno = 0;
-  int ec = ::_readdir(reinterpret_cast<struct DIR*>(it.IterationHandle), &dentry);
+  int ec = ::readdir(reinterpret_cast<struct DIR*>(it.IterationHandle), &dentry);
   if (ec != EOK && ec != EOF) {
     return std::error_code(ec, std::generic_category());
   } else if (ec != EOF) {
@@ -393,11 +393,11 @@ static int nativeOpenFlags(CreationDisposition Disp, OpenFlags Flags,
                            FileAccess Access) {
   int Result = 0;
   if (Access == FA_Read)
-    Result |= _O_RDONLY;
+    Result |= O_RDONLY;
   else if (Access == FA_Write)
-    Result |= _O_WRONLY;
+    Result |= O_WRONLY;
   else if (Access == (FA_Read | FA_Write))
-    Result |= _O_RDWR;
+    Result |= O_RDWR;
 
   // This is for compatibility with old code that assumed F_Append implied
   // would open an existing file.  See Windows/Path.inc for a longer comment.
@@ -405,19 +405,19 @@ static int nativeOpenFlags(CreationDisposition Disp, OpenFlags Flags,
     Disp = CD_OpenAlways;
 
   if (Disp == CD_CreateNew) {
-    Result |= _O_CREAT; // Create if it doesn't exist.
-    Result |= _O_EXCL;  // Fail if it does.
+    Result |= O_CREAT; // Create if it doesn't exist.
+    Result |= O_EXCL;  // Fail if it does.
   } else if (Disp == CD_CreateAlways) {
-    Result |= _O_CREAT; // Create if it doesn't exist.
-    Result |= _O_TRUNC; // Truncate if it does.
+    Result |= O_CREAT; // Create if it doesn't exist.
+    Result |= O_TRUNC; // Truncate if it does.
   } else if (Disp == CD_OpenAlways) {
-    Result |= _O_CREAT; // Create if it doesn't exist.
+    Result |= O_CREAT; // Create if it doesn't exist.
   } else if (Disp == CD_OpenExisting) {
     // Nothing special, just don't add O_CREAT and we get these semantics.
   }
 
   if (Flags & F_Append)
-    Result |= _O_APPEND;
+    Result |= O_APPEND;
 
   return Result;
 }
@@ -430,7 +430,7 @@ std::error_code openFile(const Twine &Name, int &ResultFD,
 
   SmallString<128> Storage;
   StringRef P = Name.toNullTerminatedStringRef(Storage);
-  if ((ResultFD = ::_open(P.begin(), OpenFlags, Mode) < 0))
+  if ((ResultFD = ::open(P.begin(), OpenFlags, Mode) < 0))
     return std::error_code(errno, std::generic_category());
   return std::error_code();
 }
@@ -469,7 +469,7 @@ std::error_code openFileForRead(const Twine &Name, int &ResultFD,
     StringRef f = Name.toNullTerminatedStringRef(name_storage);
     // @todo handle openflags
 
-    int fd = _open(f.begin(), _O_RDONLY);
+    int fd = open(f.begin(), O_RDONLY);
     if (fd == -1) {
         return std::error_code(errno, std::generic_category());
     }
@@ -491,18 +491,18 @@ std::error_code openFileForWrite(const Twine &Name, int &ResultFD,
   // Verify that we don't have both "append" and "excl". @todo
   SmallString<256> name_storage;
   StringRef f = Name.toNullTerminatedStringRef(name_storage);
-  int oflags = _O_RDWR;
+  int oflags = O_RDWR;
 
   // Resolve Mode flags @todo
 
   // Resolve creation flags
-  if (Flags & OF_Append) { oflags |= _O_APPEND; }
-  else                   { oflags |= _O_CREAT;  }
-  if (Flags & OF_Delete) { oflags |= _O_TEMPORARY; }
-  if (Flags & OF_Text)   { oflags |= _O_TEXT; }
+  if (Flags & OF_Append) { oflags |= O_APPEND; }
+  else                   { oflags |= O_CREAT;  }
+  if (Flags & OF_Delete) { oflags |= O_TEMPORARY; }
+  if (Flags & OF_Text)   { oflags |= O_TEXT; }
 
   // open
-  int fd = _open(f.begin(), oflags);
+  int fd = open(f.begin(), oflags);
   if (fd == -1) {
       return std::error_code(errno, std::generic_category());
   }
@@ -596,13 +596,13 @@ std::error_code real_path(const Twine &path, SmallVectorImpl<char> &dest,
     struct DIR *dhandle = NULL;
     StringRef f = path.toNullTerminatedStringRef(path_storage);
     dest.reserve(_MAXPATH);
-    if (::_opendir(f.begin(), _O_RDONLY, &dhandle) == -1) {
+    if (::opendir(f.begin(), O_RDONLY, &dhandle) == -1) {
         return std::error_code(errno, std::generic_category());
     }
     //@todo
     //GetFilePathFromHandle(dhandle->d_handle, (const char*)dest.begin(), _MAXPATH);
     dest.set_size(strlen((const char*)dest.begin()) + 1);
-    ::_closedir(dhandle);
+    ::closedir(dhandle);
     return std::error_code();
   }
 

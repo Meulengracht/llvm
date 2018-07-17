@@ -107,6 +107,8 @@ static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
     return llvm::make_unique<X86ELFTargetObjectFile>();
   if (TT.isOSBinFormatCOFF())
     return llvm::make_unique<TargetLoweringObjectFileCOFF>();
+  if (TT.isOSBinFormatVPE())
+    return llvm::make_unique<TargetLoweringObjectFileVPE>();
   llvm_unreachable("unknown subtarget type");
 }
 
@@ -122,7 +124,7 @@ static std::string computeDataLayout(const Triple &TT) {
     Ret += "-p:32:32";
 
   // Some ABIs align 64 bit integers and doubles to 64 bits, others to 32.
-  if (TT.isArch64Bit() || TT.isOSWindows() || TT.isOSNaCl())
+  if (TT.isArch64Bit() || TT.isOSWindows() || TT.isOSNaCl() || TT.isOSVali())
     Ret += "-i64:64";
   else if (TT.isOSIAMCU())
     Ret += "-i64:32-f64:32";
@@ -147,7 +149,7 @@ static std::string computeDataLayout(const Triple &TT) {
     Ret += "-n8:16:32";
 
   // The stack is aligned to 32 bits on some ABIs and 128 bits on others.
-  if ((!TT.isArch64Bit() && TT.isOSWindows()) || TT.isOSIAMCU())
+  if ((!TT.isArch64Bit() && (TT.isOSWindows() || TT.isOSVali())) || TT.isOSIAMCU())
     Ret += "-a:0:32-S32";
   else
     Ret += "-S128";
@@ -168,6 +170,8 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
       return Reloc::DynamicNoPIC;
     }
     if (TT.isOSWindows() && is64Bit)
+      return Reloc::PIC_;
+    if (TT.isOSVali() && is64Bit)
       return Reloc::PIC_;
     return Reloc::Static;
   }
@@ -503,6 +507,6 @@ void X86PassConfig::addPreEmitPass2() {
   // correct CFA calculation rule where needed by inserting appropriate CFI
   // instructions.
   const Triple &TT = TM->getTargetTriple();
-  if (!TT.isOSDarwin() && !TT.isOSWindows())
+  if (!TT.isOSDarwin() && !TT.isOSWindows()) // does vali need this @todo
     addPass(createCFIInstrInserter());
 }

@@ -34,7 +34,7 @@ public:
     ssize_t Completed = 0;
     while (Completed < static_cast<ssize_t>(Size)) {
 #if defined(LLVM_ON_VALI)
-      ssize_t Read = ::_read(InFD, (void*)(Dst + Completed), Size - Completed);
+      ssize_t Read = ::read(InFD, (void*)(Dst + Completed), Size - Completed);
 #else
       ssize_t Read = ::read(InFD, Dst + Completed, Size - Completed);
 #endif
@@ -56,7 +56,7 @@ public:
     ssize_t Completed = 0;
     while (Completed < static_cast<ssize_t>(Size)) {
 #if defined(LLVM_ON_VALI)
-      ssize_t Written = ::_write(OutFD, (void*)(Src + Completed), Size - Completed);
+      ssize_t Written = ::write(OutFD, (void*)(Src + Completed), Size - Completed);
 #else
       ssize_t Written = ::write(OutFD, Src + Completed, Size - Completed);
 #endif

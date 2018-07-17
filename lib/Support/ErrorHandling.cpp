@@ -118,7 +118,7 @@ void llvm::report_fatal_error(const Twine &Reason, bool GenCrashDiag) {
     OS << "LLVM ERROR: " << Reason << "\n";
     StringRef MessageStr = OS.str();
 #if defined(LLVM_ON_VALI)
-    ssize_t written = _write(2, (void*)MessageStr.data(), MessageStr.size());
+    ssize_t written = ::write(2, (void*)MessageStr.data(), MessageStr.size());
 #else
     ssize_t written = ::write(2, MessageStr.data(), MessageStr.size());
 #endif

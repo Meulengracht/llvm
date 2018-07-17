@@ -2361,12 +2361,12 @@ inline int RmDir(const char* dir) { return remove(dir); }
 inline bool IsDir(const StatStruct& st) { return (st.Flags & FILE_FLAG_DIRECTORY) != 0; }
 
 inline int Read(int fd, void* buf, unsigned int count) {
-  return static_cast<int>(_read(fd, buf, count));
+  return static_cast<int>(read(fd, buf, count));
 }
 inline int Write(int fd, const void* buf, unsigned int count) {
-  return static_cast<int>(_write(fd, const_cast<void*>(buf), count));
+  return static_cast<int>(write(fd, const_cast<void*>(buf), count));
 }
-inline int Close(int fd) { return _close(fd); }
+inline int Close(int fd) { return close(fd); }
 inline const char* StrError(int errnum) { return strerror(errnum); }
 
 #else

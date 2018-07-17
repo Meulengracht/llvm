@@ -576,11 +576,7 @@ raw_fd_ostream::raw_fd_ostream(int fd, bool shouldClose, bool unbuffered)
     ShouldClose = false;
 
   // Get the starting position.
-#ifdef LLVM_ON_VALI
-  off_t loc = _lseek(FD, 0, SEEK_CUR);
-#else
   off_t loc = ::lseek(FD, 0, SEEK_CUR);
-#endif
 #ifdef _WIN32
   // MSVCRT's _lseek(SEEK_CUR) doesn't return -1 for pipes.
   sys::fs::file_status Status;
@@ -645,7 +641,7 @@ void raw_fd_ostream::write_impl(const char *Ptr, size_t Size) {
   do {
     size_t ChunkSize = std::min(Size, MaxWriteSize);
 #if defined(LLVM_ON_VALI)
-    ssize_t ret = _write(FD, (void*)Ptr, ChunkSize);
+    ssize_t ret = ::write(FD, (void*)Ptr, ChunkSize);
 #else
     ssize_t ret = ::write(FD, Ptr, ChunkSize);
 #endif
@@ -694,7 +690,7 @@ uint64_t raw_fd_ostream::seek(uint64_t off) {
 #ifdef _WIN32
   pos = ::_lseeki64(FD, off, SEEK_SET);
 #elif defined(LLVM_ON_VALI)
-  pos = ::_lseeki64(FD, off, SEEK_SET);
+  pos = ::lseeki64(FD, off, SEEK_SET);
 #elif defined(HAVE_LSEEK64)
   pos = ::lseek64(FD, off, SEEK_SET);
 #else

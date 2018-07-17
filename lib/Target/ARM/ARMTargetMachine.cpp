@@ -101,6 +101,8 @@ static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
     return llvm::make_unique<TargetLoweringObjectFileMachO>();
   if (TT.isOSWindows())
     return llvm::make_unique<TargetLoweringObjectFileCOFF>();
+  if (TT.isOSVali())
+    return llvm::make_unique<TargetLoweringObjectFileVPE>();
   return llvm::make_unique<ARMElfTargetObjectFile>();
 }
 
@@ -218,7 +220,7 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
     if (TargetTriple.getEnvironment() == Triple::GNUEABIHF ||
         TargetTriple.getEnvironment() == Triple::MuslEABIHF ||
         TargetTriple.getEnvironment() == Triple::EABIHF ||
-        TargetTriple.isOSWindows() ||
+        TargetTriple.isOSWindows() || TargetTriple.isOSVali() ||
         TargetABI == ARMBaseTargetMachine::ARM_ABI_AAPCS16)
       this->Options.FloatABIType = FloatABI::Hard;
     else
@@ -233,7 +235,7 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
          TargetTriple.getEnvironment() == Triple::GNUEABIHF ||
          TargetTriple.getEnvironment() == Triple::MuslEABI ||
          TargetTriple.getEnvironment() == Triple::MuslEABIHF) &&
-        !(TargetTriple.isOSWindows() || TargetTriple.isOSDarwin()))
+        !(TargetTriple.isOSWindows() || TargetTriple.isOSVali() || TargetTriple.isOSDarwin()))
       this->Options.EABIVersion = EABI::GNU;
     else
       this->Options.EABIVersion = EABI::EABI5;

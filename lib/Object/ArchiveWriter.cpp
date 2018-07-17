@@ -31,9 +31,6 @@
 #include <unistd.h>
 #else
 #include <io.h>
-#if defined(MOLLENOS)
-#define close(fd) _close(fd)
-#endif
 #endif
 
 using namespace llvm;

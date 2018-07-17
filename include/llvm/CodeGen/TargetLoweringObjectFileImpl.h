@@ -202,6 +202,50 @@ public:
                                        const TargetMachine &TM) const override;
 };
 
+class TargetLoweringObjectFileVPE : public TargetLoweringObjectFile {
+  mutable unsigned NextUniqueID = 0;
+
+public:
+  ~TargetLoweringObjectFileVPE() override = default;
+
+  void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
+  MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
+                                      const TargetMachine &TM) const override;
+
+  MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
+                                    const TargetMachine &TM) const override;
+
+  void getNameWithPrefix(SmallVectorImpl<char> &OutName, const GlobalValue *GV,
+                         const TargetMachine &TM) const override;
+
+  MCSection *getSectionForJumpTable(const Function &F,
+                                    const TargetMachine &TM) const override;
+
+  /// Emit Obj-C garbage collection and linker options.
+  void emitModuleMetadata(MCStreamer &Streamer, Module &M) const override;
+
+  MCSection *getStaticCtorSection(unsigned Priority,
+                                  const MCSymbol *KeySym) const override;
+  MCSection *getStaticDtorSection(unsigned Priority,
+                                  const MCSymbol *KeySym) const override;
+
+  void emitLinkerFlagsForGlobal(raw_ostream &OS,
+                                const GlobalValue *GV) const override;
+
+  void emitLinkerFlagsForUsed(raw_ostream &OS,
+                              const GlobalValue *GV) const override;
+
+  const MCExpr *lowerRelativeReference(const GlobalValue *LHS,
+                                       const GlobalValue *RHS,
+                                       const TargetMachine &TM) const override;
+
+  /// Given a mergeable constant with the specified size and relocation
+  /// information, return a section that it should be placed in.
+  MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
+                                   const Constant *C,
+                                   unsigned &Align) const override;
+};
+
 } // end namespace llvm
 
 #endif // LLVM_CODEGEN_TARGETLOWERINGOBJECTFILEIMPL_H

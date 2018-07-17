@@ -145,6 +145,7 @@ public:
     AMD,
     Mesa,
     SUSE,
+    Nordic,
     OpenEmbedded,
     LastVendorType = OpenEmbedded
   };
@@ -168,6 +169,7 @@ public:
     Win32,
     Haiku,
     Minix,
+    Vali,
     RTEMS,
     NaCl,       // Native Client
     CNK,        // BG/P Compute-Node Kernel
@@ -215,6 +217,7 @@ public:
     ELF,
     MachO,
     Wasm,
+    VPE,
   };
 
 private:
@@ -491,6 +494,10 @@ public:
     return getOS() == Triple::Fuchsia;
   }
 
+  bool isOSVali() const {
+    return getOS() == Triple::Vali;
+  }
+
   bool isOSDragonFly() const { return getOS() == Triple::DragonFly; }
 
   bool isOSSolaris() const {
@@ -592,6 +599,10 @@ public:
   /// Tests whether the OS uses the COFF binary format.
   bool isOSBinFormatCOFF() const {
     return getObjectFormat() == Triple::COFF;
+  }
+  /// Tests whether the OS uses the VPE binary format.
+  bool isOSBinFormatVPE() const {
+    return getObjectFormat() == Triple::VPE;
   }
 
   /// Tests whether the environment is MachO.

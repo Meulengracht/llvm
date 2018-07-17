@@ -168,6 +168,7 @@ StringRef Triple::getVendorTypeName(VendorType Kind) {
   case AMD: return "amd";
   case Mesa: return "mesa";
   case SUSE: return "suse";
+  case Nordic: return "nordic";
   case OpenEmbedded: return "oe";
   }
 
@@ -195,6 +196,7 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case Win32: return "windows";
   case Haiku: return "haiku";
   case Minix: return "minix";
+  case Vali: return "vali";
   case RTEMS: return "rtems";
   case NaCl: return "nacl";
   case CNK: return "cnk";
@@ -464,6 +466,7 @@ static Triple::VendorType parseVendor(StringRef VendorName) {
     .Case("amd", Triple::AMD)
     .Case("mesa", Triple::Mesa)
     .Case("suse", Triple::SUSE)
+    .Case("nordic", Triple::Nordic)
     .Case("oe", Triple::OpenEmbedded)
     .Default(Triple::UnknownVendor);
 }
@@ -488,6 +491,7 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("windows", Triple::Win32)
     .StartsWith("haiku", Triple::Haiku)
     .StartsWith("minix", Triple::Minix)
+    .StartsWith("vali", Triple::Vali)
     .StartsWith("rtems", Triple::RTEMS)
     .StartsWith("nacl", Triple::NaCl)
     .StartsWith("cnk", Triple::CNK)
@@ -531,6 +535,7 @@ static Triple::EnvironmentType parseEnvironment(StringRef EnvironmentName) {
 static Triple::ObjectFormatType parseFormat(StringRef EnvironmentName) {
   return StringSwitch<Triple::ObjectFormatType>(EnvironmentName)
     .EndsWith("coff", Triple::COFF)
+    .EndsWith("vpe", Triple::VPE)
     .EndsWith("elf", Triple::ELF)
     .EndsWith("macho", Triple::MachO)
     .EndsWith("wasm", Triple::Wasm)
@@ -609,6 +614,7 @@ static StringRef getObjectFormatTypeName(Triple::ObjectFormatType Kind) {
   switch (Kind) {
   case Triple::UnknownObjectFormat: return "";
   case Triple::COFF: return "coff";
+  case Triple::VPE: return "vpe";
   case Triple::ELF: return "elf";
   case Triple::MachO: return "macho";
   case Triple::Wasm: return "wasm";
@@ -628,6 +634,8 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
       return Triple::MachO;
     else if (T.isOSWindows())
       return Triple::COFF;
+    else if (T.isOSVali())
+      return Triple::VPE;
     return Triple::ELF;
 
   case Triple::aarch64_be:

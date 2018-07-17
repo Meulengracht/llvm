@@ -120,7 +120,7 @@ static void RemoveFilesToRemove() {
 
     // Otherwise, remove the file. We ignore any errors here as there is nothing
     // else we can do.
-    _unlink(path);
+    unlink(path);
   }
 }
 
