@@ -23,6 +23,9 @@
 if(NOT DEFINED ENV{CROSS})
     message(FATAL_ERROR "CROSS environmental variable is not undefined")
 endif()
+if(NOT DEFINED ENV{VALI_ARCH})
+    message(FATAL_ERROR "VALI_ARCH environmental variable is not undefined")
+endif()
 if(NOT DEFINED ENV{INCLUDES})
     message(FATAL_ERROR "INCLUDES environmental variable is not undefined")
 endif()
@@ -45,10 +48,16 @@ set(VERBOSE 1)
 # Must have a local host llvm-tblgen in path
 set(LLVM_TABLEGEN "$ENV{CROSS}/bin/llvm-tblgen" CACHE FILEPATH "")
 
-set(LLVM_BUILD_32_BITS ON CACHE BOOL "")
+if("$ENV{VALI_ARCH}" STREQUAL "i386")
+    set(LLVM_BUILD_32_BITS ON CACHE BOOL "")
+    set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
+else()
+    set(LLVM_BUILD_32_BITS OFF CACHE BOOL "")
+    set(LLVM_DEFAULT_TARGET_TRIPLE amd64-pc-win32-itanium-coff)
+endif()
+
 set(LLVM_TARGET_ARCH "X86" CACHE STRING "")
 set(LLVM_TARGETS_TO_BUILD "X86" CACHE STRING "") 
-set(LLVM_DEFAULT_TARGET_TRIPLE i386-pc-win32-itanium-coff)
 
 set(LLVM_ENABLE_EH ON CACHE BOOL "")
 set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
@@ -58,20 +67,13 @@ set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
 set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 
 # Setup shared compile flags to make compilation succeed
-set(COMPILE_FLAGS
-    -U_WIN32
-    -DMOLLENOS
-    -DZLIB_DLL
-    -Di386
-    -D__i386__
-    -m32
-    -fms-extensions
-    -Wall
-    -nostdlib
-    -nostdinc
-    -O3
-    -I$ENV{INCLUDES}/cxx
-    -I$ENV{INCLUDES})
+if("$ENV{VALI_ARCH}" STREQUAL "i386")
+    set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Di386 -D__i386__ -m32 -fms-extensions
+        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -I$ENV{INCLUDES}/cxx -I$ENV{INCLUDES})
+else()
+    set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Damd64 -D__amd64__ -m64 -fms-extensions
+        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -fdwarf-exceptions -I$ENV{INCLUDES}/cxx -I$ENV{INCLUDES})
+endif()
 
 string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
 
@@ -84,16 +86,15 @@ string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
 
-set(LINK_FLAGS
-    /nodefaultlib
-    /machine:X86 
-    /subsystem:native
-    /lldmap
-    $ENV{LIBRARIES}/libclang.lib
-    $ENV{LIBRARIES}/libm.lib
-    $ENV{LIBRARIES}/libc.lib
-    $ENV{LIBRARIES}/zlib.lib
-    $ENV{LIBRARIES}/libunwind.lib)
+if("$ENV{VALI_ARCH}" STREQUAL "i386")
+    set(LINK_FLAGS /nodefaultlib /machine:X86 /subsystem:native /lldmap
+        $ENV{LIBRARIES}/libclang.lib $ENV{LIBRARIES}/libm.lib $ENV{LIBRARIES}/libc.lib
+        $ENV{LIBRARIES}/zlib.lib $ENV{LIBRARIES}/libunwind.lib)
+else()
+    set(LINK_FLAGS /nodefaultlib /machine:X64 /subsystem:native /lldmap
+        $ENV{LIBRARIES}/libclang.lib $ENV{LIBRARIES}/libm.lib $ENV{LIBRARIES}/libc.lib
+        $ENV{LIBRARIES}/zlib.lib $ENV{LIBRARIES}/libunwind.lib)
+endif()
 
 string(REPLACE ";" " " LINK_FLAGS "${LINK_FLAGS}")
 

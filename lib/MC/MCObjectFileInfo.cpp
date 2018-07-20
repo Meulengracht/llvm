@@ -633,7 +633,8 @@ void MCObjectFileInfo::initCOFFMCObjectFileInfo(const Triple &T) {
 
   CommDirectiveSupportsAlignment = true;
 
-  // COFF
+  // VPE is a non-os specific version of COFF, so it contains around 95% of the same
+  // functionality.
   BSSSection = Ctx->getCOFFSection(
       ".bss", COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA |
                   COFF::IMAGE_SCN_MEM_READ | COFF::IMAGE_SCN_MEM_WRITE,
@@ -896,6 +897,213 @@ void MCObjectFileInfo::initWasmMCObjectFileInfo(const Triple &T) {
   // TODO: Define more sections.
 }
 
+void MCObjectFileInfo::initVPEMCObjectFileInfo(const Triple &T) {
+  EHFrameSection = Ctx->getCOFFSection(
+      ".eh_frame", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+                       COFF::IMAGE_SCN_MEM_READ | COFF::IMAGE_SCN_MEM_WRITE,
+      SectionKind::getData());
+
+  // Set the `IMAGE_SCN_MEM_16BIT` flag when compiling for thumb mode.  This is
+  // used to indicate to the linker that the text segment contains thumb instructions
+  // and to set the ISA selection bit for calls accordingly.
+  const bool IsThumb = T.getArch() == Triple::thumb;
+
+  CommDirectiveSupportsAlignment = true;
+
+  // COFF
+  BSSSection = Ctx->getCOFFSection(
+      ".bss", COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA |
+                  COFF::IMAGE_SCN_MEM_READ | COFF::IMAGE_SCN_MEM_WRITE,
+      SectionKind::getBSS());
+  TextSection = Ctx->getCOFFSection(
+      ".text",
+      (IsThumb ? COFF::IMAGE_SCN_MEM_16BIT : (COFF::SectionCharacteristics)0) |
+          COFF::IMAGE_SCN_CNT_CODE | COFF::IMAGE_SCN_MEM_EXECUTE |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getText());
+  DataSection = Ctx->getCOFFSection(
+      ".data", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
+                   COFF::IMAGE_SCN_MEM_WRITE,
+      SectionKind::getData());
+  ReadOnlySection = Ctx->getCOFFSection(
+      ".rdata", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getReadOnly());
+
+  // FIXME: We're emitting LSDA info into a readonly section on COFF, even
+  // though it contains relocatable pointers.  In PIC mode, this is probably a
+  // big runtime hit for C++ apps.  Either the contents of the LSDA need to be
+  // adjusted or this should be a data section.
+  LSDASection = Ctx->getCOFFSection(".gcc_except_table",
+    COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ,
+    SectionKind::getReadOnly());
+
+  // We do not support CodeView, but rather Dwarf exceptions
+  COFFDebugSymbolsSection = nullptr;
+  COFFDebugTypesSection = nullptr;
+  COFFGlobalTypeHashesSection = nullptr;
+
+  DwarfAbbrevSection = Ctx->getCOFFSection(
+      ".debug_abbrev",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_abbrev");
+  DwarfInfoSection = Ctx->getCOFFSection(
+      ".debug_info",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_info");
+  DwarfLineSection = Ctx->getCOFFSection(
+      ".debug_line",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_line");
+  DwarfLineStrSection = Ctx->getCOFFSection(
+      ".debug_line_str",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_line_str");
+  DwarfFrameSection = Ctx->getCOFFSection(
+      ".debug_frame",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfPubNamesSection = Ctx->getCOFFSection(
+      ".debug_pubnames",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfPubTypesSection = Ctx->getCOFFSection(
+      ".debug_pubtypes",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfGnuPubNamesSection = Ctx->getCOFFSection(
+      ".debug_gnu_pubnames",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfGnuPubTypesSection = Ctx->getCOFFSection(
+      ".debug_gnu_pubtypes",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfStrSection = Ctx->getCOFFSection(
+      ".debug_str",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "info_string");
+  DwarfStrOffSection = Ctx->getCOFFSection(
+      ".debug_str_offsets",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_str_off");
+  DwarfLocSection = Ctx->getCOFFSection(
+      ".debug_loc",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_debug_loc");
+  DwarfARangesSection = Ctx->getCOFFSection(
+      ".debug_aranges",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfRangesSection = Ctx->getCOFFSection(
+      ".debug_ranges",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "debug_range");
+  DwarfMacinfoSection = Ctx->getCOFFSection(
+      ".debug_macinfo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "debug_macinfo");
+  DwarfInfoDWOSection = Ctx->getCOFFSection(
+      ".debug_info.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_info_dwo");
+  DwarfTypesDWOSection = Ctx->getCOFFSection(
+      ".debug_types.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_types_dwo");
+  DwarfAbbrevDWOSection = Ctx->getCOFFSection(
+      ".debug_abbrev.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_abbrev_dwo");
+  DwarfStrDWOSection = Ctx->getCOFFSection(
+      ".debug_str.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "skel_string");
+  DwarfLineDWOSection = Ctx->getCOFFSection(
+      ".debug_line.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfLocDWOSection = Ctx->getCOFFSection(
+      ".debug_loc.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "skel_loc");
+  DwarfStrOffDWOSection = Ctx->getCOFFSection(
+      ".debug_str_offsets.dwo",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "section_str_off_dwo");
+  DwarfAddrSection = Ctx->getCOFFSection(
+      ".debug_addr",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "addr_sec");
+  DwarfCUIndexSection = Ctx->getCOFFSection(
+      ".debug_cu_index",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfTUIndexSection = Ctx->getCOFFSection(
+      ".debug_tu_index",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata());
+  DwarfDebugNamesSection = Ctx->getCOFFSection(
+      ".debug_names",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "debug_names_begin");
+  DwarfAccelNamesSection = Ctx->getCOFFSection(
+      ".apple_names",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "names_begin");
+  DwarfAccelNamespaceSection = Ctx->getCOFFSection(
+      ".apple_namespaces",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "namespac_begin");
+  DwarfAccelTypesSection = Ctx->getCOFFSection(
+      ".apple_types",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "types_begin");
+  DwarfAccelObjCSection = Ctx->getCOFFSection(
+      ".apple_objc",
+      COFF::IMAGE_SCN_MEM_DISCARDABLE | COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+          COFF::IMAGE_SCN_MEM_READ,
+      SectionKind::getMetadata(), "objc_begin");
+
+  TLSDataSection = Ctx->getCOFFSection(
+      ".tls$", COFF::IMAGE_SCN_CNT_INITIALIZED_DATA | COFF::IMAGE_SCN_MEM_READ |
+                   COFF::IMAGE_SCN_MEM_WRITE,
+      SectionKind::getData());
+
+  StackMapSection = Ctx->getCOFFSection(".llvm_stackmaps",
+                                        COFF::IMAGE_SCN_CNT_INITIALIZED_DATA |
+                                            COFF::IMAGE_SCN_MEM_READ,
+                                        SectionKind::getReadOnly());
+}
+
 void MCObjectFileInfo::InitMCObjectFileInfo(const Triple &TheTriple, bool PIC,
                                             MCContext &ctx,
                                             bool LargeCodeModel) {
@@ -927,6 +1135,11 @@ void MCObjectFileInfo::InitMCObjectFileInfo(const Triple &TheTriple, bool PIC,
     Env = IsMachO;
     initMachOMCObjectFileInfo(TT);
     break;
+  case Triple::VPE:
+    Env = IsVPE;
+    initVPEMCObjectFileInfo(TT);
+    break;
+    
   case Triple::COFF:
     if (!TT.isOSWindows())
       report_fatal_error(

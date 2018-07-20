@@ -153,6 +153,7 @@ MCSymbol *MCContext::createSymbolImpl(const StringMapEntry<bool> *Name,
                                       bool IsTemporary) {
   if (MOFI) {
     switch (MOFI->getObjectFileType()) {
+    case MCObjectFileInfo::IsVPE: // We use coff symbols for @vpe
     case MCObjectFileInfo::IsCOFF:
       return new (Name, *this) MCSymbolCOFF(Name, IsTemporary);
     case MCObjectFileInfo::IsELF:

@@ -17,6 +17,7 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCWasmObjectWriter.h"
 #include "llvm/MC/MCWinCOFFObjectWriter.h"
+#include "llvm/MC/MCVPEObjectWriter.h"
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +33,8 @@ std::unique_ptr<MCObjectWriter>
 MCAsmBackend::createObjectWriter(raw_pwrite_stream &OS) const {
   auto TW = createObjectTargetWriter();
   switch (TW->getFormat()) {
+  case Triple::VPE:
+    return createVPEObjectWriter(cast<MCVPEObjectTargetWriter>(std::move(TW)), OS);
   case Triple::ELF:
     return createELFObjectWriter(cast<MCELFObjectTargetWriter>(std::move(TW)), OS,
                                  Endian == support::little);

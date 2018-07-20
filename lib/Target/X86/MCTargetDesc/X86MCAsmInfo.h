@@ -43,6 +43,13 @@ public:
   explicit X86ELFMCAsmInfo(const Triple &Triple);
 };
 
+class X86VPEMCAsmInfo : public MCAsmInfoCOFF {
+  void anchor() override;
+
+public:
+  explicit X86VPEMCAsmInfo(const Triple &Triple);
+};
+
 class X86MCAsmInfoMicrosoft : public MCAsmInfoMicrosoft {
   void anchor() override;
 
