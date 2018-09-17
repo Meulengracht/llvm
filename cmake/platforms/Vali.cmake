@@ -21,16 +21,16 @@
 
 # Make sure all the proper env are set
 if(NOT DEFINED ENV{CROSS})
-    message(FATAL_ERROR "CROSS environmental variable is not undefined")
+    message(FATAL_ERROR "CROSS environmental variable is not defined")
 endif()
 if(NOT DEFINED ENV{VALI_ARCH})
-    message(FATAL_ERROR "VALI_ARCH environmental variable is not undefined")
+    message(FATAL_ERROR "VALI_ARCH environmental variable is not defined")
 endif()
-if(NOT DEFINED ENV{INCLUDES})
-    message(FATAL_ERROR "INCLUDES environmental variable is not undefined")
+if(NOT DEFINED ENV{VALI_INCLUDES})
+    message(FATAL_ERROR "VALI_INCLUDES environmental variable is not defined")
 endif()
-if(NOT DEFINED ENV{LIBRARIES})
-    message(FATAL_ERROR "LIBRARIES environmental variable is not undefined")
+if(NOT DEFINED ENV{VALI_LIBRARIES})
+    message(FATAL_ERROR "VALI_LIBRARIES environmental variable is not defined")
 endif()
 
 # Setup environment stuff for cmake configuration
@@ -39,6 +39,8 @@ set(CMAKE_CROSSCOMPILING OFF CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
 set(CMAKE_LINKER "$ENV{CROSS}/bin/lld-link" CACHE FILEPATH "")
+set(ENV{INCLUDES} "$ENV{VALI_INCLUDES}")
+set(ENV{LIBRARIES} "$ENV{VALI_LIBRARIES}")
 set(VERBOSE 1)
 
 ##################################################
@@ -69,10 +71,10 @@ set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 # Setup shared compile flags to make compilation succeed
 if("$ENV{VALI_ARCH}" STREQUAL "i386")
     set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Di386 -D__i386__ -m32 -fms-extensions
-        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -I$ENV{INCLUDES}/cxx -I$ENV{INCLUDES})
+        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -I$ENV{VALI_INCLUDES}/cxx -I$ENV{VALI_INCLUDES})
 else()
     set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Damd64 -D__amd64__ -m64 -fms-extensions
-        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -fdwarf-exceptions -I$ENV{INCLUDES}/cxx -I$ENV{INCLUDES})
+        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -fdwarf-exceptions -I$ENV{VALI_INCLUDES}/cxx -I$ENV{VALI_INCLUDES})
 endif()
 
 string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
@@ -88,12 +90,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
 
 if("$ENV{VALI_ARCH}" STREQUAL "i386")
     set(LINK_FLAGS /nodefaultlib /machine:X86 /subsystem:native /lldmap
-        $ENV{LIBRARIES}/libclang.lib $ENV{LIBRARIES}/libm.lib $ENV{LIBRARIES}/libc.lib
-        $ENV{LIBRARIES}/zlib.lib $ENV{LIBRARIES}/libunwind.lib)
+        $ENV{VALI_LIBRARIES}/libclang.lib $ENV{VALI_LIBRARIES}/libm.lib $ENV{VALI_LIBRARIES}/libc.lib
+        $ENV{VALI_LIBRARIES}/zlib.lib $ENV{VALI_LIBRARIES}/libunwind.lib)
 else()
     set(LINK_FLAGS /nodefaultlib /machine:X64 /subsystem:native /lldmap
-        $ENV{LIBRARIES}/libclang.lib $ENV{LIBRARIES}/libm.lib $ENV{LIBRARIES}/libc.lib
-        $ENV{LIBRARIES}/zlib.lib $ENV{LIBRARIES}/libunwind.lib)
+        $ENV{VALI_LIBRARIES}/libclang.lib $ENV{VALI_LIBRARIES}/libm.lib $ENV{VALI_LIBRARIES}/libc.lib
+        $ENV{VALI_LIBRARIES}/zlib.lib $ENV{VALI_LIBRARIES}/libunwind.lib)
 endif()
 
 string(REPLACE ";" " " LINK_FLAGS "${LINK_FLAGS}")
