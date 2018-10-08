@@ -192,7 +192,7 @@ std::error_code resize_file(int FD, uint64_t Size) {
 
 // Implemented
 std::error_code access(const Twine &Path, AccessMode Mode) {
-    vFileDescriptor_t Descriptor;
+    OsFileDescriptor_t Descriptor;
     SmallString<256> path_storage;
     StringRef f = Path.toNullTerminatedStringRef(path_storage);
     if (GetFileInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
@@ -254,7 +254,7 @@ static perms perms_from_flags(Flags_t Permissions) {
 
 // Implemented
 std::error_code status(const Twine &path, file_status &result, bool Follow) {
-    vFileDescriptor_t Descriptor;
+    OsFileDescriptor_t Descriptor;
     SmallString<256> path_storage;
     StringRef f = path.toNullTerminatedStringRef(path_storage);
     if (GetFileInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
@@ -269,7 +269,7 @@ std::error_code status(const Twine &path, file_status &result, bool Follow) {
 
 // Implemented
 std::error_code status(int FD, file_status &Result) {
-    vFileDescriptor_t Descriptor;
+    OsFileDescriptor_t Descriptor;
     if (GetFileInformationFromFd(FD, &Descriptor) != OsSuccess) {
         return errc::no_such_file_or_directory;
     }

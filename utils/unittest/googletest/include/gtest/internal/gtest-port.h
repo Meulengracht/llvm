@@ -2348,7 +2348,7 @@ inline bool IsDir(const StatStruct& st) {
 
 #elif GTEST_OS_VALI
 
-typedef vFileDescriptor_t StatStruct;
+typedef OsFileDescriptor_t StatStruct;
 
 inline int IsATTY(int fd) { return isatty(fd); }
 inline int FileNo(FILE* file) { return fileno(file); }
