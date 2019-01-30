@@ -1,9 +1,8 @@
 //===- MipsMSAInstrInfo.td - MSA ASE instructions -*- tablegen ------------*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -107,6 +106,18 @@ class vfsetcc_type<ValueType ResTy, ValueType OpTy, CondCode CC> :
           (ResTy (vfsetcc (OpTy node:$lhs), (OpTy node:$rhs), CC))>;
 
 // ISD::SETFALSE cannot occur
+def vfseteq_v4f32 : vfsetcc_type<v4i32, v4f32, SETEQ>;
+def vfseteq_v2f64 : vfsetcc_type<v2i64, v2f64, SETEQ>;
+def vfsetge_v4f32 : vfsetcc_type<v4i32, v4f32, SETGE>;
+def vfsetge_v2f64 : vfsetcc_type<v2i64, v2f64, SETGE>;
+def vfsetgt_v4f32 : vfsetcc_type<v4i32, v4f32, SETGT>;
+def vfsetgt_v2f64 : vfsetcc_type<v2i64, v2f64, SETGT>;
+def vfsetle_v4f32 : vfsetcc_type<v4i32, v4f32, SETLE>;
+def vfsetle_v2f64 : vfsetcc_type<v2i64, v2f64, SETLE>;
+def vfsetlt_v4f32 : vfsetcc_type<v4i32, v4f32, SETLT>;
+def vfsetlt_v2f64 : vfsetcc_type<v2i64, v2f64, SETLT>;
+def vfsetne_v4f32 : vfsetcc_type<v4i32, v4f32, SETNE>;
+def vfsetne_v2f64 : vfsetcc_type<v2i64, v2f64, SETNE>;
 def vfsetoeq_v4f32 : vfsetcc_type<v4i32, v4f32, SETOEQ>;
 def vfsetoeq_v2f64 : vfsetcc_type<v2i64, v2f64, SETOEQ>;
 def vfsetoge_v4f32 : vfsetcc_type<v4i32, v4f32, SETOGE>;
@@ -3150,17 +3161,17 @@ def FTRUNC_U_D : FTRUNC_U_D_ENC, FTRUNC_U_D_DESC;
 
 def : MipsPat<(fsub MSA128WOpnd:$wd, (fmul MSA128WOpnd:$ws, MSA128WOpnd:$wt)),
               (FMSUB_W MSA128WOpnd:$wd, MSA128WOpnd:$ws, MSA128WOpnd:$wt)>,
-              FPOP_FUSION_FAST;
+              ISA_MIPS1, ASE_MSA, FPOP_FUSION_FAST;
 def : MipsPat<(fsub MSA128DOpnd:$wd, (fmul MSA128DOpnd:$ws, MSA128DOpnd:$wt)),
               (FMSUB_D MSA128DOpnd:$wd, MSA128DOpnd:$ws, MSA128DOpnd:$wt)>,
-              FPOP_FUSION_FAST;
+              ISA_MIPS1, ASE_MSA, FPOP_FUSION_FAST;
 
 def : MipsPat<(fadd MSA128WOpnd:$wd, (fmul MSA128WOpnd:$ws, MSA128WOpnd:$wt)),
               (FMADD_W MSA128WOpnd:$wd, MSA128WOpnd:$ws, MSA128WOpnd:$wt)>,
-              FPOP_FUSION_FAST;
+              ISA_MIPS1, ASE_MSA, FPOP_FUSION_FAST;
 def : MipsPat<(fadd MSA128DOpnd:$wd, (fmul MSA128DOpnd:$ws, MSA128DOpnd:$wt)),
               (FMADD_D MSA128DOpnd:$wd, MSA128DOpnd:$ws, MSA128DOpnd:$wt)>,
-              FPOP_FUSION_FAST;
+              ISA_MIPS1, ASE_MSA, FPOP_FUSION_FAST;
 
 def HADD_S_H : HADD_S_H_ENC, HADD_S_H_DESC;
 def HADD_S_W : HADD_S_W_ENC, HADD_S_W_DESC;
@@ -3792,12 +3803,13 @@ let ASEPredicate = [HasMSA] in {
  }
 
  def : MipsPat<(MipsTruncIntFP MSA128F16:$ws),
-               (TRUNC_W_D64 (MSA_FP_EXTEND_D_PSEUDO MSA128F16:$ws))>;
+               (TRUNC_W_D64 (MSA_FP_EXTEND_D_PSEUDO MSA128F16:$ws))>, ISA_MIPS1,
+               ASE_MSA;
 
  def : MipsPat<(MipsFPCmp MSA128F16:$ws, MSA128F16:$wt, imm:$cond),
                (FCMP_S32 (MSA_FP_EXTEND_W_PSEUDO MSA128F16:$ws),
                          (MSA_FP_EXTEND_W_PSEUDO MSA128F16:$wt), imm:$cond)>,
-       ISA_MIPS1_NOT_32R6_64R6;
+       ISA_MIPS1_NOT_32R6_64R6, ASE_MSA;
 }
 
 def vsplati64_imm_eq_63 : PatLeaf<(bitconvert (v4i32 (build_vector))), [{
@@ -4037,3 +4049,20 @@ def : MSAPat<
          (SPLAT_D v2f64:$ws,
            (COPY_TO_REGCLASS (i32 (EXTRACT_SUBREG i64:$idx, sub_32)), GPR32)),
          sub_64))>;
+
+def : MSAPat<(vfseteq_v4f32 MSA128WOpnd:$a, MSA128WOpnd:$b),
+             (FCEQ_W MSA128WOpnd:$a, MSA128WOpnd:$b)>;
+def : MSAPat<(vfseteq_v2f64 MSA128DOpnd:$a, MSA128DOpnd:$b),
+             (FCEQ_D MSA128DOpnd:$a, MSA128DOpnd:$b)>;
+def : MSAPat<(vfsetle_v4f32 MSA128WOpnd:$a, MSA128WOpnd:$b),
+             (FCLE_W MSA128WOpnd:$a, MSA128WOpnd:$b)>;
+def : MSAPat<(vfsetle_v2f64 MSA128DOpnd:$a, MSA128DOpnd:$b),
+             (FCLE_D MSA128DOpnd:$a, MSA128DOpnd:$b)>;
+def : MSAPat<(vfsetlt_v4f32 MSA128WOpnd:$a, MSA128WOpnd:$b),
+             (FCLT_W MSA128WOpnd:$a, MSA128WOpnd:$b)>;
+def : MSAPat<(vfsetlt_v2f64 MSA128DOpnd:$a, MSA128DOpnd:$b),
+             (FCLT_D MSA128DOpnd:$a, MSA128DOpnd:$b)>;
+def : MSAPat<(vfsetne_v4f32 MSA128WOpnd:$a, MSA128WOpnd:$b),
+             (FCNE_W MSA128WOpnd:$a, MSA128WOpnd:$b)>;
+def : MSAPat<(vfsetne_v2f64 MSA128DOpnd:$a, MSA128DOpnd:$b),
+             (FCNE_D MSA128DOpnd:$a, MSA128DOpnd:$b)>;

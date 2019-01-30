@@ -1,9 +1,8 @@
 //===- Target.td - Target Independent TableGen interface ---*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -439,6 +438,7 @@ class Instruction {
   // instruction.
   bit isReturn     = 0;     // Is this instruction a return instruction?
   bit isBranch     = 0;     // Is this instruction a branch instruction?
+  bit isEHScopeReturn = 0;  // Does this instruction end an EH scope?
   bit isIndirectBranch = 0; // Is this instruction an indirect branch?
   bit isCompare    = 0;     // Is this instruction a comparison instruction?
   bit isMoveImm    = 0;     // Is this instruction a move immediate instruction?
@@ -448,6 +448,7 @@ class Instruction {
   bit isBarrier    = 0;     // Can control flow fall through this instruction?
   bit isCall       = 0;     // Is this instruction a call instruction?
   bit isAdd        = 0;     // Is this instruction an add instruction?
+  bit isTrap       = 0;     // Is this instruction a trap instruction?
   bit canFoldAsLoad = 0;    // Can this be folded as a simple memory operand?
   bit mayLoad      = ?;     // Is it possible for this inst to read memory?
   bit mayStore     = ?;     // Is it possible for this inst to write memory?
@@ -477,6 +478,7 @@ class Instruction {
   bit isInsertSubreg = 0;   // Is this instruction a kind of insert subreg?
                             // If so, make sure to override
                             // TargetInstrInfo::getInsertSubregLikeInputs.
+  bit variadicOpsAreDefs = 0; // Are variadic operands definitions?
 
   // Does the instruction have side effects that are not captured by any
   // operands of the instruction or other flags?
@@ -1102,7 +1104,7 @@ def FAULTING_OP : StandardPseudoInstruction {
   let isBranch = 1;
 }
 def PATCHABLE_OP : StandardPseudoInstruction {
-  let OutOperandList = (outs unknown:$dst);
+  let OutOperandList = (outs);
   let InOperandList = (ins variable_ops);
   let usesCustomInserter = 1;
   let mayLoad = 1;
@@ -1162,8 +1164,8 @@ def PATCHABLE_TYPED_EVENT_CALL : StandardPseudoInstruction {
   let hasSideEffects = 1;
 }
 def FENTRY_CALL : StandardPseudoInstruction {
-  let OutOperandList = (outs unknown:$dst);
-  let InOperandList = (ins variable_ops);
+  let OutOperandList = (outs);
+  let InOperandList = (ins);
   let AsmString = "# FEntry call";
   let usesCustomInserter = 1;
   let mayLoad = 1;
@@ -1553,3 +1555,8 @@ include "llvm/Target/GlobalISel/Target.td"
 // Pull in the common support for the Global ISel DAG-based selector generation.
 //
 include "llvm/Target/GlobalISel/SelectionDAGCompat.td"
+
+//===----------------------------------------------------------------------===//
+// Pull in the common support for Pfm Counters generation.
+//
+include "llvm/Target/TargetPfmCounters.td"

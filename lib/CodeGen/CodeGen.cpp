@@ -1,9 +1,8 @@
 //===-- CodeGen.cpp -------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -42,6 +41,7 @@ void llvm::initializeCodeGen(PassRegistry &Registry) {
   initializeIfConverterPass(Registry);
   initializeImplicitNullChecksPass(Registry);
   initializeIndirectBrExpandPassPass(Registry);
+  initializeInterleavedLoadCombinePass(Registry);
   initializeInterleavedAccessPass(Registry);
   initializeLiveDebugValuesPass(Registry);
   initializeLiveDebugVariablesPass(Registry);
@@ -51,6 +51,7 @@ void llvm::initializeCodeGen(PassRegistry &Registry) {
   initializeLiveVariablesPass(Registry);
   initializeLocalStackSlotPassPass(Registry);
   initializeLowerIntrinsicsPass(Registry);
+  initializeMIRCanonicalizerPass(Registry);
   initializeMachineBlockFrequencyInfoPass(Registry);
   initializeMachineBlockPlacementPass(Registry);
   initializeMachineBlockPlacementStatsPass(Registry);
@@ -82,8 +83,10 @@ void llvm::initializeCodeGen(PassRegistry &Registry) {
   initializePreISelIntrinsicLoweringLegacyPassPass(Registry);
   initializeProcessImplicitDefsPass(Registry);
   initializeRABasicPass(Registry);
-  initializeRegAllocFastPass(Registry);
   initializeRAGreedyPass(Registry);
+  initializeRegAllocFastPass(Registry);
+  initializeRegUsageInfoCollectorPass(Registry);
+  initializeRegUsageInfoPropagationPass(Registry);
   initializeRegisterCoalescerPass(Registry);
   initializeRenameIndependentSubregsPass(Registry);
   initializeSafeStackLegacyPassPass(Registry);
@@ -105,7 +108,6 @@ void llvm::initializeCodeGen(PassRegistry &Registry) {
   initializeWasmEHPreparePass(Registry);
   initializeWinEHPreparePass(Registry);
   initializeXRayInstrumentationPass(Registry);
-  initializeMIRCanonicalizerPass(Registry);
 }
 
 void LLVMInitializeCodeGen(LLVMPassRegistryRef R) {

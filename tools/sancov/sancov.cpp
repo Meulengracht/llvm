@@ -1,9 +1,8 @@
 //===-- sancov.cpp --------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 // This file is a command-line tool for reading and analyzing sanitizer
@@ -766,6 +765,19 @@ findSanitizerCovFunctions(const object::ObjectFile &O) {
   return Result;
 }
 
+static uint64_t getPreviousInstructionPc(uint64_t PC,
+                                         Triple TheTriple) {
+  if (TheTriple.isARM()) {
+    return (PC - 3) & (~1);
+  } else if (TheTriple.isAArch64()) {
+    return PC - 4;
+  } else if (TheTriple.isMIPS()) {
+    return PC - 8;
+  } else {
+    return PC - 1;
+  }
+}
+
 // Locate addresses of all coverage points in a file. Coverage point
 // is defined as the 'address of instruction following __sanitizer_cov
 // call - 1'.
@@ -832,7 +844,7 @@ static void getObjectCoveragePoints(const object::ObjectFile &O,
       }
       uint64_t Addr = Index + SectionAddr;
       // Sanitizer coverage uses the address of the next instruction - 1.
-      uint64_t CovPoint = Addr + Size - 1;
+      uint64_t CovPoint = getPreviousInstructionPc(Addr + Size, TheTriple);
       uint64_t Target;
       if (MIA->isCall(Inst) &&
           MIA->evaluateBranch(Inst, SectionAddr + Index, Size, Target) &&

@@ -1,9 +1,8 @@
 //===- Unix/Process.cpp - Unix Process Implementation --------- -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -211,7 +210,10 @@ std::error_code Process::FixupStandardFileDescriptors() {
     assert(errno == EBADF && "expected errno to have EBADF at this point!");
 
     if (NullFD < 0) {
-      if ((NullFD = RetryAfterSignal(-1, ::open, "/dev/null", O_RDWR)) < 0)
+      // Call ::open in a lambda to avoid overload resolution in
+      // RetryAfterSignal when open is overloaded, such as in Bionic.
+      auto Open = [&]() { return ::open("/dev/null", O_RDWR); };
+      if ((NullFD = RetryAfterSignal(-1, Open)) < 0)
         return std::error_code(errno, std::generic_category());
     }
 

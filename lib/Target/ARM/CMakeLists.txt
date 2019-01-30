@@ -22,7 +22,9 @@ add_llvm_target(ARMCodeGen
   ARMAsmPrinter.cpp
   ARMBaseInstrInfo.cpp
   ARMBaseRegisterInfo.cpp
+  ARMCallingConv.cpp
   ARMCallLowering.cpp
+  ARMCodeGenPrepare.cpp
   ARMConstantIslandPass.cpp
   ARMConstantPoolValue.cpp
   ARMExpandPseudoInsts.cpp

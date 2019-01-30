@@ -1,9 +1,8 @@
 //===- AMDGPUPerfHintAnalysis.cpp - analysis of functions memory traffic --===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -98,8 +97,6 @@ private:
   AMDGPUPerfHintAnalysis::FuncInfoMap &FIM;
 
   const DataLayout *DL;
-
-  AMDGPUAS AS;
 
   const TargetLowering *TLI;
 
@@ -267,7 +264,6 @@ void AMDGPUPerfHint::runOnFunction(Function &F) {
 
   const Module &M = *F.getParent();
   DL = &M.getDataLayout();
-  AS = AMDGPU::getAMDGPUAS(M);
 
   visit(F);
   auto Loc = FIM.find(&F);
@@ -306,14 +302,14 @@ bool AMDGPUPerfHint::isGlobalAddr(const Value *V) const {
   if (auto PT = dyn_cast<PointerType>(V->getType())) {
     unsigned As = PT->getAddressSpace();
     // Flat likely points to global too.
-    return As == AS.GLOBAL_ADDRESS || As == AS.FLAT_ADDRESS;
+    return As == AMDGPUAS::GLOBAL_ADDRESS || As == AMDGPUAS::FLAT_ADDRESS;
   }
   return false;
 }
 
 bool AMDGPUPerfHint::isLocalAddr(const Value *V) const {
   if (auto PT = dyn_cast<PointerType>(V->getType()))
-    return PT->getAddressSpace() == AS.LOCAL_ADDRESS;
+    return PT->getAddressSpace() == AMDGPUAS::LOCAL_ADDRESS;
   return false;
 }
 
@@ -346,7 +342,8 @@ AMDGPUPerfHint::makeMemAccessInfo(Instruction *Inst) const {
 bool AMDGPUPerfHint::isConstantAddr(const Value *V) const {
   if (auto PT = dyn_cast<PointerType>(V->getType())) {
     unsigned As = PT->getAddressSpace();
-    return As == AS.CONSTANT_ADDRESS || As == AS.CONSTANT_ADDRESS_32BIT;
+    return As == AMDGPUAS::CONSTANT_ADDRESS ||
+           As == AMDGPUAS::CONSTANT_ADDRESS_32BIT;
   }
   return false;
 }

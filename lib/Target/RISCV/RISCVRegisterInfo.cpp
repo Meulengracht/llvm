@@ -1,9 +1,8 @@
 //===-- RISCVRegisterInfo.cpp - RISCV Register Information ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -33,6 +32,13 @@ RISCVRegisterInfo::RISCVRegisterInfo(unsigned HwMode)
 
 const MCPhysReg *
 RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+  if (MF->getFunction().hasFnAttribute("interrupt")) {
+    if (MF->getSubtarget<RISCVSubtarget>().hasStdExtD())
+      return CSR_XLEN_F64_Interrupt_SaveList;
+    if (MF->getSubtarget<RISCVSubtarget>().hasStdExtF())
+      return CSR_XLEN_F32_Interrupt_SaveList;
+    return CSR_Interrupt_SaveList;
+  }
   return CSR_SaveList;
 }
 
@@ -108,7 +114,14 @@ unsigned RISCVRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
 }
 
 const uint32_t *
-RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & /*MF*/,
+RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
                                         CallingConv::ID /*CC*/) const {
+  if (MF.getFunction().hasFnAttribute("interrupt")) {
+    if (MF.getSubtarget<RISCVSubtarget>().hasStdExtD())
+      return CSR_XLEN_F64_Interrupt_RegMask;
+    if (MF.getSubtarget<RISCVSubtarget>().hasStdExtF())
+      return CSR_XLEN_F32_Interrupt_RegMask;
+    return CSR_Interrupt_RegMask;
+  }
   return CSR_RegMask;
 }

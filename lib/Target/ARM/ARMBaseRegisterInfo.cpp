@@ -1,9 +1,8 @@
 //===-- ARMBaseRegisterInfo.cpp - ARM Register Information ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -207,6 +206,11 @@ getReservedRegs(const MachineFunction &MF) const {
 
   assert(checkAllSuperRegsMarked(Reserved));
   return Reserved;
+}
+
+bool ARMBaseRegisterInfo::
+isAsmClobberable(const MachineFunction &MF, unsigned PhysReg) const {
+  return !getReservedRegs(MF).test(PhysReg);
 }
 
 const TargetRegisterClass *
@@ -584,7 +588,7 @@ needsFrameBaseReg(MachineInstr *MI, int64_t Offset) const {
   // don't know for sure yet whether we'll need that, so we guess based
   // on whether there are any local variables that would trigger it.
   unsigned StackAlign = TFI->getStackAlignment();
-  if (TFI->hasFP(MF) && 
+  if (TFI->hasFP(MF) &&
       !((MFI.getLocalFrameMaxAlign() > StackAlign) && canRealignStack(MF))) {
     if (isFrameOffsetLegal(MI, getFrameRegister(MF), FPOffset))
       return false;

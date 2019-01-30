@@ -1,9 +1,8 @@
 //===- Record.cpp - Record implementation ---------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -158,10 +157,9 @@ RecordRecTy *RecordRecTy::get(ArrayRef<Record *> UnsortedClasses) {
 
   SmallVector<Record *, 4> Classes(UnsortedClasses.begin(),
                                    UnsortedClasses.end());
-  llvm::sort(Classes.begin(), Classes.end(),
-             [](Record *LHS, Record *RHS) {
-               return LHS->getNameInitAsString() < RHS->getNameInitAsString();
-             });
+  llvm::sort(Classes, [](Record *LHS, Record *RHS) {
+    return LHS->getNameInitAsString() < RHS->getNameInitAsString();
+  });
 
   FoldingSetNodeID ID;
   ProfileRecordRecTy(ID, Classes);
@@ -487,7 +485,7 @@ Init *IntInit::convertInitializerTo(RecTy *Ty) const {
 
     SmallVector<Init *, 16> NewBits(BRT->getNumBits());
     for (unsigned i = 0; i != BRT->getNumBits(); ++i)
-      NewBits[i] = BitInit::get(Value & (1LL << i));
+      NewBits[i] = BitInit::get(Value & ((i < 64) ? (1LL << i) : 0));
 
     return BitsInit::get(NewBits);
   }
@@ -710,6 +708,8 @@ Init *UnOpInit::Fold(Record *CurRec, bool IsFinal) const {
         return StringInit::get(LHSi->getAsString());
     } else if (isa<RecordRecTy>(getType())) {
       if (StringInit *Name = dyn_cast<StringInit>(LHS)) {
+        if (!CurRec && !IsFinal)
+          break;
         assert(CurRec && "NULL pointer");
         Record *D;
 
@@ -1691,6 +1691,137 @@ Init *FieldInit::Fold(Record *CurRec) const {
       return FieldVal;
   }
   return const_cast<FieldInit *>(this);
+}
+
+static void ProfileCondOpInit(FoldingSetNodeID &ID,
+                             ArrayRef<Init *> CondRange,
+                             ArrayRef<Init *> ValRange,
+                             const RecTy *ValType) {
+  assert(CondRange.size() == ValRange.size() &&
+         "Number of conditions and values must match!");
+  ID.AddPointer(ValType);
+  ArrayRef<Init *>::iterator Case = CondRange.begin();
+  ArrayRef<Init *>::iterator Val = ValRange.begin();
+
+  while (Case != CondRange.end()) {
+    ID.AddPointer(*Case++);
+    ID.AddPointer(*Val++);
+  }
+}
+
+void CondOpInit::Profile(FoldingSetNodeID &ID) const {
+  ProfileCondOpInit(ID,
+      makeArrayRef(getTrailingObjects<Init *>(), NumConds),
+      makeArrayRef(getTrailingObjects<Init *>() + NumConds, NumConds),
+      ValType);
+}
+
+CondOpInit *
+CondOpInit::get(ArrayRef<Init *> CondRange,
+                ArrayRef<Init *> ValRange, RecTy *Ty) {
+  assert(CondRange.size() == ValRange.size() &&
+         "Number of conditions and values must match!");
+
+  static FoldingSet<CondOpInit> ThePool;
+  FoldingSetNodeID ID;
+  ProfileCondOpInit(ID, CondRange, ValRange, Ty);
+
+  void *IP = nullptr;
+  if (CondOpInit *I = ThePool.FindNodeOrInsertPos(ID, IP))
+    return I;
+
+  void *Mem = Allocator.Allocate(totalSizeToAlloc<Init *>(2*CondRange.size()),
+                                 alignof(BitsInit));
+  CondOpInit *I = new(Mem) CondOpInit(CondRange.size(), Ty);
+
+  std::uninitialized_copy(CondRange.begin(), CondRange.end(),
+                          I->getTrailingObjects<Init *>());
+  std::uninitialized_copy(ValRange.begin(), ValRange.end(),
+                          I->getTrailingObjects<Init *>()+CondRange.size());
+  ThePool.InsertNode(I, IP);
+  return I;
+}
+
+Init *CondOpInit::resolveReferences(Resolver &R) const {
+  SmallVector<Init*, 4> NewConds;
+  bool Changed = false;
+  for (const Init *Case : getConds()) {
+    Init *NewCase = Case->resolveReferences(R);
+    NewConds.push_back(NewCase);
+    Changed |= NewCase != Case;
+  }
+
+  SmallVector<Init*, 4> NewVals;
+  for (const Init *Val : getVals()) {
+    Init *NewVal = Val->resolveReferences(R);
+    NewVals.push_back(NewVal);
+    Changed |= NewVal != Val;
+  }
+
+  if (Changed)
+    return (CondOpInit::get(NewConds, NewVals,
+            getValType()))->Fold(R.getCurrentRecord());
+
+  return const_cast<CondOpInit *>(this);
+}
+
+Init *CondOpInit::Fold(Record *CurRec) const {
+  for ( unsigned i = 0; i < NumConds; ++i) {
+    Init *Cond = getCond(i);
+    Init *Val = getVal(i);
+
+    if (IntInit *CondI = dyn_cast_or_null<IntInit>(
+            Cond->convertInitializerTo(IntRecTy::get()))) {
+      if (CondI->getValue())
+        return Val->convertInitializerTo(getValType());
+    } else
+     return const_cast<CondOpInit *>(this);
+  }
+
+  PrintFatalError(CurRec->getLoc(),
+                  CurRec->getName() +
+                  " does not have any true condition in:" +
+                  this->getAsString());
+  return nullptr;
+}
+
+bool CondOpInit::isConcrete() const {
+  for (const Init *Case : getConds())
+    if (!Case->isConcrete())
+      return false;
+
+  for (const Init *Val : getVals())
+    if (!Val->isConcrete())
+      return false;
+
+  return true;
+}
+
+bool CondOpInit::isComplete() const {
+  for (const Init *Case : getConds())
+    if (!Case->isComplete())
+      return false;
+
+  for (const Init *Val : getVals())
+    if (!Val->isConcrete())
+      return false;
+
+  return true;
+}
+
+std::string CondOpInit::getAsString() const {
+  std::string Result = "!cond(";
+  for (unsigned i = 0; i < getNumConds(); i++) {
+    Result += getCond(i)->getAsString() + ": ";
+    Result += getVal(i)->getAsString();
+    if (i != getNumConds()-1)
+      Result += ", ";
+  }
+  return Result + ")";
+}
+
+Init *CondOpInit::getBit(unsigned Bit) const {
+  return VarBitInit::get(const_cast<CondOpInit *>(this), Bit);
 }
 
 static void ProfileDagInit(FoldingSetNodeID &ID, Init *V, StringInit *VN,

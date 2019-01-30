@@ -1,9 +1,8 @@
 //===-- PPCMachineFunctionInfo.h - Private data used for PowerPC --*- C++ -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -29,7 +28,7 @@ class PPCFunctionInfo : public MachineFunctionInfo {
   /// stored.  Also used as an anchor for instructions that need to be altered
   /// when using frame pointers (dyna_add, dyna_sub.)
   int FramePointerSaveIndex = 0;
-  
+
   /// ReturnAddrSaveIndex - Frame index of where the return address is stored.
   ///
   int ReturnAddrSaveIndex = 0;
@@ -128,7 +127,7 @@ public:
 
   int getFramePointerSaveIndex() const { return FramePointerSaveIndex; }
   void setFramePointerSaveIndex(int Idx) { FramePointerSaveIndex = Idx; }
-  
+
   int getReturnAddrSaveIndex() const { return ReturnAddrSaveIndex; }
   void setReturnAddrSaveIndex(int idx) { ReturnAddrSaveIndex = idx; }
 

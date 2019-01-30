@@ -1,9 +1,8 @@
 //===- MIRParser.cpp - MIR serialization format parser implementation -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -355,6 +354,7 @@ MIRParserImpl::initializeMachineFunction(const yaml::MachineFunction &YamlMF,
   if (YamlMF.Alignment)
     MF.setAlignment(YamlMF.Alignment);
   MF.setExposesReturnsTwice(YamlMF.ExposesReturnsTwice);
+  MF.setHasWinCFI(YamlMF.HasWinCFI);
 
   if (YamlMF.Legalized)
     MF.getProperties().set(MachineFunctionProperties::Property::Legalized);
@@ -580,6 +580,7 @@ bool MIRParserImpl::initializeFrameInfo(PerFunctionMIParsingState &PFS,
   MFI.setHasCalls(YamlMFI.HasCalls);
   if (YamlMFI.MaxCallFrameSize != ~0u)
     MFI.setMaxCallFrameSize(YamlMFI.MaxCallFrameSize);
+  MFI.setCVBytesOfCalleeSavedRegisters(YamlMFI.CVBytesOfCalleeSavedRegisters);
   MFI.setHasOpaqueSPAdjustment(YamlMFI.HasOpaqueSPAdjustment);
   MFI.setHasVAStart(YamlMFI.HasVAStart);
   MFI.setHasMustTailInVarArgFunc(YamlMFI.HasMustTailInVarArgFunc);

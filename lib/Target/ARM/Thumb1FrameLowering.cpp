@@ -1,9 +1,8 @@
 //===- Thumb1FrameLowering.cpp - Thumb1 Frame Information -----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -127,7 +126,7 @@ void Thumb1FrameLowering::emitPrologue(MachineFunction &MF,
   // Debug location must be unknown since the first debug location is used
   // to determine the end of the prologue.
   DebugLoc dl;
-  
+
   unsigned FramePtr = RegInfo->getFrameRegister(MF);
   unsigned BasePtr = RegInfo->getBaseRegister();
   int CFAOffset = 0;

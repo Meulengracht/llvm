@@ -1,10 +1,9 @@
 #!/bin/bash
 #===- llvm/utils/docker/build_docker_image.sh ----------------------------===//
 #
-#                     The LLVM Compiler Infrastructure
-#
-# This file is distributed under the University of Illinois Open Source
-# License. See LICENSE.TXT for details.
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 #
 #===----------------------------------------------------------------------===//
 set -e
@@ -117,7 +116,7 @@ while [[ $# -gt 0 ]]; do
 
       CHECKOUT_ARGS="$CHECKOUT_ARGS $1 $PROJ"
       if [ "$PROJ" != "clang-tools-extra" ]; then
-        CMAKE_ENABLED_PROJECTS="$CMAKE_ENABLED_PROJECTS:$PROJ"
+        CMAKE_ENABLED_PROJECTS="$CMAKE_ENABLED_PROJECTS;$PROJ"
       fi
 
       shift 2
@@ -142,7 +141,7 @@ done
 
 
 if [ "$CMAKE_ENABLED_PROJECTS" != "" ]; then
-  # Remove the leading ':' character.
+  # Remove the leading ';' character.
   CMAKE_ENABLED_PROJECTS="${CMAKE_ENABLED_PROJECTS:1}"
 
   if [[ $SEEN_CMAKE_ARGS -eq 0 ]]; then

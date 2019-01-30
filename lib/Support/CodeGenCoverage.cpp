@@ -1,9 +1,8 @@
 //===- lib/Support/CodeGenCoverage.cpp -------------------------------------==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -22,7 +21,7 @@
 
 #if LLVM_ON_UNIX
 #include <unistd.h>
-#elif _WIN32
+#elif defined(_WIN32)
 #include <windows.h>
 #elif LLVM_ON_VALI
 #include <os/process.h>
@@ -95,7 +94,7 @@ bool CodeGenCoverage::emit(StringRef CoveragePrefix,
     std::string Pid =
 #if LLVM_ON_UNIX
         llvm::to_string(::getpid());
-#elif _WIN32
+#elif defined(_WIN32)
         llvm::to_string(::GetCurrentProcessId());
 #elif LLVM_ON_VALI
         llvm::to_string(::ProcessGetCurrentId());

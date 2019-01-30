@@ -1,9 +1,8 @@
 //===-- FunctionLoweringInfo.cpp ------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -89,10 +88,12 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
 
   // Check whether the function can return without sret-demotion.
   SmallVector<ISD::OutputArg, 4> Outs;
-  GetReturnInfo(Fn->getReturnType(), Fn->getAttributes(), Outs, *TLI,
+  CallingConv::ID CC = Fn->getCallingConv();
+
+  GetReturnInfo(CC, Fn->getReturnType(), Fn->getAttributes(), Outs, *TLI,
                 mf.getDataLayout());
-  CanLowerReturn = TLI->CanLowerReturn(Fn->getCallingConv(), *MF,
-                                       Fn->isVarArg(), Outs, Fn->getContext());
+  CanLowerReturn =
+      TLI->CanLowerReturn(CC, *MF, Fn->isVarArg(), Outs, Fn->getContext());
 
   // If this personality uses funclets, we need to do a bit more work.
   DenseMap<const AllocaInst *, TinyPtrVector<int *>> CatchObjects;
@@ -577,9 +578,18 @@ FunctionLoweringInfo::getOrCreateSwiftErrorVRegUseAt(const Instruction *I, const
 const Value *
 FunctionLoweringInfo::getValueFromVirtualReg(unsigned Vreg) {
   if (VirtReg2Value.empty()) {
+    SmallVector<EVT, 4> ValueVTs;
     for (auto &P : ValueMap) {
-      VirtReg2Value[P.second] = P.first;
+      ValueVTs.clear();
+      ComputeValueVTs(*TLI, Fn->getParent()->getDataLayout(),
+                      P.first->getType(), ValueVTs);
+      unsigned Reg = P.second;
+      for (EVT VT : ValueVTs) {
+        unsigned NumRegisters = TLI->getNumRegisters(Fn->getContext(), VT);
+        for (unsigned i = 0, e = NumRegisters; i != e; ++i)
+          VirtReg2Value[Reg++] = P.first;
+      }
     }
   }
-  return VirtReg2Value[Vreg];
+  return VirtReg2Value.lookup(Vreg);
 }

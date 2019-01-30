@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/VirtRegMap.h - Virtual Register Map ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -172,7 +171,7 @@ class TargetInstrInfo;
 
     /// create a mapping for the specified virtual register to
     /// the specified stack slot
-    void assignVirt2StackSlot(unsigned virtReg, int frameIndex);
+    void assignVirt2StackSlot(unsigned virtReg, int SS);
 
     void print(raw_ostream &OS, const Module* M = nullptr) const override;
     void dump() const;

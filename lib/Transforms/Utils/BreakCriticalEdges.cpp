@@ -1,9 +1,8 @@
 //===- BreakCriticalEdges.cpp - Critical Edge Elimination Pass ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,6 +22,7 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/MemorySSAUpdater.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Instructions.h"
@@ -129,7 +129,7 @@ static void createPHIsForSplitLoopExit(ArrayRef<BasicBlock *> Preds,
 }
 
 BasicBlock *
-llvm::SplitCriticalEdge(TerminatorInst *TI, unsigned SuccNum,
+llvm::SplitCriticalEdge(Instruction *TI, unsigned SuccNum,
                         const CriticalEdgeSplittingOptions &Options) {
   if (!isCriticalEdge(TI, SuccNum, Options.MergeIdenticalEdges))
     return nullptr;
@@ -198,6 +198,11 @@ llvm::SplitCriticalEdge(TerminatorInst *TI, unsigned SuccNum,
   // If we have nothing to update, just return.
   auto *DT = Options.DT;
   auto *LI = Options.LI;
+  auto *MSSAU = Options.MSSAU;
+  if (MSSAU)
+    MSSAU->wireOldPredecessorsToNewImmediatePredecessor(
+        DestBB, NewBB, {TIBB}, Options.MergeIdenticalEdges);
+
   if (!DT && !LI)
     return NewBB;
 
@@ -283,7 +288,7 @@ llvm::SplitCriticalEdge(TerminatorInst *TI, unsigned SuccNum,
         if (!LoopPreds.empty()) {
           assert(!DestBB->isEHPad() && "We don't split edges to EH pads!");
           BasicBlock *NewExitBB = SplitBlockPredecessors(
-              DestBB, LoopPreds, "split", DT, LI, Options.PreserveLCSSA);
+              DestBB, LoopPreds, "split", DT, LI, MSSAU, Options.PreserveLCSSA);
           if (Options.PreserveLCSSA)
             createPHIsForSplitLoopExit(LoopPreds, NewExitBB, DestBB);
         }
@@ -312,7 +317,7 @@ findIBRPredecessor(BasicBlock *BB, SmallVectorImpl<BasicBlock *> &OtherPreds) {
   BasicBlock *IBB = nullptr;
   for (unsigned Pred = 0, E = PN->getNumIncomingValues(); Pred != E; ++Pred) {
     BasicBlock *PredBB = PN->getIncomingBlock(Pred);
-    TerminatorInst *PredTerm = PredBB->getTerminator();
+    Instruction *PredTerm = PredBB->getTerminator();
     switch (PredTerm->getOpcode()) {
     case Instruction::IndirectBr:
       if (IBB)

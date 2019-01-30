@@ -1,9 +1,8 @@
 //===- ObjectTransformLayer.h - Run all objects through functor -*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,16 +22,16 @@
 namespace llvm {
 namespace orc {
 
-class ObjectTransformLayer2 : public ObjectLayer {
+class ObjectTransformLayer : public ObjectLayer {
 public:
   using TransformFunction =
       std::function<Expected<std::unique_ptr<MemoryBuffer>>(
           std::unique_ptr<MemoryBuffer>)>;
 
-  ObjectTransformLayer2(ExecutionSession &ES, ObjectLayer &BaseLayer,
-                        TransformFunction Transform);
+  ObjectTransformLayer(ExecutionSession &ES, ObjectLayer &BaseLayer,
+                       TransformFunction Transform);
 
-  void emit(MaterializationResponsibility R, VModuleKey K,
+  void emit(MaterializationResponsibility R,
             std::unique_ptr<MemoryBuffer> O) override;
 
 private:
@@ -46,11 +45,11 @@ private:
 /// immediately applies the user supplied functor to each object, then adds
 /// the set of transformed objects to the layer below.
 template <typename BaseLayerT, typename TransformFtor>
-class ObjectTransformLayer {
+class LegacyObjectTransformLayer {
 public:
   /// Construct an ObjectTransformLayer with the given BaseLayer
-  ObjectTransformLayer(BaseLayerT &BaseLayer,
-                       TransformFtor Transform = TransformFtor())
+  LegacyObjectTransformLayer(BaseLayerT &BaseLayer,
+                             TransformFtor Transform = TransformFtor())
       : BaseLayer(BaseLayer), Transform(std::move(Transform)) {}
 
   /// Apply the transform functor to each object in the object set, then

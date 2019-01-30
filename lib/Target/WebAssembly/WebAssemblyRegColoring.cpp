@@ -1,9 +1,8 @@
 //===-- WebAssemblyRegColoring.cpp - Register coloring --------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -118,16 +117,15 @@ bool WebAssemblyRegColoring::runOnMachineFunction(MachineFunction &MF) {
   // registers), by weight next, and then by position.
   // TODO: Investigate more intelligent sorting heuristics. For starters, we
   // should try to coalesce adjacent live intervals before non-adjacent ones.
-  llvm::sort(SortedIntervals.begin(), SortedIntervals.end(),
-             [MRI](LiveInterval *LHS, LiveInterval *RHS) {
-               if (MRI->isLiveIn(LHS->reg) != MRI->isLiveIn(RHS->reg))
-                 return MRI->isLiveIn(LHS->reg);
-               if (LHS->weight != RHS->weight)
-                 return LHS->weight > RHS->weight;
-               if (LHS->empty() || RHS->empty())
-                 return !LHS->empty() && RHS->empty();
-               return *LHS < *RHS;
-             });
+  llvm::sort(SortedIntervals, [MRI](LiveInterval *LHS, LiveInterval *RHS) {
+    if (MRI->isLiveIn(LHS->reg) != MRI->isLiveIn(RHS->reg))
+      return MRI->isLiveIn(LHS->reg);
+    if (LHS->weight != RHS->weight)
+      return LHS->weight > RHS->weight;
+    if (LHS->empty() || RHS->empty())
+      return !LHS->empty() && RHS->empty();
+    return *LHS < *RHS;
+  });
 
   LLVM_DEBUG(dbgs() << "Coloring register intervals:\n");
   SmallVector<unsigned, 16> SlotMapping(SortedIntervals.size(), -1u);

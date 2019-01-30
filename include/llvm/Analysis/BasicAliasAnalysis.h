@@ -1,9 +1,8 @@
 //===- BasicAliasAnalysis.h - Stateless, local Alias Analysis ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -21,7 +20,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/MemoryLocation.h"
-#include "llvm/IR/CallSite.h"
+#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 #include <algorithm>
@@ -43,6 +42,7 @@ class LoopInfo;
 class PHINode;
 class SelectInst;
 class TargetLibraryInfo;
+class PhiValues;
 class Value;
 
 /// This is the AA result object for the basic, local, and stateless alias
@@ -60,19 +60,22 @@ class BasicAAResult : public AAResultBase<BasicAAResult> {
   AssumptionCache &AC;
   DominatorTree *DT;
   LoopInfo *LI;
+  PhiValues *PV;
 
 public:
   BasicAAResult(const DataLayout &DL, const Function &F,
                 const TargetLibraryInfo &TLI, AssumptionCache &AC,
-                DominatorTree *DT = nullptr, LoopInfo *LI = nullptr)
-      : AAResultBase(), DL(DL), F(F), TLI(TLI), AC(AC), DT(DT), LI(LI) {}
+                DominatorTree *DT = nullptr, LoopInfo *LI = nullptr,
+                PhiValues *PV = nullptr)
+      : AAResultBase(), DL(DL), F(F), TLI(TLI), AC(AC), DT(DT), LI(LI), PV(PV)
+        {}
 
   BasicAAResult(const BasicAAResult &Arg)
       : AAResultBase(Arg), DL(Arg.DL), F(Arg.F), TLI(Arg.TLI), AC(Arg.AC),
-        DT(Arg.DT), LI(Arg.LI) {}
+        DT(Arg.DT),  LI(Arg.LI), PV(Arg.PV) {}
   BasicAAResult(BasicAAResult &&Arg)
       : AAResultBase(std::move(Arg)), DL(Arg.DL), F(Arg.F), TLI(Arg.TLI),
-        AC(Arg.AC), DT(Arg.DT), LI(Arg.LI) {}
+        AC(Arg.AC), DT(Arg.DT), LI(Arg.LI), PV(Arg.PV) {}
 
   /// Handle invalidation events in the new pass manager.
   bool invalidate(Function &Fn, const PreservedAnalyses &PA,
@@ -80,18 +83,18 @@ public:
 
   AliasResult alias(const MemoryLocation &LocA, const MemoryLocation &LocB);
 
-  ModRefInfo getModRefInfo(ImmutableCallSite CS, const MemoryLocation &Loc);
+  ModRefInfo getModRefInfo(const CallBase *Call, const MemoryLocation &Loc);
 
-  ModRefInfo getModRefInfo(ImmutableCallSite CS1, ImmutableCallSite CS2);
+  ModRefInfo getModRefInfo(const CallBase *Call1, const CallBase *Call2);
 
   /// Chases pointers until we find a (constant global) or not.
   bool pointsToConstantMemory(const MemoryLocation &Loc, bool OrLocal);
 
   /// Get the location associated with a pointer argument of a callsite.
-  ModRefInfo getArgModRefInfo(ImmutableCallSite CS, unsigned ArgIdx);
+  ModRefInfo getArgModRefInfo(const CallBase *Call, unsigned ArgIdx);
 
   /// Returns the behavior when calling the given call site.
-  FunctionModRefBehavior getModRefBehavior(ImmutableCallSite CS);
+  FunctionModRefBehavior getModRefBehavior(const CallBase *Call);
 
   /// Returns the behavior when calling the given function. For use when the
   /// call site is not known.
@@ -111,7 +114,7 @@ private:
     unsigned ZExtBits;
     unsigned SExtBits;
 
-    int64_t Scale;
+    APInt Scale;
 
     bool operator==(const VariableGEPIndex &Other) const {
       return V == Other.V && ZExtBits == Other.ZExtBits &&
@@ -129,10 +132,10 @@ private:
     // Base pointer of the GEP
     const Value *Base;
     // Total constant offset w.r.t the base from indexing into structs
-    int64_t StructOffset;
+    APInt StructOffset;
     // Total constant offset w.r.t the base from indexing through
     // pointers/arrays/vectors
-    int64_t OtherOffset;
+    APInt OtherOffset;
     // Scaled variable (non-constant) indices.
     SmallVector<VariableGEPIndex, 4> VarIndices;
   };
@@ -185,7 +188,7 @@ private:
   bool
   constantOffsetHeuristic(const SmallVectorImpl<VariableGEPIndex> &VarIndices,
                           LocationSize V1Size, LocationSize V2Size,
-                          int64_t BaseOffset, AssumptionCache *AC,
+                          APInt BaseOffset, AssumptionCache *AC,
                           DominatorTree *DT);
 
   bool isValueEqualInPotentialCycles(const Value *V1, const Value *V2);

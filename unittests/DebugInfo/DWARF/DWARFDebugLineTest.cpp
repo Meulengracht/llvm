@@ -1,9 +1,8 @@
 //===- DWARFDebugLineTest.cpp ---------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -129,8 +128,8 @@ struct CommonFixture {
   Error Unrecoverable;
   std::function<void(Error)> RecordUnrecoverable;
 
-  SmallVector<std::unique_ptr<DWARFCompileUnit>, 2> CUs;
-  std::deque<DWARFUnitSection<DWARFTypeUnit>> TUs;
+  SmallVector<std::unique_ptr<DWARFUnit>, 2> CUs;
+  SmallVector<std::unique_ptr<DWARFUnit>, 2> TUs;
 };
 
 // Fixtures must derive from "Test", but parameterised fixtures from

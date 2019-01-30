@@ -1,9 +1,8 @@
 //===-- X86InstrSystem.td - System Instructions ------------*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,7 +21,7 @@ let Defs = [RAX, RCX, RDX] in
 
 // CPU flow control instructions
 
-let mayLoad = 1, mayStore = 0, hasSideEffects = 1 in {
+let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
   def TRAP    : I<0x0B, RawFrm, (outs), (ins), "ud2", [(trap)]>, TB;
   def UD2B    : I<0xB9, RawFrm, (outs), (ins), "ud2b", []>, TB;
 }

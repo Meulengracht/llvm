@@ -1,9 +1,8 @@
 //===- ScheduleDAGInstrs.h - MachineInstr Scheduling ------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -327,7 +326,8 @@ namespace llvm {
     /// whole MachineFunction. By default does nothing.
     virtual void finalizeSchedule() {}
 
-    void dumpNode(const SUnit *SU) const override;
+    void dumpNode(const SUnit &SU) const override;
+    void dump() const override;
 
     /// Returns a label for a DAG node that points to an instruction.
     std::string getGraphNodeLabel(const SUnit *SU) const override;

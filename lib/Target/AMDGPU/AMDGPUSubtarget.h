@@ -1,9 +1,8 @@
 //=====-- AMDGPUSubtarget.h - Define Subtarget for AMDGPU ------*- C++ -*-====//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //==-----------------------------------------------------------------------===//
 //
@@ -51,7 +50,7 @@ public:
   enum Generation {
     R600 = 0,
     R700 = 1,
-    EVERGREEN = 2, 
+    EVERGREEN = 2,
     NORTHERN_ISLANDS = 3,
     SOUTHERN_ISLANDS = 4,
     SEA_ISLANDS = 5,
@@ -63,7 +62,6 @@ private:
   Triple TargetTriple;
 
 protected:
-  const FeatureBitset &SubtargetFeatureBits;
   bool Has16BitInsts;
   bool HasMadMixInsts;
   bool FP32Denormals;
@@ -72,17 +70,19 @@ protected:
   bool HasVOP3PInsts;
   bool HasMulI24;
   bool HasMulU24;
+  bool HasInv2PiInlineImm;
   bool HasFminFmaxLegacy;
   bool EnablePromoteAlloca;
+  bool HasTrigReducedRange;
   int LocalMemorySize;
   unsigned WavefrontSize;
 
 public:
-  AMDGPUSubtarget(const Triple &TT, const FeatureBitset &FeatureBits);
+  AMDGPUSubtarget(const Triple &TT);
 
   static const AMDGPUSubtarget &get(const MachineFunction &MF);
   static const AMDGPUSubtarget &get(const TargetMachine &TM,
-                                          const Function &F);
+                                    const Function &F);
 
   /// \returns Default range flat work group size for a calling convention.
   std::pair<unsigned, unsigned> getDefaultFlatWorkGroupSize(CallingConv::ID CC) const;
@@ -134,7 +134,7 @@ public:
     return isMesa3DOS() && !AMDGPU::isShader(F.getCallingConv());
   }
 
-  bool isAmdCodeObjectV2(const Function &F) const {
+  bool isAmdHsaOrMesa(const Function &F) const {
     return isAmdHsaOS() || isMesaKernel(F);
   }
 
@@ -170,8 +170,16 @@ public:
     return HasMulU24;
   }
 
+  bool hasInv2PiInlineImm() const {
+    return HasInv2PiInlineImm;
+  }
+
   bool hasFminFmaxLegacy() const {
     return HasFminFmaxLegacy;
+  }
+
+  bool hasTrigReducedRange() const {
+    return HasTrigReducedRange;
   }
 
   bool isPromoteAllocaEnabled() const {
@@ -193,43 +201,43 @@ public:
   /// Returns the offset in bytes from the start of the input buffer
   ///        of the first explicit kernel argument.
   unsigned getExplicitKernelArgOffset(const Function &F) const {
-    return isAmdCodeObjectV2(F) ? 0 : 36;
+    return isAmdHsaOrMesa(F) ? 0 : 36;
   }
 
   /// \returns Maximum number of work groups per compute unit supported by the
   /// subtarget and limited by given \p FlatWorkGroupSize.
-  unsigned getMaxWorkGroupsPerCU(unsigned FlatWorkGroupSize) const {
-    return AMDGPU::IsaInfo::getMaxWorkGroupsPerCU(SubtargetFeatureBits,
-                                                  FlatWorkGroupSize);
-  }
+  virtual unsigned getMaxWorkGroupsPerCU(unsigned FlatWorkGroupSize) const = 0;
 
   /// \returns Minimum flat work group size supported by the subtarget.
-  unsigned getMinFlatWorkGroupSize() const {
-    return AMDGPU::IsaInfo::getMinFlatWorkGroupSize(SubtargetFeatureBits);
-  }
+  virtual unsigned getMinFlatWorkGroupSize() const = 0;
 
   /// \returns Maximum flat work group size supported by the subtarget.
-  unsigned getMaxFlatWorkGroupSize() const {
-    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize(SubtargetFeatureBits);
-  }
+  virtual unsigned getMaxFlatWorkGroupSize() const = 0;
 
   /// \returns Maximum number of waves per execution unit supported by the
   /// subtarget and limited by given \p FlatWorkGroupSize.
-  unsigned getMaxWavesPerEU(unsigned FlatWorkGroupSize) const {
-    return AMDGPU::IsaInfo::getMaxWavesPerEU(SubtargetFeatureBits,
-                                             FlatWorkGroupSize);
-  }
+  virtual unsigned getMaxWavesPerEU(unsigned FlatWorkGroupSize) const  = 0;
 
   /// \returns Minimum number of waves per execution unit supported by the
   /// subtarget.
-  unsigned getMinWavesPerEU() const {
-    return AMDGPU::IsaInfo::getMinWavesPerEU(SubtargetFeatureBits);
-  }
+  virtual unsigned getMinWavesPerEU() const = 0;
 
   unsigned getMaxWavesPerEU() const { return 10; }
 
   /// Creates value range metadata on an workitemid.* inrinsic call or load.
   bool makeLIDRangeMetadata(Instruction *I) const;
+
+  /// \returns Number of bytes of arguments that are passed to a shader or
+  /// kernel in addition to the explicit ones declared for the function.
+  unsigned getImplicitArgNumBytes(const Function &F) const {
+    if (isMesaKernel(F))
+      return 16;
+    return AMDGPU::getIntegerAttribute(F, "amdgpu-implicitarg-num-bytes", 0);
+  }
+  uint64_t getExplicitKernArgSize(const Function &F,
+                                  unsigned &MaxAlign) const;
+  unsigned getKernArgSegmentSize(const Function &F,
+                                 unsigned &MaxAlign) const;
 
   virtual ~AMDGPUSubtarget() {}
 };
@@ -254,6 +262,7 @@ public:
     ISAVersion9_0_2,
     ISAVersion9_0_4,
     ISAVersion9_0_6,
+    ISAVersion9_0_9,
   };
 
   enum TrapHandlerAbi {
@@ -288,6 +297,7 @@ protected:
   Triple TargetTriple;
   unsigned Gen;
   unsigned IsaVersion;
+  InstrItineraryData InstrItins;
   int LDSBankCount;
   unsigned MaxPrivateElementSize;
 
@@ -311,11 +321,11 @@ protected:
 
   // Used as options.
   bool EnableHugePrivateBuffer;
-  bool EnableVGPRSpilling;
   bool EnableLoadStoreOpt;
   bool EnableUnsafeDSOffsetFolding;
   bool EnableSIScheduler;
   bool EnableDS128;
+  bool EnablePRTStrictNull;
   bool DumpCode;
 
   // Subtarget statically properties set by tablegen
@@ -325,6 +335,7 @@ protected:
   bool IsGCN;
   bool GCN3Encoding;
   bool CIInsts;
+  bool VIInsts;
   bool GFX9Insts;
   bool SGPRInitBug;
   bool HasSMemRealTime;
@@ -334,15 +345,16 @@ protected:
   bool HasVGPRIndexMode;
   bool HasScalarStores;
   bool HasScalarAtomics;
-  bool HasInv2PiInlineImm;
   bool HasSDWAOmod;
   bool HasSDWAScalar;
   bool HasSDWASdst;
   bool HasSDWAMac;
   bool HasSDWAOutModsVOPC;
   bool HasDPP;
+  bool HasR128A16;
   bool HasDLInsts;
-  bool D16PreservesUnusedBits;
+  bool HasDotInsts;
+  bool EnableSRAMECC;
   bool FlatAddressSpace;
   bool FlatInstOffsets;
   bool FlatGlobalInsts;
@@ -360,7 +372,6 @@ protected:
   bool FeatureDisable;
 
   SelectionDAGTargetInfo TSInfo;
-  AMDGPUAS AS;
 private:
   SIInstrInfo InstrInfo;
   SITargetLowering TLInfo;
@@ -411,6 +422,10 @@ public:
     return &TSInfo;
   }
 
+  const InstrItineraryData *getInstrItineraryData() const override {
+    return &InstrItins;
+  }
+
   void ParseSubtargetFeatures(StringRef CPU, StringRef FS);
 
   Generation getGeneration() const {
@@ -427,10 +442,6 @@ public:
 
   unsigned getMaxPrivateElementSize() const {
     return MaxPrivateElementSize;
-  }
-
-  AMDGPUAS getAMDGPUAS() const {
-    return AS;
   }
 
   bool hasIntClamp() const {
@@ -505,6 +516,10 @@ public:
     return FMA;
   }
 
+  bool hasSwap() const {
+    return GFX9Insts;
+  }
+
   TrapHandlerAbi getTrapHandlerAbi() const {
     return isAmdHsaOS() ? TrapHandlerAbiHsa : TrapHandlerAbiNone;
   }
@@ -562,12 +577,19 @@ public:
     return getGeneration() < AMDGPUSubtarget::GFX9;
   }
 
+  /// \returns If target requires PRT Struct NULL support (zero result registers
+  /// for sparse texture support).
+  bool usePRTStrictNull() const {
+    return EnablePRTStrictNull;
+  }
+
   bool hasAutoWaitcntBeforeBarrier() const {
     return AutoWaitcntBeforeBarrier;
   }
 
   bool hasCodeObjectV3() const {
-    return CodeObjectV3;
+    // FIXME: Need to add code object v3 support for mesa and pal.
+    return isAmdHsaOS() ? CodeObjectV3 : false;
   }
 
   bool hasUnalignedBufferAccess() const {
@@ -665,16 +687,12 @@ public:
     return HasDLInsts;
   }
 
-  bool d16PreservesUnusedBits() const {
-    return D16PreservesUnusedBits;
+  bool hasDotInsts() const {
+    return HasDotInsts;
   }
 
-  /// \returns Number of bytes of arguments that are passed to a shader or
-  /// kernel in addition to the explicit ones declared for the function.
-  unsigned getImplicitArgNumBytes(const Function &F) const {
-    if (isMesaKernel(F))
-      return 16;
-    return AMDGPU::getIntegerAttribute(F, "amdgpu-implicitarg-num-bytes", 0);
+  bool isSRAMECCEnabled() const {
+    return EnableSRAMECC;
   }
 
   // Scratch is allocated in 256 dword per wave blocks for the entire
@@ -703,20 +721,19 @@ public:
   /// \returns Number of execution units per compute unit supported by the
   /// subtarget.
   unsigned getEUsPerCU() const {
-    return AMDGPU::IsaInfo::getEUsPerCU(MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getEUsPerCU(this);
   }
 
   /// \returns Maximum number of waves per compute unit supported by the
   /// subtarget without any kind of limitation.
   unsigned getMaxWavesPerCU() const {
-    return AMDGPU::IsaInfo::getMaxWavesPerCU(MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getMaxWavesPerCU(this);
   }
 
   /// \returns Maximum number of waves per compute unit supported by the
   /// subtarget and limited by given \p FlatWorkGroupSize.
   unsigned getMaxWavesPerCU(unsigned FlatWorkGroupSize) const {
-    return AMDGPU::IsaInfo::getMaxWavesPerCU(MCSubtargetInfo::getFeatureBits(),
-                                             FlatWorkGroupSize);
+    return AMDGPU::IsaInfo::getMaxWavesPerCU(this, FlatWorkGroupSize);
   }
 
   /// \returns Maximum number of waves per execution unit supported by the
@@ -728,8 +745,7 @@ public:
   /// \returns Number of waves per work group supported by the subtarget and
   /// limited by given \p FlatWorkGroupSize.
   unsigned getWavesPerWorkGroup(unsigned FlatWorkGroupSize) const {
-    return AMDGPU::IsaInfo::getWavesPerWorkGroup(
-        MCSubtargetInfo::getFeatureBits(), FlatWorkGroupSize);
+    return AMDGPU::IsaInfo::getWavesPerWorkGroup(this, FlatWorkGroupSize);
   }
 
   // static wrappers
@@ -742,8 +758,6 @@ public:
 
   void overrideSchedPolicy(MachineSchedPolicy &Policy,
                            unsigned NumRegionInstrs) const override;
-
-  bool isVGPRSpillingEnabled(const Function &F) const;
 
   unsigned getMaxNumUserSGPRs() const {
     return 16;
@@ -777,12 +791,16 @@ public:
     return HasScalarAtomics;
   }
 
-  bool hasInv2PiInlineImm() const {
-    return HasInv2PiInlineImm;
+  bool hasLDSFPAtomics() const {
+    return VIInsts;
   }
 
   bool hasDPP() const {
     return HasDPP;
+  }
+
+  bool hasR128A16() const {
+    return HasR128A16;
   }
 
   bool enableSIScheduler() const {
@@ -813,6 +831,11 @@ public:
     return getGeneration() != AMDGPUSubtarget::SOUTHERN_ISLANDS;
   }
 
+  // \returns true if the subtarget supports DWORDX3 load/store instructions.
+  bool hasDwordx3LoadStores() const {
+    return CIInsts;
+  }
+
   bool hasSMovFedHazard() const {
     return getGeneration() >= AMDGPUSubtarget::GFX9;
   }
@@ -824,10 +847,6 @@ public:
   bool hasReadM0SendMsgHazard() const {
     return getGeneration() >= AMDGPUSubtarget::VOLCANIC_ISLANDS;
   }
-
-  uint64_t getExplicitKernArgSize(const Function &F) const;
-  unsigned getKernArgSegmentSize(const Function &F,
-                                 int64_t ExplicitArgBytes = -1) const;
 
   /// Return the maximum number of waves per SIMD for kernels using \p SGPRs
   /// SGPRs
@@ -851,39 +870,34 @@ public:
 
   /// \returns SGPR allocation granularity supported by the subtarget.
   unsigned getSGPRAllocGranule() const {
-    return AMDGPU::IsaInfo::getSGPRAllocGranule(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getSGPRAllocGranule(this);
   }
 
   /// \returns SGPR encoding granularity supported by the subtarget.
   unsigned getSGPREncodingGranule() const {
-    return AMDGPU::IsaInfo::getSGPREncodingGranule(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getSGPREncodingGranule(this);
   }
 
   /// \returns Total number of SGPRs supported by the subtarget.
   unsigned getTotalNumSGPRs() const {
-    return AMDGPU::IsaInfo::getTotalNumSGPRs(MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getTotalNumSGPRs(this);
   }
 
   /// \returns Addressable number of SGPRs supported by the subtarget.
   unsigned getAddressableNumSGPRs() const {
-    return AMDGPU::IsaInfo::getAddressableNumSGPRs(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getAddressableNumSGPRs(this);
   }
 
   /// \returns Minimum number of SGPRs that meets the given number of waves per
   /// execution unit requirement supported by the subtarget.
   unsigned getMinNumSGPRs(unsigned WavesPerEU) const {
-    return AMDGPU::IsaInfo::getMinNumSGPRs(MCSubtargetInfo::getFeatureBits(),
-                                           WavesPerEU);
+    return AMDGPU::IsaInfo::getMinNumSGPRs(this, WavesPerEU);
   }
 
   /// \returns Maximum number of SGPRs that meets the given number of waves per
   /// execution unit requirement supported by the subtarget.
   unsigned getMaxNumSGPRs(unsigned WavesPerEU, bool Addressable) const {
-    return AMDGPU::IsaInfo::getMaxNumSGPRs(MCSubtargetInfo::getFeatureBits(),
-                                           WavesPerEU, Addressable);
+    return AMDGPU::IsaInfo::getMaxNumSGPRs(this, WavesPerEU, Addressable);
   }
 
   /// \returns Reserved number of SGPRs for given function \p MF.
@@ -901,39 +915,34 @@ public:
 
   /// \returns VGPR allocation granularity supported by the subtarget.
   unsigned getVGPRAllocGranule() const {
-    return AMDGPU::IsaInfo::getVGPRAllocGranule(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getVGPRAllocGranule(this);
   }
 
   /// \returns VGPR encoding granularity supported by the subtarget.
   unsigned getVGPREncodingGranule() const {
-    return AMDGPU::IsaInfo::getVGPREncodingGranule(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getVGPREncodingGranule(this);
   }
 
   /// \returns Total number of VGPRs supported by the subtarget.
   unsigned getTotalNumVGPRs() const {
-    return AMDGPU::IsaInfo::getTotalNumVGPRs(MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getTotalNumVGPRs(this);
   }
 
   /// \returns Addressable number of VGPRs supported by the subtarget.
   unsigned getAddressableNumVGPRs() const {
-    return AMDGPU::IsaInfo::getAddressableNumVGPRs(
-        MCSubtargetInfo::getFeatureBits());
+    return AMDGPU::IsaInfo::getAddressableNumVGPRs(this);
   }
 
   /// \returns Minimum number of VGPRs that meets given number of waves per
   /// execution unit requirement supported by the subtarget.
   unsigned getMinNumVGPRs(unsigned WavesPerEU) const {
-    return AMDGPU::IsaInfo::getMinNumVGPRs(MCSubtargetInfo::getFeatureBits(),
-                                           WavesPerEU);
+    return AMDGPU::IsaInfo::getMinNumVGPRs(this, WavesPerEU);
   }
 
   /// \returns Maximum number of VGPRs that meets given number of waves per
   /// execution unit requirement supported by the subtarget.
   unsigned getMaxNumVGPRs(unsigned WavesPerEU) const {
-    return AMDGPU::IsaInfo::getMaxNumVGPRs(MCSubtargetInfo::getFeatureBits(),
-                                           WavesPerEU);
+    return AMDGPU::IsaInfo::getMaxNumVGPRs(this, WavesPerEU);
   }
 
   /// \returns Maximum number of VGPRs that meets number of waves per execution
@@ -949,6 +958,34 @@ public:
   void getPostRAMutations(
       std::vector<std::unique_ptr<ScheduleDAGMutation>> &Mutations)
       const override;
+
+  /// \returns Maximum number of work groups per compute unit supported by the
+  /// subtarget and limited by given \p FlatWorkGroupSize.
+  unsigned getMaxWorkGroupsPerCU(unsigned FlatWorkGroupSize) const override {
+    return AMDGPU::IsaInfo::getMaxWorkGroupsPerCU(this, FlatWorkGroupSize);
+  }
+
+  /// \returns Minimum flat work group size supported by the subtarget.
+  unsigned getMinFlatWorkGroupSize() const override {
+    return AMDGPU::IsaInfo::getMinFlatWorkGroupSize(this);
+  }
+
+  /// \returns Maximum flat work group size supported by the subtarget.
+  unsigned getMaxFlatWorkGroupSize() const override {
+    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize(this);
+  }
+
+  /// \returns Maximum number of waves per execution unit supported by the
+  /// subtarget and limited by given \p FlatWorkGroupSize.
+  unsigned getMaxWavesPerEU(unsigned FlatWorkGroupSize) const override {
+    return AMDGPU::IsaInfo::getMaxWavesPerEU(this, FlatWorkGroupSize);
+  }
+
+  /// \returns Minimum number of waves per execution unit supported by the
+  /// subtarget.
+  unsigned getMinWavesPerEU() const override {
+    return AMDGPU::IsaInfo::getMinWavesPerEU(this);
+  }
 };
 
 class R600Subtarget final : public R600GenSubtargetInfo,
@@ -968,7 +1005,6 @@ private:
   R600TargetLowering TLInfo;
   InstrItineraryData InstrItins;
   SelectionDAGTargetInfo TSInfo;
-  AMDGPUAS AS;
 
 public:
   R600Subtarget(const Triple &TT, StringRef CPU, StringRef FS,
@@ -1053,14 +1089,40 @@ public:
 
   short getTexVTXClauseSize() const { return TexVTXClauseSize; }
 
-  AMDGPUAS getAMDGPUAS() const { return AS; }
-
   bool enableMachineScheduler() const override {
     return true;
   }
 
   bool enableSubRegLiveness() const override {
     return true;
+  }
+
+  /// \returns Maximum number of work groups per compute unit supported by the
+  /// subtarget and limited by given \p FlatWorkGroupSize.
+  unsigned getMaxWorkGroupsPerCU(unsigned FlatWorkGroupSize) const override {
+    return AMDGPU::IsaInfo::getMaxWorkGroupsPerCU(this, FlatWorkGroupSize);
+  }
+
+  /// \returns Minimum flat work group size supported by the subtarget.
+  unsigned getMinFlatWorkGroupSize() const override {
+    return AMDGPU::IsaInfo::getMinFlatWorkGroupSize(this);
+  }
+
+  /// \returns Maximum flat work group size supported by the subtarget.
+  unsigned getMaxFlatWorkGroupSize() const override {
+    return AMDGPU::IsaInfo::getMaxFlatWorkGroupSize(this);
+  }
+
+  /// \returns Maximum number of waves per execution unit supported by the
+  /// subtarget and limited by given \p FlatWorkGroupSize.
+  unsigned getMaxWavesPerEU(unsigned FlatWorkGroupSize) const override {
+    return AMDGPU::IsaInfo::getMaxWavesPerEU(this, FlatWorkGroupSize);
+  }
+
+  /// \returns Minimum number of waves per execution unit supported by the
+  /// subtarget.
+  unsigned getMinWavesPerEU() const override {
+    return AMDGPU::IsaInfo::getMinWavesPerEU(this);
   }
 };
 

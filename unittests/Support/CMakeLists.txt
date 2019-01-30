@@ -20,6 +20,7 @@ add_llvm_unittest(SupportTests
   ConvertUTFTest.cpp
   DataExtractorTest.cpp
   DebugTest.cpp
+  DebugCounterTest.cpp
   DJBTest.cpp
   EndianStreamTest.cpp
   EndianTest.cpp
@@ -30,6 +31,7 @@ add_llvm_unittest(SupportTests
   FormatVariadicTest.cpp
   GlobPatternTest.cpp
   Host.cpp
+  ItaniumManglingCanonicalizerTest.cpp
   JSONTest.cpp
   LEB128Test.cpp
   LineIteratorTest.cpp
@@ -52,6 +54,7 @@ add_llvm_unittest(SupportTests
   SpecialCaseListTest.cpp
   StringPool.cpp
   SwapByteOrderTest.cpp
+  SymbolRemappingReaderTest.cpp
   TarWriterTest.cpp
   TargetParserTest.cpp
   TaskQueueTest.cpp
@@ -65,6 +68,7 @@ add_llvm_unittest(SupportTests
   TrigramIndexTest.cpp
   UnicodeTest.cpp
   VersionTupleTest.cpp
+  VirtualFileSystemTest.cpp
   YAMLIOTest.cpp
   YAMLParserTest.cpp
   formatted_raw_ostream_test.cpp
@@ -79,7 +83,21 @@ target_link_libraries(SupportTests PRIVATE LLVMTestingSupport)
 # Disable all warning for AlignOfTest.cpp,
 # as it does things intentionally, and there is no reliable way of
 # disabling all warnings for all the compilers by using pragmas.
-set_source_files_properties(AlignOfTest.cpp PROPERTIES COMPILE_FLAGS -w)
+# Don't disable on MSVC, because all incriminated warnings are already disabled
+# in source; and because we would otherwise see this warning:
+#   cl : Command line warning D9025: overriding '/W4' with '/w'
+if(NOT MSVC)
+  set_source_files_properties(AlignOfTest.cpp PROPERTIES COMPILE_FLAGS -w)
+endif()
+if(MSVC)
+  if( CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 19.14 )
+    # Since VS2017 15.8, the following snippet: Failed<CustomSubError>()
+    # generates a warning:
+    # \svn\llvm\utils\unittest\googlemock\include\gmock\gmock-matchers.h(186):
+    #   warning C5046: 'testing::MatcherInterface<T>::~MatcherInterface': Symbol involving type with internal linkage not defined
+    set_source_files_properties(ErrorTest.cpp PROPERTIES COMPILE_FLAGS -wd5046)
+  endif()
+endif()
 
 # ManagedStatic.cpp uses <pthread>.
 target_link_libraries(SupportTests PRIVATE LLVMTestingSupport ${LLVM_PTHREAD_LIB})

@@ -1,9 +1,8 @@
 //===- RewriteStatepointsForGC.cpp - Make GC relocations explicit ---------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -28,7 +27,6 @@
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/Argument.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/BasicBlock.h"
@@ -38,6 +36,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/DomTreeUpdater.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
@@ -65,6 +64,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/Transforms/Utils/PromoteMemToReg.h"
 #include <algorithm>
 #include <cassert>
@@ -346,7 +346,7 @@ static bool containsGCPtrType(Type *Ty) {
   if (ArrayType *AT = dyn_cast<ArrayType>(Ty))
     return containsGCPtrType(AT->getElementType());
   if (StructType *ST = dyn_cast<StructType>(Ty))
-    return llvm::any_of(ST->subtypes(), containsGCPtrType);
+    return llvm::any_of(ST->elements(), containsGCPtrType);
   return false;
 }
 
@@ -401,7 +401,7 @@ namespace {
 /// defining value.  The 'base defining value' for 'Def' is the transitive
 /// closure of this relation stopping at the first instruction which has no
 /// immediate base defining value.  The b.d.v. might itself be a base pointer,
-/// but it can also be an arbitrary derived pointer. 
+/// but it can also be an arbitrary derived pointer.
 struct BaseDefiningValueResult {
   /// Contains the value which is the base defining value.
   Value * const BDV;
@@ -427,13 +427,13 @@ static BaseDefiningValueResult findBaseDefiningValue(Value *I);
 
 /// Return a base defining value for the 'Index' element of the given vector
 /// instruction 'I'.  If Index is null, returns a BDV for the entire vector
-/// 'I'.  As an optimization, this method will try to determine when the 
+/// 'I'.  As an optimization, this method will try to determine when the
 /// element is known to already be a base pointer.  If this can be established,
 /// the second value in the returned pair will be true.  Note that either a
 /// vector or a pointer typed value can be returned.  For the former, the
 /// vector returned is a BDV (and possibly a base) of the entire vector 'I'.
 /// If the later, the return pointer is a BDV (or possibly a base) for the
-/// particular element in 'I'.  
+/// particular element in 'I'.
 static BaseDefiningValueResult
 findBaseDefiningValueOfVector(Value *I) {
   // Each case parallels findBaseDefiningValue below, see that code for
@@ -444,7 +444,7 @@ findBaseDefiningValueOfVector(Value *I) {
     return BaseDefiningValueResult(I, true);
 
   if (isa<Constant>(I))
-    // Base of constant vector consists only of constant null pointers. 
+    // Base of constant vector consists only of constant null pointers.
     // For reasoning see similar case inside 'findBaseDefiningValue' function.
     return BaseDefiningValueResult(ConstantAggregateZero::get(I->getType()),
                                    true);
@@ -508,11 +508,11 @@ static BaseDefiningValueResult findBaseDefiningValue(Value *I) {
   if (isa<Constant>(I)) {
     // We assume that objects with a constant base (e.g. a global) can't move
     // and don't need to be reported to the collector because they are always
-    // live. Besides global references, all kinds of constants (e.g. undef, 
+    // live. Besides global references, all kinds of constants (e.g. undef,
     // constant expressions, null pointers) can be introduced by the inliner or
     // the optimizer, especially on dynamically dead paths.
     // Here we treat all of them as having single null base. By doing this we
-    // trying to avoid problems reporting various conflicts in a form of 
+    // trying to avoid problems reporting various conflicts in a form of
     // "phi (const1, const2)" or "phi (const, regular gc ptr)".
     // See constant.ll file for relevant test cases.
 
@@ -1285,14 +1285,14 @@ static void CreateGCRelocates(ArrayRef<Value *> LiveVariables,
     return Index;
   };
   Module *M = StatepointToken->getModule();
-  
+
   // All gc_relocate are generated as i8 addrspace(1)* (or a vector type whose
   // element type is i8 addrspace(1)*). We originally generated unique
   // declarations for each pointer type, but this proved problematic because
   // the intrinsic mangling code is incomplete and fragile.  Since we're moving
   // towards a single unified pointer type anyways, we can just cast everything
   // to an i8* of the right address space.  A bitcast is added later to convert
-  // gc_relocate to the actual value's type.  
+  // gc_relocate to the actual value's type.
   auto getGCRelocateDecl = [&] (Type *Ty) {
     assert(isHandledGCPointerType(Ty));
     auto AS = Ty->getScalarType()->getPointerAddressSpace();
@@ -1413,7 +1413,7 @@ static StringRef getDeoptLowering(CallSite CS) {
   }
   return "live-through";
 }
-    
+
 static void
 makeStatepointExplicitImpl(const CallSite CS, /* to replace */
                            const SmallVectorImpl<Value *> &BasePtrs,
@@ -1824,7 +1824,7 @@ static void relocationViaAlloca(
       }
     }
 
-    llvm::sort(Uses.begin(), Uses.end());
+    llvm::sort(Uses);
     auto Last = std::unique(Uses.begin(), Uses.end());
     Uses.erase(Last, Uses.end());
 
@@ -1850,13 +1850,13 @@ static void relocationViaAlloca(
     StoreInst *Store = new StoreInst(Def, Alloca);
     if (Instruction *Inst = dyn_cast<Instruction>(Def)) {
       if (InvokeInst *Invoke = dyn_cast<InvokeInst>(Inst)) {
-        // InvokeInst is a TerminatorInst so the store need to be inserted
-        // into its normal destination block.
+        // InvokeInst is a terminator so the store need to be inserted into its
+        // normal destination block.
         BasicBlock *NormalDest = Invoke->getNormalDest();
         Store->insertBefore(NormalDest->getFirstNonPHI());
       } else {
         assert(!Inst->isTerminator() &&
-               "The only TerminatorInst that can produce a value is "
+               "The only terminator that can produce a value is "
                "InvokeInst which is handled above.");
         Store->insertAfter(Inst);
       }
@@ -2534,9 +2534,10 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
   // Delete any unreachable statepoints so that we don't have unrewritten
   // statepoints surviving this pass.  This makes testing easier and the
   // resulting IR less confusing to human readers.
-  DeferredDominance DD(DT);
-  bool MadeChange = removeUnreachableBlocks(F, nullptr, &DD);
-  DD.flush();
+  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Lazy);
+  bool MadeChange = removeUnreachableBlocks(F, nullptr, &DTU);
+  // Flush the Dominator Tree.
+  DTU.getDomTree();
 
   // Gather all the statepoints which need rewritten.  Be careful to only
   // consider those in reachable code since we need to ask dominance queries
@@ -2570,7 +2571,7 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
     }
 
   // Before we start introducing relocations, we want to tweak the IR a bit to
-  // avoid unfortunate code generation effects.  The main example is that we 
+  // avoid unfortunate code generation effects.  The main example is that we
   // want to try to make sure the comparison feeding a branch is after any
   // safepoints.  Otherwise, we end up with a comparison of pre-relocation
   // values feeding a branch after relocation.  This is semantically correct,
@@ -2582,7 +2583,7 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
   // increase the liveset of any statepoint we move over.  This is profitable
   // as long as all statepoints are in rare blocks.  If we had in-register
   // lowering for live values this would be a much safer transform.
-  auto getConditionInst = [](TerminatorInst *TI) -> Instruction* {
+  auto getConditionInst = [](Instruction *TI) -> Instruction * {
     if (auto *BI = dyn_cast<BranchInst>(TI))
       if (BI->isConditional())
         return dyn_cast<Instruction>(BI->getCondition());
@@ -2590,14 +2591,41 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
     return nullptr;
   };
   for (BasicBlock &BB : F) {
-    TerminatorInst *TI = BB.getTerminator();
+    Instruction *TI = BB.getTerminator();
     if (auto *Cond = getConditionInst(TI))
       // TODO: Handle more than just ICmps here.  We should be able to move
-      // most instructions without side effects or memory access.  
+      // most instructions without side effects or memory access.
       if (isa<ICmpInst>(Cond) && Cond->hasOneUse()) {
         MadeChange = true;
         Cond->moveBefore(TI);
       }
+  }
+
+  // Nasty workaround - The base computation code in the main algorithm doesn't
+  // consider the fact that a GEP can be used to convert a scalar to a vector.
+  // The right fix for this is to integrate GEPs into the base rewriting
+  // algorithm properly, this is just a short term workaround to prevent
+  // crashes by canonicalizing such GEPs into fully vector GEPs.
+  for (Instruction &I : instructions(F)) {
+    if (!isa<GetElementPtrInst>(I))
+      continue;
+
+    unsigned VF = 0;
+    for (unsigned i = 0; i < I.getNumOperands(); i++)
+      if (I.getOperand(i)->getType()->isVectorTy()) {
+        assert(VF == 0 ||
+               VF == I.getOperand(i)->getType()->getVectorNumElements());
+        VF = I.getOperand(i)->getType()->getVectorNumElements();
+      }
+
+    // It's the vector to scalar traversal through the pointer operand which
+    // confuses base pointer rewriting, so limit ourselves to that case.
+    if (!I.getOperand(0)->getType()->isVectorTy() && VF != 0) {
+      IRBuilder<> B(&I);
+      auto *Splat = B.CreateVectorSplat(VF, I.getOperand(0));
+      I.setOperand(0, Splat);
+      MadeChange = true;
+    }
   }
 
   MadeChange |= insertParsePoints(F, DT, TTI, ParsePointNeeded);
@@ -2673,7 +2701,7 @@ static SetVector<Value *> computeKillSet(BasicBlock *BB) {
 /// Check that the items in 'Live' dominate 'TI'.  This is used as a basic
 /// sanity check for the liveness computation.
 static void checkBasicSSA(DominatorTree &DT, SetVector<Value *> &Live,
-                          TerminatorInst *TI, bool TermOkay = false) {
+                          Instruction *TI, bool TermOkay = false) {
   for (Value *V : Live) {
     if (auto *I = dyn_cast<Instruction>(V)) {
       // The terminator can be a member of the LiveOut set.  LLVM's definition

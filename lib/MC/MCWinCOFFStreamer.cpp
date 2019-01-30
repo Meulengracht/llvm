@@ -1,9 +1,8 @@
 //===- llvm/MC/MCWinCOFFStreamer.cpp --------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -226,6 +225,25 @@ void MCWinCOFFStreamer::EmitCOFFSecRel32(const MCSymbol *Symbol,
         MCE, MCConstantExpr::create(Offset, getContext()), getContext());
   // Build the secrel32 relocation.
   MCFixup Fixup = MCFixup::create(DF->getContents().size(), MCE, FK_SecRel_4);
+  // Record the relocation.
+  DF->getFixups().push_back(Fixup);
+  // Emit 4 bytes (zeros) to the object file.
+  DF->getContents().resize(DF->getContents().size() + 4, 0);
+}
+
+void MCWinCOFFStreamer::EmitCOFFImgRel32(const MCSymbol *Symbol,
+                                         int64_t Offset) {
+  visitUsedSymbol(*Symbol);
+  MCDataFragment *DF = getOrCreateDataFragment();
+  // Create Symbol A for the relocation relative reference.
+  const MCExpr *MCE = MCSymbolRefExpr::create(
+      Symbol, MCSymbolRefExpr::VK_COFF_IMGREL32, getContext());
+  // Add the constant offset, if given.
+  if (Offset)
+    MCE = MCBinaryExpr::createAdd(
+        MCE, MCConstantExpr::create(Offset, getContext()), getContext());
+  // Build the imgrel relocation.
+  MCFixup Fixup = MCFixup::create(DF->getContents().size(), MCE, FK_Data_4);
   // Record the relocation.
   DF->getFixups().push_back(Fixup);
   // Emit 4 bytes (zeros) to the object file.

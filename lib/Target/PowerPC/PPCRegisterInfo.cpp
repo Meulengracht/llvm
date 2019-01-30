@@ -1,9 +1,8 @@
 //===-- PPCRegisterInfo.cpp - PowerPC Register Information ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -106,6 +105,12 @@ PPCRegisterInfo::PPCRegisterInfo(const PPCTargetMachine &TM)
   ImmToIdxMap[PPC::STXV] = PPC::STXVX;
   ImmToIdxMap[PPC::STXSD] = PPC::STXSDX;
   ImmToIdxMap[PPC::STXSSP] = PPC::STXSSPX;
+
+  // SPE
+  ImmToIdxMap[PPC::EVLDD] = PPC::EVLDDX;
+  ImmToIdxMap[PPC::EVSTDD] = PPC::EVSTDDX;
+  ImmToIdxMap[PPC::SPESTW] = PPC::SPESTWX;
+  ImmToIdxMap[PPC::SPELWZ] = PPC::SPELWZX;
 }
 
 /// getPointerRegClass - Return the register class to use to hold pointers.
@@ -146,6 +151,9 @@ PPCRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 
   if (TM.isPPC64() && MF->getInfo<PPCFunctionInfo>()->isSplitCSR())
     return CSR_SRV464_TLS_PE_SaveList;
+
+  if (Subtarget.hasSPE())
+    return CSR_SVR432_SPE_SaveList;
 
   // On PPC64, we might need to save r2 (but only if it is not reserved).
   bool SaveR2 = MF->getRegInfo().isAllocatable(PPC::X2);
@@ -342,6 +350,8 @@ unsigned PPCRegisterInfo::getRegPressureLimit(const TargetRegisterClass *RC,
     return 0;
   case PPC::G8RC_NOX0RegClassID:
   case PPC::GPRC_NOR0RegClassID:
+  case PPC::SPERCRegClassID:
+  case PPC::SPE4RCRegClassID:
   case PPC::G8RCRegClassID:
   case PPC::GPRCRegClassID: {
     unsigned FP = TFI->hasFP(MF) ? 1 : 0;
@@ -662,12 +672,15 @@ void PPCRegisterInfo::lowerCRBitSpilling(MachineBasicBlock::iterator II,
   unsigned Reg = MF.getRegInfo().createVirtualRegister(LP64 ? G8RC : GPRC);
   unsigned SrcReg = MI.getOperand(0).getReg();
 
-  BuildMI(MBB, II, dl, TII.get(TargetOpcode::KILL),
-          getCRFromCRBit(SrcReg))
-          .addReg(SrcReg, getKillRegState(MI.getOperand(0).isKill()));
-
+  // We need to move the CR field that contains the CR bit we are spilling.
+  // The super register may not be explicitly defined (i.e. it can be defined
+  // by a CR-logical that only defines the subreg) so we state that the CR
+  // field is undef. Also, in order to preserve the kill flag on the CR bit,
+  // we add it as an implicit use.
   BuildMI(MBB, II, dl, TII.get(LP64 ? PPC::MFOCRF8 : PPC::MFOCRF), Reg)
-      .addReg(getCRFromCRBit(SrcReg));
+      .addReg(getCRFromCRBit(SrcReg), RegState::Undef)
+      .addReg(SrcReg,
+              RegState::Implicit | getKillRegState(MI.getOperand(0).isKill()));
 
   // If the saved register wasn't CR0LT, shift the bits left so that the bit to
   // store is the first one. Mask all but that bit.
@@ -968,7 +981,7 @@ PPCRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
            SReg = MF.getRegInfo().createVirtualRegister(RC);
 
   // Insert a set of rA with the full offset value before the ld, st, or add
-  if (isInt<16>(Offset)) 
+  if (isInt<16>(Offset))
     BuildMI(MBB, II, dl, TII.get(is64Bit ? PPC::LI8 : PPC::LI), SReg)
       .addImm(Offset);
   else {

@@ -1,9 +1,8 @@
 //===-- llvm/GlobalValue.h - Class to represent a global value --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -110,17 +109,11 @@ protected:
   unsigned IsDSOLocal : 1;
 
 private:
-  friend class Constant;
-
-  void maybeSetDsoLocal() {
-    if (hasLocalLinkage() ||
-        (!hasDefaultVisibility() && !hasExternalWeakLinkage()))
-      setDSOLocal(true);
-  }
-
   // Give subclasses access to what otherwise would be wasted padding.
   // (17 + 4 + 2 + 2 + 2 + 3 + 1 + 1) == 32.
   unsigned SubClassData : GlobalValueSubClassDataBits;
+
+  friend class Constant;
 
   void destroyConstantImpl();
   Value *handleOperandChangeImpl(Value *From, Value *To);
@@ -147,6 +140,12 @@ private:
     }
 
     llvm_unreachable("Fully covered switch above!");
+  }
+
+  void maybeSetDsoLocal() {
+    if (hasLocalLinkage() ||
+        (!hasDefaultVisibility() && !hasExternalWeakLinkage()))
+      setDSOLocal(true);
   }
 
 protected:
@@ -189,6 +188,7 @@ public:
   GlobalValue(const GlobalValue &) = delete;
 
   unsigned getAlignment() const;
+  unsigned getAddressSpace() const;
 
   enum class UnnamedAddr {
     None,

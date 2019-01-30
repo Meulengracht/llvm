@@ -1,9 +1,9 @@
 /*===-- llvm-c/lto.h - LTO Public C Interface ---------------------*- C -*-===*\
 |*                                                                            *|
-|*                     The LLVM Compiler Infrastructure                       *|
-|*                                                                            *|
-|* This file is distributed under the University of Illinois Open Source      *|
-|* License. See LICENSE.TXT for details.                                      *|
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
+|* Exceptions.                                                                *|
+|* See https://llvm.org/LICENSE.txt for license information.                  *|
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
 |*                                                                            *|
 |*===----------------------------------------------------------------------===*|
 |*                                                                            *|
@@ -44,7 +44,7 @@ typedef bool lto_bool_t;
  * @{
  */
 
-#define LTO_API_VERSION 22
+#define LTO_API_VERSION 23
 
 /**
  * \since prior to LTO_API_VERSION=3
@@ -826,6 +826,16 @@ extern void thinlto_codegen_set_cache_entry_expiration(thinlto_code_gen_t cg,
  */
 extern void thinlto_codegen_set_cache_size_bytes(thinlto_code_gen_t cg,
                                                  unsigned max_size_bytes);
+
+/**
+ * Same as thinlto_codegen_set_cache_size_bytes, except the maximum size is in
+ * megabytes (2^20 bytes).
+ *
+ * \since LTO_API_VERSION=23
+ */
+extern void
+thinlto_codegen_set_cache_size_megabytes(thinlto_code_gen_t cg,
+                                         unsigned max_size_megabytes);
 
 /**
  * Sets the maximum number of files in the cache directory. An unspecified

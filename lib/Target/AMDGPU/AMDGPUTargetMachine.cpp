@@ -1,9 +1,8 @@
 //===-- AMDGPUTargetMachine.cpp - TargetMachine for hw codegen targets-----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -45,6 +44,7 @@
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Vectorize.h"
 #include <memory>
 
@@ -105,6 +105,11 @@ static cl::opt<bool> EnableSDWAPeephole(
   cl::desc("Enable SDWA peepholer"),
   cl::init(true));
 
+static cl::opt<bool> EnableDPPCombine(
+  "amdgpu-dpp-combine",
+  cl::desc("Enable DPP combiner"),
+  cl::init(false));
+
 // Enable address space based alias analysis
 static cl::opt<bool> EnableAMDGPUAliasAnalysis("enable-amdgpu-aa", cl::Hidden,
   cl::desc("Enable AMDGPU Alias Analysis"),
@@ -137,6 +142,20 @@ static cl::opt<bool> EnableLowerKernelArguments(
   cl::init(true),
   cl::Hidden);
 
+// Enable atomic optimization
+static cl::opt<bool> EnableAtomicOptimizations(
+  "amdgpu-atomic-optimizations",
+  cl::desc("Enable atomic optimizations"),
+  cl::init(false),
+  cl::Hidden);
+
+// Enable Mode register optimization
+static cl::opt<bool> EnableSIModeRegisterPass(
+  "amdgpu-mode-register",
+  cl::desc("Enable mode register pass"),
+  cl::init(true),
+  cl::Hidden);
+
 extern "C" void LLVMInitializeAMDGPUTarget() {
   // Register the target
   RegisterTargetMachine<R600TargetMachine> X(getTheAMDGPUTarget());
@@ -150,18 +169,22 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeR600VectorRegMergerPass(*PR);
   initializeGlobalISel(*PR);
   initializeAMDGPUDAGToDAGISelPass(*PR);
+  initializeGCNDPPCombinePass(*PR);
   initializeSILowerI1CopiesPass(*PR);
   initializeSIFixSGPRCopiesPass(*PR);
   initializeSIFixVGPRCopiesPass(*PR);
+  initializeSIFixupVectorISelPass(*PR);
   initializeSIFoldOperandsPass(*PR);
   initializeSIPeepholeSDWAPass(*PR);
   initializeSIShrinkInstructionsPass(*PR);
   initializeSIOptimizeExecMaskingPreRAPass(*PR);
   initializeSILoadStoreOptimizerPass(*PR);
+  initializeAMDGPUFixFunctionBitcastsPass(*PR);
   initializeAMDGPUAlwaysInlinePass(*PR);
   initializeAMDGPUAnnotateKernelFeaturesPass(*PR);
   initializeAMDGPUAnnotateUniformValuesPass(*PR);
   initializeAMDGPUArgumentUsageInfoPass(*PR);
+  initializeAMDGPUAtomicOptimizerPass(*PR);
   initializeAMDGPULowerKernelArgumentsPass(*PR);
   initializeAMDGPULowerKernelAttributesPass(*PR);
   initializeAMDGPULowerIntrinsicsPass(*PR);
@@ -172,6 +195,7 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeAMDGPUUnifyMetadataPass(*PR);
   initializeSIAnnotateControlFlowPass(*PR);
   initializeSIInsertWaitcntsPass(*PR);
+  initializeSIModeRegisterPass(*PR);
   initializeSIWholeQuadModePass(*PR);
   initializeSILowerControlFlowPass(*PR);
   initializeSIInsertSkipsPass(*PR);
@@ -182,6 +206,7 @@ extern "C" void LLVMInitializeAMDGPUTarget() {
   initializeSIFormMemoryClausesPass(*PR);
   initializeAMDGPUUnifyDivergentExitNodesPass(*PR);
   initializeAMDGPUAAWrapperPassPass(*PR);
+  initializeAMDGPUExternalAAWrapperPass(*PR);
   initializeAMDGPUUseNativeCallsPass(*PR);
   initializeAMDGPUSimplifyLibCallsPass(*PR);
   initializeAMDGPUInlinerPass(*PR);
@@ -292,12 +317,6 @@ static Reloc::Model getEffectiveRelocModel(Optional<Reloc::Model> RM) {
   return Reloc::PIC_;
 }
 
-static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM) {
-  if (CM)
-    return *CM;
-  return CodeModel::Small;
-}
-
 AMDGPUTargetMachine::AMDGPUTargetMachine(const Target &T, const Triple &TT,
                                          StringRef CPU, StringRef FS,
                                          TargetOptions Options,
@@ -306,9 +325,8 @@ AMDGPUTargetMachine::AMDGPUTargetMachine(const Target &T, const Triple &TT,
                                          CodeGenOpt::Level OptLevel)
     : LLVMTargetMachine(T, computeDataLayout(TT), TT, getGPUOrDefault(TT, CPU),
                         FS, Options, getEffectiveRelocModel(RM),
-                        getEffectiveCodeModel(CM), OptLevel),
+                        getEffectiveCodeModel(CM, CodeModel::Small), OptLevel),
       TLOF(createTLOF(getTargetTriple())) {
-  AS = AMDGPU::getAMDGPUAS(TT);
   initAsmInfo();
 }
 
@@ -331,13 +349,6 @@ StringRef AMDGPUTargetMachine::getFeatureString(const Function &F) const {
     FSAttr.getValueAsString();
 }
 
-static ImmutablePass *createAMDGPUExternalAAWrapperPass() {
-  return createExternalAAWrapperPass([](Pass &P, Function &, AAResults &AAR) {
-      if (auto *WrapperPass = P.getAnalysisIfAvailable<AMDGPUAAWrapperPass>())
-        AAR.addAAResult(WrapperPass->getResult());
-      });
-}
-
 /// Predicate for Internalize pass.
 static bool mustPreserveGV(const GlobalValue &GV) {
   if (const Function *F = dyn_cast<Function>(&GV))
@@ -358,17 +369,6 @@ void AMDGPUTargetMachine::adjustPassManager(PassManagerBuilder &Builder) {
   if (EnableAMDGPUFunctionCalls) {
     delete Builder.Inliner;
     Builder.Inliner = createAMDGPUFunctionInliningPass();
-  }
-
-  if (Internalize) {
-    // If we're generating code, we always have the whole program available. The
-    // relocations expected for externally visible functions aren't supported,
-    // so make sure every non-entry function is hidden.
-    Builder.addExtension(
-      PassManagerBuilder::EP_EnabledOnOptLevel0,
-      [](const PassManagerBuilder &, legacy::PassManagerBase &PM) {
-        PM.add(createInternalizePass(mustPreserveGV));
-      });
   }
 
   Builder.addExtension(
@@ -613,20 +613,23 @@ void AMDGPUPassConfig::addIRPasses() {
   disablePass(&FuncletLayoutID);
   disablePass(&PatchableFunctionID);
 
+  addPass(createAtomicExpandPass());
+
+  // This must occur before inlining, as the inliner will not look through
+  // bitcast calls.
+  addPass(createAMDGPUFixFunctionBitcastsPass());
+
   addPass(createAMDGPULowerIntrinsicsPass());
 
-  if (TM.getTargetTriple().getArch() == Triple::r600 ||
-      !EnableAMDGPUFunctionCalls) {
-    // Function calls are not supported, so make sure we inline everything.
-    addPass(createAMDGPUAlwaysInlinePass());
-    addPass(createAlwaysInlinerLegacyPass());
-    // We need to add the barrier noop pass, otherwise adding the function
-    // inlining pass will cause all of the PassConfigs passes to be run
-    // one function at a time, which means if we have a nodule with two
-    // functions, then we will generate code for the first function
-    // without ever running any passes on the second.
-    addPass(createBarrierNoopPass());
-  }
+  // Function calls are not supported, so make sure we inline everything.
+  addPass(createAMDGPUAlwaysInlinePass());
+  addPass(createAlwaysInlinerLegacyPass());
+  // We need to add the barrier noop pass, otherwise adding the function
+  // inlining pass will cause all of the PassConfigs passes to be run
+  // one function at a time, which means if we have a nodule with two
+  // functions, then we will generate code for the first function
+  // without ever running any passes on the second.
+  addPass(createBarrierNoopPass());
 
   if (TM.getTargetTriple().getArch() == Triple::amdgcn) {
     // TODO: May want to move later or split into an early and late one.
@@ -690,6 +693,7 @@ void AMDGPUPassConfig::addCodeGenPrepare() {
 }
 
 bool AMDGPUPassConfig::addPreISel() {
+  addPass(createLowerSwitchPass());
   addPass(createFlattenCFGPass());
   return false;
 }
@@ -759,6 +763,10 @@ ScheduleDAGInstrs *GCNPassConfig::createMachineScheduler(
 bool GCNPassConfig::addPreISel() {
   AMDGPUPassConfig::addPreISel();
 
+  if (EnableAtomicOptimizations) {
+    addPass(createAMDGPUAtomicOptimizerPass());
+  }
+
   // FIXME: We need to run a pass to propagate the attributes when calls are
   // supported.
   addPass(createAMDGPUAnnotateKernelFeaturesPass());
@@ -789,6 +797,8 @@ void GCNPassConfig::addMachineSSAOptimization() {
   //
   // XXX - Can we get away without running DeadMachineInstructionElim again?
   addPass(&SIFoldOperandsID);
+  if (EnableDPPCombine)
+    addPass(&GCNDPPCombineID);
   addPass(&DeadMachineInstructionElimID);
   addPass(&SILoadStoreOptimizerID);
   if (EnableSDWAPeephole) {
@@ -811,8 +821,10 @@ bool GCNPassConfig::addILPOpts() {
 
 bool GCNPassConfig::addInstSelector() {
   AMDGPUPassConfig::addInstSelector();
-  addPass(createSILowerI1CopiesPass());
   addPass(&SIFixSGPRCopiesID);
+  addPass(createSILowerI1CopiesPass());
+  addPass(createSIFixupVectorISelPass());
+  addPass(createSIAddIMGInitPass());
   return false;
 }
 
@@ -878,7 +890,8 @@ void GCNPassConfig::addOptimizedRegAlloc(FunctionPass *RegAllocPass) {
 
 void GCNPassConfig::addPostRegAlloc() {
   addPass(&SIFixVGPRCopiesID);
-  addPass(&SIOptimizeExecMaskingID);
+  if (getOptLevel() > CodeGenOpt::None)
+    addPass(&SIOptimizeExecMaskingID);
   TargetPassConfig::addPostRegAlloc();
 }
 
@@ -886,6 +899,11 @@ void GCNPassConfig::addPreSched2() {
 }
 
 void GCNPassConfig::addPreEmitPass() {
+  addPass(createSIMemoryLegalizerPass());
+  addPass(createSIInsertWaitcntsPass());
+  addPass(createSIShrinkInstructionsPass());
+  addPass(createSIModeRegisterPass());
+
   // The hazard recognizer that runs as part of the post-ra scheduler does not
   // guarantee to be able handle all hazards correctly. This is because if there
   // are multiple scheduling regions in a basic block, the regions are scheduled
@@ -894,11 +912,11 @@ void GCNPassConfig::addPreEmitPass() {
   //
   // Here we add a stand-alone hazard recognizer pass which can handle all
   // cases.
+  //
+  // FIXME: This stand-alone pass will emit indiv. S_NOP 0, as needed. It would
+  // be better for it to emit S_NOP <N> when possible.
   addPass(&PostRAHazardRecognizerID);
 
-  addPass(createSIMemoryLegalizerPass());
-  addPass(createSIInsertWaitcntsPass());
-  addPass(createSIShrinkInstructionsPass());
   addPass(&SIInsertSkipsPassID);
   addPass(createSIDebuggerInsertNopsPass());
   addPass(&BranchRelaxationPassID);

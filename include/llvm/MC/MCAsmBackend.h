@@ -1,9 +1,8 @@
 //===- llvm/MC/MCAsmBackend.h - MC Asm Backend ------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -163,6 +162,11 @@ public:
   virtual uint32_t
       generateCompactUnwindEncoding(ArrayRef<MCCFIInstruction>) const {
     return 0;
+  }
+
+  /// Check whether a given symbol has been flagged with MICROMIPS flag.
+  virtual bool isMicroMips(const MCSymbol *Sym) const {
+    return false;
   }
 
   /// Handles all target related code padding when starting to write a new

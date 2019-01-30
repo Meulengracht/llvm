@@ -1,9 +1,8 @@
 //===-- ARMAsmBackend.cpp - ARM Assembler Backend -------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -373,6 +372,7 @@ unsigned ARMAsmBackend::adjustFixupValue(const MCAssembler &Asm,
   // interfere with checking valid expressions.
   if (const MCSymbolRefExpr *A = Target.getSymA()) {
     if (A->hasSubsectionsViaSymbols() && Asm.isThumbFunc(&A->getSymbol()) &&
+        A->getSymbol().isExternal() &&
         (Kind == FK_Data_4 || Kind == ARM::fixup_arm_movw_lo16 ||
          Kind == ARM::fixup_arm_movt_hi16 || Kind == ARM::fixup_t2_movw_lo16 ||
          Kind == ARM::fixup_t2_movt_hi16))

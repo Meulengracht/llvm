@@ -1,9 +1,8 @@
 //===- ARCInstPrinter.cpp - ARC MCInst to assembly syntax -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -20,7 +19,6 @@
 #include "llvm/MC/MCSymbol.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -28,6 +26,12 @@ using namespace llvm;
 #define DEBUG_TYPE "asm-printer"
 
 #include "ARCGenAsmWriter.inc"
+
+template <class T>
+static const char *BadConditionCode(T cc) {
+  LLVM_DEBUG(dbgs() << "Unknown condition code passed: " << cc << "\n");
+  return "{unknown-cc}";
+}
 
 static const char *ARCBRCondCodeToString(ARCCC::BRCondCode BRCC) {
   switch (BRCC) {
@@ -44,7 +48,7 @@ static const char *ARCBRCondCodeToString(ARCCC::BRCondCode BRCC) {
   case ARCCC::BRHS:
     return "hs";
   }
-  llvm_unreachable("Unhandled ARCCC::BRCondCode");
+  return BadConditionCode(BRCC);
 }
 
 static const char *ARCCondCodeToString(ARCCC::CondCode CC) {
@@ -86,7 +90,7 @@ static const char *ARCCondCodeToString(ARCCC::CondCode CC) {
   case ARCCC::Z:
     return "z";
   }
-  llvm_unreachable("Unhandled ARCCC::CondCode");
+  return BadConditionCode(CC);
 }
 
 void ARCInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {

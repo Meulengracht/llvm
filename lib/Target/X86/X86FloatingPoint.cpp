@@ -1,9 +1,8 @@
 //===-- X86FloatingPoint.cpp - Floating point Reg -> Stack converter ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -347,12 +346,12 @@ bool FPS::runOnMachineFunction(MachineFunction &MF) {
 
   LiveBundle &Bundle =
     LiveBundles[Bundles->getBundle(Entry->getNumber(), false)];
-  
+
   // In regcall convention, some FP registers may not be passed through
   // the stack, so they will need to be assigned to the stack first
   if ((Entry->getParent()->getFunction().getCallingConv() ==
     CallingConv::X86_RegCall) && (Bundle.Mask && !Bundle.FixCount)) {
-    // In the register calling convention, up to one FP argument could be 
+    // In the register calling convention, up to one FP argument could be
     // saved in the first FP register.
     // If bundle.mask is non-zero and Bundle.FixCount is zero, it means
     // that the FP registers contain arguments.
@@ -991,7 +990,7 @@ void FPS::handleCall(MachineBasicBlock::iterator &I) {
   assert(STReturns == 0 || (isMask_32(STReturns) && N <= 2));
 
   // Reset the FP Stack - It is required because of possible leftovers from
-  // passed arguments. The caller should assume that the FP stack is 
+  // passed arguments. The caller should assume that the FP stack is
   // returned empty (unless the callee returns values on FP stack).
   while (StackTop > 0)
     popReg();

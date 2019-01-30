@@ -1,9 +1,8 @@
 //===-- ARMSubtarget.h - Define Subtarget for the ARM ----------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -68,7 +67,7 @@ protected:
     CortexR5,
     CortexR52,
     CortexR7,
-    ExynosM1,
+    Exynos,
     Krait,
     Kryo,
     Swift
@@ -106,6 +105,7 @@ protected:
     ARMv82a,
     ARMv83a,
     ARMv84a,
+    ARMv85a,
     ARMv8a,
     ARMv8mBaseline,
     ARMv8mMainline,
@@ -153,6 +153,7 @@ protected:
   bool HasV8_2aOps = false;
   bool HasV8_3aOps = false;
   bool HasV8_4aOps = false;
+  bool HasV8_5aOps = false;
   bool HasV8MBaselineOps = false;
   bool HasV8MMainlineOps = false;
 
@@ -226,6 +227,9 @@ protected:
 
   /// HasFullFP16 - True if subtarget supports half-precision FP operations
   bool HasFullFP16 = false;
+
+  /// HasFP16FML - True if subtarget supports half-precision FP fml operations
+  bool HasFP16FML = false;
 
   /// HasD16 - True if subtarget is limited to 16 double precision
   /// FP registers for VFPv3.
@@ -327,6 +331,10 @@ protected:
   /// pairs faster.
   bool HasFuseAES = false;
 
+  /// HasFuseLiterals - if true, processor executes back to back
+  /// bottom and top halves of literal generation faster.
+  bool HasFuseLiterals = false;
+
   /// If true, if conversion may decide to leave some instructions unpredicated.
   bool IsProfitableToUnpredicate = false;
 
@@ -349,11 +357,17 @@ protected:
   /// If true, loading into a D subregister will be penalized.
   bool SlowLoadDSubregister = false;
 
+  /// If true, use a wider stride when allocating VFP registers.
+  bool UseWideStrideVFP = false;
+
   /// If true, the AGU and NEON/FPU units are multiplexed.
   bool HasMuxedUnits = false;
 
-  /// If true, VMOVS will never be widened to VMOVD
+  /// If true, VMOVS will never be widened to VMOVD.
   bool DontWidenVMOVS = false;
+
+  /// If true, splat a register between VFP and NEON instructions.
+  bool SplatVFPToNeon = false;
 
   /// If true, run the MLx expansion pass.
   bool ExpandMLx = false;
@@ -401,6 +415,9 @@ protected:
   /// UseSjLjEH - If true, the target uses SjLj exception handling (e.g. iOS).
   bool UseSjLjEH = false;
 
+  /// Has speculation barrier
+  bool HasSB = false;
+
   /// Implicitly convert an instruction to a different one if its immediates
   /// cannot be encoded. For example, ADD r0, r1, #FFFFFFFF -> SUB r0, r1, #1.
   bool NegativeImmediates = true;
@@ -424,6 +441,9 @@ protected:
   /// The adjustment that we need to apply to get the operand latency from the
   /// operand cycle returned by the itinerary data for pre-ISel operands.
   int PreISelOperandLatencyAdjustment = 2;
+
+  /// What alignment is preferred for loop bodies, in log2(bytes).
+  unsigned PrefLoopAlignment = 0;
 
   /// IsLittle - The target is Little Endian
   bool IsLittle;
@@ -522,6 +542,7 @@ public:
   bool hasV8_2aOps() const { return HasV8_2aOps; }
   bool hasV8_3aOps() const { return HasV8_3aOps; }
   bool hasV8_4aOps() const { return HasV8_4aOps; }
+  bool hasV8_5aOps() const { return HasV8_5aOps; }
   bool hasV8MBaselineOps() const { return HasV8MBaselineOps; }
   bool hasV8MMainlineOps() const { return HasV8MMainlineOps; }
 
@@ -589,8 +610,10 @@ public:
   bool hasVMLxHazards() const { return HasVMLxHazards; }
   bool hasSlowOddRegister() const { return SlowOddRegister; }
   bool hasSlowLoadDSubregister() const { return SlowLoadDSubregister; }
+  bool useWideStrideVFP() const { return UseWideStrideVFP; }
   bool hasMuxedUnits() const { return HasMuxedUnits; }
   bool dontWidenVMOVS() const { return DontWidenVMOVS; }
+  bool useSplatVFPToNeon() const { return SplatVFPToNeon; }
   bool useNEONForFPMovs() const { return UseNEONForFPMovs; }
   bool checkVLDnAccessAlignment() const { return CheckVLDnAlign; }
   bool nonpipelinedVFP() const { return NonpipelinedVFP; }
@@ -604,16 +627,19 @@ public:
   bool hasDSP() const { return HasDSP; }
   bool useNaClTrap() const { return UseNaClTrap; }
   bool useSjLjEH() const { return UseSjLjEH; }
+  bool hasSB() const { return HasSB; }
   bool genLongCalls() const { return GenLongCalls; }
   bool genExecuteOnly() const { return GenExecuteOnly; }
 
   bool hasFP16() const { return HasFP16; }
   bool hasD16() const { return HasD16; }
   bool hasFullFP16() const { return HasFullFP16; }
+  bool hasFP16FML() const { return HasFP16FML; }
 
   bool hasFuseAES() const { return HasFuseAES; }
+  bool hasFuseLiterals() const { return HasFuseLiterals; }
   /// Return true if the CPU supports any kind of instruction fusion.
-  bool hasFusion() const { return hasFuseAES(); }
+  bool hasFusion() const { return hasFuseAES() || hasFuseLiterals(); }
 
   const Triple &getTargetTriple() const { return TargetTriple; }
 
@@ -666,13 +692,7 @@ public:
            !isTargetDarwin() && !isTargetWindows();
   }
 
-  bool isTargetHardFloat() const {
-    // FIXME: this is invalid for WindowsCE
-    return TargetTriple.getEnvironment() == Triple::GNUEABIHF ||
-           TargetTriple.getEnvironment() == Triple::MuslEABIHF ||
-           TargetTriple.getEnvironment() == Triple::EABIHF ||
-           isTargetWindows() || isAAPCS16_ABI();
-  }
+  bool isTargetHardFloat() const;
 
   bool isTargetAndroid() const { return TargetTriple.isAndroid(); }
 
@@ -792,6 +812,10 @@ public:
   /// ROPI does not use GOT.
   bool allowPositionIndependentMovt() const {
     return isROPI() || !isTargetELF();
+  }
+
+  unsigned getPrefLoopAlignment() const {
+    return PrefLoopAlignment;
   }
 };
 

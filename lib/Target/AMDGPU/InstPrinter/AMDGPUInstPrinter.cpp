@@ -1,9 +1,8 @@
 //===-- AMDGPUInstPrinter.cpp - AMDGPU MC Inst -> ASM ---------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 // \file
 //===----------------------------------------------------------------------===//
@@ -207,9 +206,12 @@ void AMDGPUInstPrinter::printDA(const MCInst *MI, unsigned OpNo,
   printNamedBit(MI, OpNo, O, "da");
 }
 
-void AMDGPUInstPrinter::printR128(const MCInst *MI, unsigned OpNo,
+void AMDGPUInstPrinter::printR128A16(const MCInst *MI, unsigned OpNo,
                                   const MCSubtargetInfo &STI, raw_ostream &O) {
-  printNamedBit(MI, OpNo, O, "r128");
+  if (STI.hasFeature(AMDGPU::FeatureR128A16))
+    printNamedBit(MI, OpNo, O, "a16");
+  else
+    printNamedBit(MI, OpNo, O, "r128");
 }
 
 void AMDGPUInstPrinter::printLWE(const MCInst *MI, unsigned OpNo,
@@ -236,21 +238,12 @@ void AMDGPUInstPrinter::printExpVM(const MCInst *MI, unsigned OpNo,
     O << " vm";
 }
 
-void AMDGPUInstPrinter::printDFMT(const MCInst *MI, unsigned OpNo,
-                                  const MCSubtargetInfo &STI,
-                                  raw_ostream &O) {
-  if (MI->getOperand(OpNo).getImm()) {
-    O << " dfmt:";
-    printU8ImmDecOperand(MI, OpNo, O);
-  }
-}
-
-void AMDGPUInstPrinter::printNFMT(const MCInst *MI, unsigned OpNo,
-                                  const MCSubtargetInfo &STI,
-                                  raw_ostream &O) {
-  if (MI->getOperand(OpNo).getImm()) {
-    O << " nfmt:";
-    printU8ImmDecOperand(MI, OpNo, O);
+void AMDGPUInstPrinter::printFORMAT(const MCInst *MI, unsigned OpNo,
+                                    const MCSubtargetInfo &STI,
+                                    raw_ostream &O) {
+  if (unsigned Val = MI->getOperand(OpNo).getImm()) {
+    O << " dfmt:" << (Val & 15);
+    O << ", nfmt:" << (Val >> 4);
   }
 }
 
@@ -497,7 +490,7 @@ void AMDGPUInstPrinter::printImmediate64(uint64_t Imm,
     O << "-4.0";
   else if (Imm == 0x3fc45f306dc9c882 &&
            STI.getFeatureBits()[AMDGPU::FeatureInv2PiInlineImm])
-  O << "0.15915494";
+    O << "0.15915494309189532";
   else {
     assert(isUInt<32>(Imm) || Imm == 0x3fc45f306dc9c882);
 
@@ -1161,8 +1154,7 @@ void AMDGPUInstPrinter::printSwizzle(const MCInst *MI, unsigned OpNo,
 void AMDGPUInstPrinter::printWaitFlag(const MCInst *MI, unsigned OpNo,
                                       const MCSubtargetInfo &STI,
                                       raw_ostream &O) {
-  AMDGPU::IsaInfo::IsaVersion ISA =
-      AMDGPU::IsaInfo::getIsaVersion(STI.getFeatureBits());
+  AMDGPU::IsaVersion ISA = AMDGPU::getIsaVersion(STI.getCPU());
 
   unsigned SImm16 = MI->getOperand(OpNo).getImm();
   unsigned Vmcnt, Expcnt, Lgkmcnt;

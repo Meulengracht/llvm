@@ -1,9 +1,8 @@
 //===-- llvm/Operator.h - Operator utility subclass -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -364,19 +363,26 @@ public:
   /// precision.
   float getFPAccuracy() const;
 
-  static bool classof(const Instruction *I) {
-    return I->getType()->isFPOrFPVectorTy() ||
-      I->getOpcode() == Instruction::FCmp;
-  }
-
-  static bool classof(const ConstantExpr *CE) {
-    return CE->getType()->isFPOrFPVectorTy() ||
-           CE->getOpcode() == Instruction::FCmp;
-  }
-
   static bool classof(const Value *V) {
-    return (isa<Instruction>(V) && classof(cast<Instruction>(V))) ||
-           (isa<ConstantExpr>(V) && classof(cast<ConstantExpr>(V)));
+    unsigned Opcode;
+    if (auto *I = dyn_cast<Instruction>(V))
+      Opcode = I->getOpcode();
+    else if (auto *CE = dyn_cast<ConstantExpr>(V))
+      Opcode = CE->getOpcode();
+    else
+      return false;
+
+    switch (Opcode) {
+    case Instruction::FCmp:
+      return true;
+    // non math FP Operators (no FMF)
+    case Instruction::ExtractElement:
+    case Instruction::ShuffleVector:
+    case Instruction::InsertElement:
+      return false;
+    default:
+      return V->getType()->isFPOrFPVectorTy();
+    }
   }
 };
 

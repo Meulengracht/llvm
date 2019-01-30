@@ -12,10 +12,9 @@ define i128 @val_compare_and_swap(i128* %p, i128 %oldval, i128 %newval) {
 ; CHECK-NEXT:    pushq %rbx
 ; CHECK-NEXT:    .cfi_def_cfa_offset 16
 ; CHECK-NEXT:    .cfi_offset %rbx, -16
-; CHECK-NEXT:    movq %rcx, %r9
+; CHECK-NEXT:    movq %rcx, %rbx
 ; CHECK-NEXT:    movq %rsi, %rax
 ; CHECK-NEXT:    movq %r8, %rcx
-; CHECK-NEXT:    movq %r9, %rbx
 ; CHECK-NEXT:    lock cmpxchg16b (%rdi)
 ; CHECK-NEXT:    popq %rbx
 ; CHECK-NEXT:    retq
@@ -360,4 +359,28 @@ define void @atomic_store_relaxed(i128* %p, i128 %in) {
 ; CHECK-NEXT:    retq
    store atomic i128 %in, i128* %p unordered, align 16
    ret void
+}
+
+
+@fsc128 = external global fp128
+
+define void @atomic_fetch_swapf128(fp128 %x) nounwind {
+; CHECK-LABEL: atomic_fetch_swapf128:
+; CHECK:       ## %bb.0:
+; CHECK-NEXT:    pushq %rbx
+; CHECK-NEXT:    movq %rsi, %rcx
+; CHECK-NEXT:    movq %rdi, %rbx
+; CHECK-NEXT:    movq _fsc128@{{.*}}(%rip), %rsi
+; CHECK-NEXT:    movq (%rsi), %rax
+; CHECK-NEXT:    movq 8(%rsi), %rdx
+; CHECK-NEXT:    .p2align 4, 0x90
+; CHECK-NEXT:  LBB14_1: ## %atomicrmw.start
+; CHECK-NEXT:    ## =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    lock cmpxchg16b (%rsi)
+; CHECK-NEXT:    jne LBB14_1
+; CHECK-NEXT:  ## %bb.2: ## %atomicrmw.end
+; CHECK-NEXT:    popq %rbx
+; CHECK-NEXT:    retq
+  %t1 = atomicrmw xchg fp128* @fsc128, fp128 %x acquire
+  ret void
 }

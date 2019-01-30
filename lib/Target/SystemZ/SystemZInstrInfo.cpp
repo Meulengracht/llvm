@@ -1,9 +1,8 @@
 //===-- SystemZInstrInfo.cpp - SystemZ instruction information ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -880,10 +879,10 @@ void SystemZInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       SystemZ::FP128BitRegClass.contains(SrcReg)) {
     unsigned SrcRegHi =
       RI.getMatchingSuperReg(RI.getSubReg(SrcReg, SystemZ::subreg_h64),
-                             SystemZ::subreg_r64, &SystemZ::VR128BitRegClass);
+                             SystemZ::subreg_h64, &SystemZ::VR128BitRegClass);
     unsigned SrcRegLo =
       RI.getMatchingSuperReg(RI.getSubReg(SrcReg, SystemZ::subreg_l64),
-                             SystemZ::subreg_r64, &SystemZ::VR128BitRegClass);
+                             SystemZ::subreg_h64, &SystemZ::VR128BitRegClass);
 
     BuildMI(MBB, MBBI, DL, get(SystemZ::VMRHG), DestReg)
       .addReg(SrcRegHi, getKillRegState(KillSrc))
@@ -894,10 +893,10 @@ void SystemZInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       SystemZ::VR128BitRegClass.contains(SrcReg)) {
     unsigned DestRegHi =
       RI.getMatchingSuperReg(RI.getSubReg(DestReg, SystemZ::subreg_h64),
-                             SystemZ::subreg_r64, &SystemZ::VR128BitRegClass);
+                             SystemZ::subreg_h64, &SystemZ::VR128BitRegClass);
     unsigned DestRegLo =
       RI.getMatchingSuperReg(RI.getSubReg(DestReg, SystemZ::subreg_l64),
-                             SystemZ::subreg_r64, &SystemZ::VR128BitRegClass);
+                             SystemZ::subreg_h64, &SystemZ::VR128BitRegClass);
 
     if (DestRegHi != SrcReg)
       copyPhysReg(MBB, MBBI, DL, DestRegHi, SrcReg, false);

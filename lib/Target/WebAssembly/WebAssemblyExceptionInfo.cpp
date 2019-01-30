@@ -1,9 +1,8 @@
 //===--- WebAssemblyExceptionInfo.cpp - Exception Infomation --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -13,8 +12,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "WebAssemblyExceptionInfo.h"
-#include "WebAssemblyUtilities.h"
 #include "MCTargetDesc/WebAssemblyMCTargetDesc.h"
+#include "WebAssemblyUtilities.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/CodeGen/MachineDominanceFrontier.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -32,7 +31,10 @@ INITIALIZE_PASS_DEPENDENCY(MachineDominanceFrontier)
 INITIALIZE_PASS_END(WebAssemblyExceptionInfo, DEBUG_TYPE,
                     "WebAssembly Exception Information", true, true)
 
-bool WebAssemblyExceptionInfo::runOnMachineFunction(MachineFunction &F) {
+bool WebAssemblyExceptionInfo::runOnMachineFunction(MachineFunction &MF) {
+  LLVM_DEBUG(dbgs() << "********** Exception Info Calculation **********\n"
+                       "********** Function: "
+                    << MF.getName() << '\n');
   releaseMemory();
   auto &MDT = getAnalysis<MachineDominatorTree>();
   auto &MDF = getAnalysis<MachineDominanceFrontier>();

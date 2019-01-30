@@ -1,9 +1,8 @@
 //===- llvm/MC/MCTargetAsmParser.h - Target Assembly Parser -----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -372,9 +371,9 @@ public:
     SemaCallback = Callback;
   }
 
-  // Target-specific parsing of assembler-level variable assignment.
-  virtual bool parseAssignmentExpression(const MCExpr *&Res, SMLoc &EndLoc) {
-    return getParser().parseExpression(Res, EndLoc);
+  // Target-specific parsing of expression.
+  virtual bool parsePrimaryExpr(const MCExpr *&Res, SMLoc &EndLoc) {
+    return getParser().parsePrimaryExpr(Res, EndLoc);
   }
 
   virtual bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
@@ -476,6 +475,9 @@ public:
     return nullptr;
   }
 
+  // For actions that have to be performed before a label is emitted
+  virtual void doBeforeLabelEmit(MCSymbol *Symbol) {}
+  
   virtual void onLabelParsed(MCSymbol *Symbol) {}
 
   /// Ensure that all previously parsed instructions have been emitted to the
@@ -487,6 +489,9 @@ public:
                                               MCContext &Ctx) {
     return nullptr;
   }
+
+  // For any checks or cleanups at the end of parsing.
+  virtual void onEndOfFile() {}
 };
 
 } // end namespace llvm

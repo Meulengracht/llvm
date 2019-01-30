@@ -1,9 +1,8 @@
 //===-- llvm/lib/Target/AMDGPU/AMDGPUCallLowering.cpp - Call lowering -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -28,11 +27,12 @@
 using namespace llvm;
 
 AMDGPUCallLowering::AMDGPUCallLowering(const AMDGPUTargetLowering &TLI)
-  : CallLowering(&TLI), AMDGPUASI(TLI.getAMDGPUAS()) {
+  : CallLowering(&TLI) {
 }
 
 bool AMDGPUCallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
-                                     const Value *Val, unsigned VReg) const {
+                                     const Value *Val,
+                                     ArrayRef<unsigned> VRegs) const {
   // FIXME: Add support for non-void returns.
   if (Val)
     return false;
@@ -50,7 +50,7 @@ unsigned AMDGPUCallLowering::lowerParameterPtr(MachineIRBuilder &MIRBuilder,
   MachineRegisterInfo &MRI = MF.getRegInfo();
   const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
-  PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUASI.CONSTANT_ADDRESS);
+  PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUAS::CONSTANT_ADDRESS);
   LLT PtrType = getLLTForType(*PtrTy, DL);
   unsigned DstReg = MRI.createGenericVirtualRegister(PtrType);
   unsigned KernArgSegmentPtr =
@@ -72,7 +72,7 @@ void AMDGPUCallLowering::lowerParameter(MachineIRBuilder &MIRBuilder,
   MachineFunction &MF = MIRBuilder.getMF();
   const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
-  PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUASI.CONSTANT_ADDRESS);
+  PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUAS::CONSTANT_ADDRESS);
   MachinePointerInfo PtrInfo(UndefValue::get(PtrTy));
   unsigned TypeSize = DL.getTypeStoreSize(ParamTy);
   unsigned PtrReg = lowerParameterPtr(MIRBuilder, ParamTy, Offset);

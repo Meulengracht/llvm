@@ -1,9 +1,8 @@
 //===-- AMDGPUTargetStreamer.h - AMDGPU Target Streamer --------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -11,6 +10,7 @@
 #define LLVM_LIB_TARGET_AMDGPU_MCTARGETDESC_AMDGPUTARGETSTREAMER_H
 
 #include "AMDKernelCodeT.h"
+#include "llvm/BinaryFormat/MsgPackTypes.h"
 #include "llvm/MC/MCStreamer.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/Support/AMDGPUMetadata.h"
@@ -31,13 +31,7 @@ class AMDGPUTargetStreamer : public MCTargetStreamer {
 protected:
   MCContext &getContext() const { return Streamer.getContext(); }
 
-  /// \returns Equivalent EF_AMDGPU_MACH_* value for given \p GPU name.
-  unsigned getMACH(StringRef GPU) const;
-
 public:
-  /// \returns Equivalent GPU name for an EF_AMDGPU_MACH_* value.
-  static const char *getMachName(unsigned Mach);
-
   AMDGPUTargetStreamer(MCStreamer &S) : MCTargetStreamer(S) {}
 
   virtual void EmitDirectiveAMDGCNTarget(StringRef Target) = 0;
@@ -58,7 +52,20 @@ public:
   virtual bool EmitISAVersion(StringRef IsaVersionString) = 0;
 
   /// \returns True on success, false on failure.
-  virtual bool EmitHSAMetadata(StringRef HSAMetadataString);
+  virtual bool EmitHSAMetadataV2(StringRef HSAMetadataString);
+
+  /// \returns True on success, false on failure.
+  virtual bool EmitHSAMetadataV3(StringRef HSAMetadataString);
+
+  /// Emit HSA Metadata
+  ///
+  /// When \p Strict is true, known metadata elements must already be
+  /// well-typed. When \p Strict is false, known types are inferred and
+  /// the \p HSAMetadata structure is updated with the correct types.
+  ///
+  /// \returns True on success, false on failure.
+  virtual bool EmitHSAMetadata(std::shared_ptr<msgpack::Node> &HSAMetadata,
+                               bool Strict) = 0;
 
   /// \returns True on success, false on failure.
   virtual bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) = 0;
@@ -71,6 +78,9 @@ public:
       const amdhsa::kernel_descriptor_t &KernelDescriptor, uint64_t NextVGPR,
       uint64_t NextSGPR, bool ReserveVCC, bool ReserveFlatScr,
       bool ReserveXNACK) = 0;
+
+  static StringRef getArchNameFromElfMach(unsigned ElfMach);
+  static unsigned getElfMach(StringRef GPU);
 };
 
 class AMDGPUTargetAsmStreamer final : public AMDGPUTargetStreamer {
@@ -95,6 +105,10 @@ public:
   bool EmitISAVersion(StringRef IsaVersionString) override;
 
   /// \returns True on success, false on failure.
+  bool EmitHSAMetadata(std::shared_ptr<msgpack::Node> &HSAMetadata,
+                       bool Strict) override;
+
+  /// \returns True on success, false on failure.
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;
 
   /// \returns True on success, false on failure.
@@ -110,8 +124,8 @@ public:
 class AMDGPUTargetELFStreamer final : public AMDGPUTargetStreamer {
   MCStreamer &Streamer;
 
-  void EmitAMDGPUNote(const MCExpr *DescSize, unsigned NoteType,
-                      function_ref<void(MCELFStreamer &)> EmitDesc);
+  void EmitNote(StringRef Name, const MCExpr *DescSize, unsigned NoteType,
+                function_ref<void(MCELFStreamer &)> EmitDesc);
 
 public:
   AMDGPUTargetELFStreamer(MCStreamer &S, const MCSubtargetInfo &STI);
@@ -133,6 +147,10 @@ public:
 
   /// \returns True on success, false on failure.
   bool EmitISAVersion(StringRef IsaVersionString) override;
+
+  /// \returns True on success, false on failure.
+  bool EmitHSAMetadata(std::shared_ptr<msgpack::Node> &HSAMetadata,
+                       bool Strict) override;
 
   /// \returns True on success, false on failure.
   bool EmitHSAMetadata(const AMDGPU::HSAMD::Metadata &HSAMetadata) override;

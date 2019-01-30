@@ -1,9 +1,8 @@
 //===- TargetTransformInfoImpl.h --------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -158,6 +157,9 @@ public:
     case Intrinsic::dbg_label:
     case Intrinsic::invariant_start:
     case Intrinsic::invariant_end:
+    case Intrinsic::launder_invariant_group:
+    case Intrinsic::strip_invariant_group:
+    case Intrinsic::is_constant:
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
     case Intrinsic::objectsize:
@@ -311,6 +313,8 @@ public:
 
   bool enableInterleavedAccessVectorization() { return false; }
 
+  bool enableMaskedInterleavedAccessVectorization() { return false; }
+
   bool isFPVectorizationPotentiallyUnsafe() { return false; }
 
   bool allowsMisalignedMemoryAccesses(LLVMContext &Context,
@@ -326,7 +330,7 @@ public:
   bool haveFastSqrt(Type *Ty) { return false; }
 
   bool isFCmpOrdCheaperThanFCmpZero(Type *Ty) { return true; }
-  
+
   unsigned getFPOpCost(Type *Ty) { return TargetTransformInfo::TCC_Basic; }
 
   int getIntImmCodeSizeCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
@@ -448,8 +452,9 @@ public:
   unsigned getInterleavedMemoryOpCost(unsigned Opcode, Type *VecTy,
                                       unsigned Factor,
                                       ArrayRef<unsigned> Indices,
-                                      unsigned Alignment,
-                                      unsigned AddressSpace) {
+                                      unsigned Alignment, unsigned AddressSpace,
+                                      bool UseMaskForCond = false,
+                                      bool UseMaskForGaps = false) {
     return 1;
   }
 
@@ -514,6 +519,14 @@ public:
 
   bool areInlineCompatible(const Function *Caller,
                            const Function *Callee) const {
+    return (Caller->getFnAttribute("target-cpu") ==
+            Callee->getFnAttribute("target-cpu")) &&
+           (Caller->getFnAttribute("target-features") ==
+            Callee->getFnAttribute("target-features"));
+  }
+
+  bool areFunctionArgsABICompatible(const Function *Caller, const Function *Callee,
+                                    SmallPtrSetImpl<Argument *> &Args) const {
     return (Caller->getFnAttribute("target-cpu") ==
             Callee->getFnAttribute("target-cpu")) &&
            (Caller->getFnAttribute("target-features") ==

@@ -1,9 +1,8 @@
 //===-- lib/CodeGen/GlobalISel/CallLowering.cpp - Call lowering -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -23,6 +22,8 @@
 
 using namespace llvm;
 
+void CallLowering::anchor() {}
+
 bool CallLowering::lowerCall(
     MachineIRBuilder &MIRBuilder, ImmutableCallSite CS, unsigned ResReg,
     ArrayRef<unsigned> ArgRegs, std::function<unsigned()> GetCalleeReg) const {
@@ -38,6 +39,9 @@ bool CallLowering::lowerCall(
     ArgInfo OrigArg{ArgRegs[i], Arg->getType(), ISD::ArgFlagsTy{},
                     i < NumFixedArgs};
     setArgFlags(OrigArg, i + AttributeList::FirstArgIndex, DL, CS);
+    // We don't currently support swifterror or swiftself args.
+    if (OrigArg.Flags.isSwiftError() || OrigArg.Flags.isSwiftSelf())
+      return false;
     OrigArgs.push_back(OrigArg);
     ++i;
   }
@@ -161,7 +165,6 @@ unsigned CallLowering::ValueHandler::extendRegister(unsigned ValReg,
     // nop in big-endian situations.
     return ValReg;
   case CCValAssign::AExt: {
-    assert(!VA.getLocVT().isVector() && "unexpected vector extend");
     auto MIB = MIRBuilder.buildAnyExt(LocTy, ValReg);
     return MIB->getOperand(0).getReg();
   }
@@ -178,3 +181,5 @@ unsigned CallLowering::ValueHandler::extendRegister(unsigned ValReg,
   }
   llvm_unreachable("unable to extend register");
 }
+
+void CallLowering::ValueHandler::anchor() {}

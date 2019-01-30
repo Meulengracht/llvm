@@ -1,9 +1,8 @@
 //===- LoopSimplify.cpp - Loop Canonicalization Pass ----------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -137,7 +136,7 @@ BasicBlock *llvm::InsertPreheaderForLoop(Loop *L, DominatorTree *DT,
   // Split out the loop pre-header.
   BasicBlock *PreheaderBB;
   PreheaderBB = SplitBlockPredecessors(Header, OutsideBlocks, ".preheader", DT,
-                                       LI, PreserveLCSSA);
+                                       LI, nullptr, PreserveLCSSA);
   if (!PreheaderBB)
     return nullptr;
 
@@ -251,7 +250,7 @@ static Loop *separateNestedLoop(Loop *L, BasicBlock *Preheader,
     SE->forgetLoop(L);
 
   BasicBlock *NewBB = SplitBlockPredecessors(Header, OuterLoopPreds, ".outer",
-                                             DT, LI, PreserveLCSSA);
+                                             DT, LI, nullptr, PreserveLCSSA);
 
   // Make sure that NewBB is put someplace intelligent, which doesn't mess up
   // code layout too horribly.
@@ -435,7 +434,7 @@ static BasicBlock *insertUniqueBackedgeBlock(Loop *L, BasicBlock *Preheader,
   unsigned LoopMDKind = BEBlock->getContext().getMDKindID("llvm.loop");
   MDNode *LoopMD = nullptr;
   for (unsigned i = 0, e = BackedgeBlocks.size(); i != e; ++i) {
-    TerminatorInst *TI = BackedgeBlocks[i]->getTerminator();
+    Instruction *TI = BackedgeBlocks[i]->getTerminator();
     if (!LoopMD)
       LoopMD = TI->getMetadata(LoopMDKind);
     TI->setMetadata(LoopMDKind, nullptr);
@@ -488,7 +487,7 @@ ReprocessLoop:
                         << P->getName() << "\n");
 
       // Zap the dead pred's terminator and replace it with unreachable.
-      TerminatorInst *TI = P->getTerminator();
+      Instruction *TI = P->getTerminator();
       changeToUnreachable(TI, /*UseLLVMTrap=*/false, PreserveLCSSA);
       Changed = true;
     }

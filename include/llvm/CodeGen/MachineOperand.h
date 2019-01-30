@@ -1,9 +1,8 @@
 //===-- llvm/CodeGen/MachineOperand.h - MachineOperand class ----*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -614,6 +613,11 @@ public:
   const uint32_t *getRegMask() const {
     assert(isRegMask() && "Wrong MachineOperand accessor");
     return Contents.RegMask;
+  }
+
+  /// Returns number of elements needed for a regmask array.
+  static unsigned getRegMaskSize(unsigned NumRegs) {
+    return (NumRegs + 31) / 32;
   }
 
   /// getRegLiveOut - Returns a bit mask of live-out registers.

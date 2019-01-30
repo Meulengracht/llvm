@@ -1,9 +1,8 @@
 //===- PPCCallingConv.td - Calling Conventions for PowerPC -*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,6 +45,7 @@ def RetCC_PPC64_AnyReg : CallingConv<[
 ]>;
 
 // Return-value convention for PowerPC coldcc.
+let Entry = 1 in
 def RetCC_PPC_Cold : CallingConv<[
   // Use the same return registers as RetCC_PPC, but limited to only
   // one return value. The remaining return values will be saved to
@@ -70,6 +70,7 @@ def RetCC_PPC_Cold : CallingConv<[
 ]>;
 
 // Return-value convention for PowerPC
+let Entry = 1 in
 def RetCC_PPC : CallingConv<[
   CCIfCC<"CallingConv::AnyReg", CCDelegateTo<RetCC_PPC64_AnyReg>>,
 
@@ -83,8 +84,14 @@ def RetCC_PPC : CallingConv<[
 
   // Floating point types returned as "direct" go into F1 .. F8; note that
   // only the ELFv2 ABI fully utilizes all these registers.
-  CCIfType<[f32], CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>,
-  CCIfType<[f64], CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>,
+  CCIfNotSubtarget<"hasSPE()",
+       CCIfType<[f32], CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>>,
+  CCIfNotSubtarget<"hasSPE()",
+       CCIfType<[f64], CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>>,
+  CCIfSubtarget<"hasSPE()",
+       CCIfType<[f32], CCAssignToReg<[R3, R4, R5, R6, R7, R8, R9, R10]>>>,
+  CCIfSubtarget<"hasSPE()",
+       CCIfType<[f64], CCAssignToReg<[S3, S4, S5, S6, S7, S8, S9, S10]>>>,
 
   // For P9, f128 are passed in vector registers.
   CCIfType<[f128],
@@ -120,6 +127,7 @@ def CC_PPC64_AnyReg : CallingConv<[
 // Simple calling convention for 64-bit ELF PowerPC fast isel.
 // Only handle ints and floats.  All ints are promoted to i64.
 // Vector types and quadword ints are not handled.
+let Entry = 1 in
 def CC_PPC64_ELF_FIS : CallingConv<[
   CCIfCC<"CallingConv::AnyReg", CCDelegateTo<CC_PPC64_AnyReg>>,
 
@@ -135,6 +143,7 @@ def CC_PPC64_ELF_FIS : CallingConv<[
 // All small ints are promoted to i64.  Vector types, quadword ints,
 // and multiple register returns are "supported" to avoid compile
 // errors, but none are handled by the fast selector.
+let Entry = 1 in
 def RetCC_PPC64_ELF_FIS : CallingConv<[
   CCIfCC<"CallingConv::AnyReg", CCDelegateTo<RetCC_PPC64_AnyReg>>,
 
@@ -188,7 +197,15 @@ def CC_PPC32_SVR4_Common : CallingConv<[
   CCIfType<[f64], CCIfSplit<CCCustom<"CC_PPC32_SVR4_Custom_AlignFPArgRegs">>>,
   
   // FP values are passed in F1 - F8.
-  CCIfType<[f32, f64], CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>,
+  CCIfType<[f32, f64],
+           CCIfNotSubtarget<"hasSPE()",
+                            CCAssignToReg<[F1, F2, F3, F4, F5, F6, F7, F8]>>>,
+  CCIfType<[f64],
+           CCIfSubtarget<"hasSPE()",
+                         CCAssignToReg<[S3, S4, S5, S6, S7, S8, S9, S10]>>>,
+  CCIfType<[f32],
+           CCIfSubtarget<"hasSPE()",
+                         CCAssignToReg<[R3, R4, R5, R6, R7, R8, R9, R10]>>>,
 
   // Split arguments have an alignment of 8 bytes on the stack.
   CCIfType<[i32], CCIfSplit<CCAssignToStack<4, 8>>>,
@@ -197,7 +214,11 @@ def CC_PPC32_SVR4_Common : CallingConv<[
   
   // Floats are stored in double precision format, thus they have the same
   // alignment and size as doubles.
-  CCIfType<[f32,f64], CCAssignToStack<8, 8>>,  
+  // With SPE floats are stored as single precision, so have alignment and
+  // size of int.
+  CCIfType<[f32,f64], CCIfNotSubtarget<"hasSPE()", CCAssignToStack<8, 8>>>,
+  CCIfType<[f32], CCIfSubtarget<"hasSPE()", CCAssignToStack<4, 4>>>,
+  CCIfType<[f64], CCIfSubtarget<"hasSPE()", CCAssignToStack<8, 8>>>,
 
   // QPX vectors that are stored in double precision need 32-byte alignment.
   CCIfType<[v4f64, v4i1], CCAssignToStack<32, 32>>,
@@ -210,12 +231,14 @@ def CC_PPC32_SVR4_Common : CallingConv<[
 // This calling convention puts vector arguments always on the stack. It is used
 // to assign vector arguments which belong to the variable portion of the
 // parameter list of a variable argument function.
+let Entry = 1 in
 def CC_PPC32_SVR4_VarArg : CallingConv<[
   CCDelegateTo<CC_PPC32_SVR4_Common>
 ]>;
 
 // In contrast to CC_PPC32_SVR4_VarArg, this calling convention first tries to
 // put vector arguments in vector registers before putting them on the stack.
+let Entry = 1 in
 def CC_PPC32_SVR4 : CallingConv<[
   // QPX vectors mirror the scalar FP convention.
   CCIfType<[v4f64, v4f32, v4i1], CCIfSubtarget<"hasQPX()",
@@ -247,6 +270,7 @@ def CC_PPC32_SVR4 : CallingConv<[
 // The only purpose of CC_PPC32_SVR4_Custom_Dummy is to skip arguments which are
 // not passed by value.
  
+let Entry = 1 in
 def CC_PPC32_SVR4_ByVal : CallingConv<[
   CCIfByVal<CCPassByVal<4, 4>>,
   
@@ -265,14 +289,22 @@ def CSR_Darwin32 : CalleeSavedRegs<(add R13, R14, R15, R16, R17, R18, R19, R20,
 
 def CSR_Darwin32_Altivec : CalleeSavedRegs<(add CSR_Darwin32, CSR_Altivec)>;
 
-def CSR_SVR432   : CalleeSavedRegs<(add R14, R15, R16, R17, R18, R19, R20,
-                                        R21, R22, R23, R24, R25, R26, R27, R28,
-                                        R29, R30, R31, F14, F15, F16, F17, F18,
+// SPE does not use FPRs, so break out the common register set as base.
+def CSR_SVR432_COMM : CalleeSavedRegs<(add R14, R15, R16, R17, R18, R19, R20,
+                                          R21, R22, R23, R24, R25, R26, R27,
+                                          R28, R29, R30, R31, CR2, CR3, CR4
+                                      )>;
+def CSR_SVR432 :  CalleeSavedRegs<(add CSR_SVR432_COMM, F14, F15, F16, F17, F18,
                                         F19, F20, F21, F22, F23, F24, F25, F26,
-                                        F27, F28, F29, F30, F31, CR2, CR3, CR4
+                                        F27, F28, F29, F30, F31
                                    )>;
+def CSR_SPE : CalleeSavedRegs<(add S14, S15, S16, S17, S18, S19, S20, S21, S22,
+                                   S23, S24, S25, S26, S27, S28, S29, S30, S31
+                              )>;
 
 def CSR_SVR432_Altivec : CalleeSavedRegs<(add CSR_SVR432, CSR_Altivec)>;
+
+def CSR_SVR432_SPE : CalleeSavedRegs<(add CSR_SVR432_COMM, CSR_SPE)>;
 
 def CSR_Darwin64 : CalleeSavedRegs<(add X13, X14, X15, X16, X17, X18, X19, X20,
                                         X21, X22, X23, X24, X25, X26, X27, X28,
@@ -312,7 +344,7 @@ def CSR_NoRegs : CalleeSavedRegs<(add)>;
 // coldcc calling convection marks most registers as non-volatile.
 // Do not include r1 since the stack pointer is never considered a CSR.
 // Do not include r2, since it is the TOC register and is added depending
-// on wether or not the function uses the TOC and is a non-leaf.
+// on whether or not the function uses the TOC and is a non-leaf.
 // Do not include r0,r11,r13 as they are optional in functional linkage
 // and value may be altered by inter-library calls.
 // Do not include r12 as it is used as a scratch register.

@@ -1,9 +1,8 @@
 //===--- MemoryBuffer.h - Memory Buffer Interface ---------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -42,7 +41,6 @@ class MemoryBufferRef;
 class MemoryBuffer {
   const char *BufferStart; // Start of the buffer.
   const char *BufferEnd;   // End of the buffer.
-
 
 protected:
   MemoryBuffer() = default;
@@ -148,9 +146,6 @@ public:
   virtual BufferKind getBufferKind() const = 0;
 
   MemoryBufferRef getMemBufferRef() const;
-
-private:
-  virtual void anchor();
 };
 
 /// This class is an extension of MemoryBuffer, which allows copy-on-write

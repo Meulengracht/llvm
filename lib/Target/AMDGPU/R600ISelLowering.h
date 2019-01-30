@@ -1,9 +1,8 @@
 //===-- R600ISelLowering.h - R600 DAG Lowering Interface -*- C++ -*--------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -98,9 +97,11 @@ private:
   bool isHWTrueValue(SDValue Op) const;
   bool isHWFalseValue(SDValue Op) const;
 
- bool FoldOperand(SDNode *ParentNode, unsigned SrcIdx, SDValue &Src,
-                  SDValue &Neg, SDValue &Abs, SDValue &Sel, SDValue &Imm,
-                  SelectionDAG &DAG) const;
+  bool FoldOperand(SDNode *ParentNode, unsigned SrcIdx, SDValue &Src,
+                   SDValue &Neg, SDValue &Abs, SDValue &Sel, SDValue &Imm,
+                   SelectionDAG &DAG) const;
+  SDValue constBufferLoad(LoadSDNode *LoadNode, int Block,
+                          SelectionDAG &DAG) const;
 
   SDNode *PostISelFolding(MachineSDNode *N, SelectionDAG &DAG) const override;
 };

@@ -2,8 +2,6 @@
 System Library
 ==============
 
-Abstract
-========
 
 This document provides some details on LLVM's System Library, located in the
 source at ``lib/System`` and ``include/llvm/System``. The library's purpose is
@@ -246,4 +244,9 @@ inter-process communications. The implementations might use System V IPC if
 that was available or named pipes, or whatever gets the job done effectively
 for a given operating system.  In all cases, the interface and the
 implementation must be semantically consistent.
+=======
+Moved
+=====
 
+The System Library has been renamed to Support Library with documentation
+available at :doc:`SupportLibrary`. Please, change your links to that page.

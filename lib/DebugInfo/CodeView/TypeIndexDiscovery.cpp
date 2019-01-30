@@ -1,9 +1,8 @@
 //===- TypeIndexDiscovery.cpp -----------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 #include "llvm/DebugInfo/CodeView/TypeIndexDiscovery.h"
@@ -428,7 +427,7 @@ static bool discoverTypeIndices(ArrayRef<uint8_t> Content, SymbolKind Kind,
   case SymbolKind::S_DEFRANGE_SUBFIELD:
     break;
 
-  // No type refernces.
+  // No type references.
   case SymbolKind::S_LABEL32:
   case SymbolKind::S_OBJNAME:
   case SymbolKind::S_COMPILE:
@@ -439,6 +438,7 @@ static bool discoverTypeIndices(ArrayRef<uint8_t> Content, SymbolKind Kind,
   case SymbolKind::S_FRAMEPROC:
   case SymbolKind::S_THUNK32:
   case SymbolKind::S_FRAMECOOKIE:
+  case SymbolKind::S_UNAMESPACE:
     break;
   // Scope ending symbols.
   case SymbolKind::S_END:

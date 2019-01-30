@@ -1,9 +1,8 @@
 //===----------- PPCVSXSwapRemoval.cpp - Remove VSX LE Swaps -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===---------------------------------------------------------------------===//
 //
@@ -443,7 +442,7 @@ bool PPCVSXSwapRemoval::gatherVectorInstructions() {
         // We can handle STXSDX and STXSSPX similarly to LXSDX and LXSSPX,
         // by adding special handling for narrowing copies as well as
         // widening ones.  However, I've experimented with this, and in
-        // practice we currently do not appear to use STXSDX fed by 
+        // practice we currently do not appear to use STXSDX fed by
         // a narrowing copy from a full vector register.  Since I can't
         // generate any useful test cases, I've left this alone for now.
       case PPC::STXSDX:

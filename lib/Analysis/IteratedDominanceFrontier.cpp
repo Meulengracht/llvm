@@ -1,9 +1,8 @@
 //===- IteratedDominanceFrontier.cpp - Compute IDF ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,6 +16,7 @@
 #include <queue>
 
 namespace llvm {
+
 template <class NodeTy, bool IsPostDom>
 void IDFCalculator<NodeTy, IsPostDom>::calculate(
     SmallVectorImpl<BasicBlock *> &PHIBlocks) {
@@ -61,29 +61,39 @@ void IDFCalculator<NodeTy, IsPostDom>::calculate(
       BasicBlock *BB = Node->getBlock();
       // Succ is the successor in the direction we are calculating IDF, so it is
       // successor for IDF, and predecessor for Reverse IDF.
-      for (auto *Succ : children<NodeTy>(BB)) {
+      auto DoWork = [&](BasicBlock *Succ) {
         DomTreeNode *SuccNode = DT.getNode(Succ);
 
         // Quickly skip all CFG edges that are also dominator tree edges instead
         // of catching them below.
         if (SuccNode->getIDom() == Node)
-          continue;
+          return;
 
         const unsigned SuccLevel = SuccNode->getLevel();
         if (SuccLevel > RootLevel)
-          continue;
+          return;
 
         if (!VisitedPQ.insert(SuccNode).second)
-          continue;
+          return;
 
         BasicBlock *SuccBB = SuccNode->getBlock();
         if (useLiveIn && !LiveInBlocks->count(SuccBB))
-          continue;
+          return;
 
         PHIBlocks.emplace_back(SuccBB);
         if (!DefBlocks->count(SuccBB))
           PQ.push(std::make_pair(
               SuccNode, std::make_pair(SuccLevel, SuccNode->getDFSNumIn())));
+      };
+
+      if (GD) {
+        for (auto Pair : children<
+                 std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, NodeTy>>(
+                 {GD, BB}))
+          DoWork(Pair.second);
+      } else {
+        for (auto *Succ : children<NodeTy>(BB))
+          DoWork(Succ);
       }
 
       for (auto DomChild : *Node) {

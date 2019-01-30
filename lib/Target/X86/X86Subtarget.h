@@ -1,9 +1,8 @@
 //===-- X86Subtarget.h - Define Subtarget for the X86 ----------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -51,22 +50,16 @@ enum Style {
 } // end namespace PICStyles
 
 class X86Subtarget final : public X86GenSubtargetInfo {
-public:  
+public:
+  // NOTE: Do not add anything new to this list. Coarse, CPU name based flags
+  // are not a good idea. We should be migrating away from these.
   enum X86ProcFamilyEnum {
     Others,
     IntelAtom,
     IntelSLM,
     IntelGLM,
     IntelGLP,
-    IntelTRM,
-    IntelHaswell,
-    IntelBroadwell,
-    IntelSkylake,
-    IntelKNL,
-    IntelSKX,
-    IntelCannonlake,
-    IntelIcelakeClient,
-    IntelIcelakeServer,
+    IntelTRM
   };
 
 protected:
@@ -229,6 +222,9 @@ protected:
   //  PMULUDQ.
   bool IsPMULLDSlow = false;
 
+  /// True if the PMADDWD instruction is slow compared to PMULLD.
+  bool IsPMADDWDSlow = false;
+
   /// True if unaligned memory accesses of 16-bytes are slow.
   bool IsUAMem16Slow = false;
 
@@ -385,9 +381,23 @@ protected:
   /// Processor supports PCONFIG instruction
   bool HasPCONFIG = false;
 
+  /// Processor has a single uop BEXTR implementation.
+  bool HasFastBEXTR = false;
+
+  /// Try harder to combine to horizontal vector ops if they are fast.
+  bool HasFastHorizontalOps = false;
+
   /// Use a retpoline thunk rather than indirect calls to block speculative
   /// execution.
-  bool UseRetpoline = false;
+  bool UseRetpolineIndirectCalls = false;
+
+  /// Use a retpoline thunk or remove any indirect branch to block speculative
+  /// execution.
+  bool UseRetpolineIndirectBranches = false;
+
+  /// Deprecated flag, query `UseRetpolineIndirectCalls` and
+  /// `UseRetpolineIndirectBranches` instead.
+  bool DeprecatedUseRetpoline = false;
 
   /// When using a retpoline thunk, call an externally provided thunk rather
   /// than emitting one inside the compiler.
@@ -407,6 +417,9 @@ protected:
 
   /// Indicates target prefers 256 bit instructions.
   bool Prefer256Bit = false;
+
+  /// Threeway branch is profitable in this subtarget.
+  bool ThreewayBranchProfitable = false;
 
   /// What processor and OS we're targeting.
   Triple TargetTriple;
@@ -534,7 +547,9 @@ public:
 
   bool hasX87() const { return HasX87; }
   bool hasNOPL() const { return HasNOPL; }
-  bool hasCMov() const { return HasCMov; }
+  // SSE codegen depends on cmovs, and all SSE1+ processors support them.
+  // All 64-bit processors support cmov.
+  bool hasCMov() const { return HasCMov || X86SSELevel >= SSE1 || is64Bit(); }
   bool hasSSE1() const { return X86SSELevel >= SSE1; }
   bool hasSSE2() const { return X86SSELevel >= SSE2; }
   bool hasSSE3() const { return X86SSELevel >= SSE3; }
@@ -599,6 +614,7 @@ public:
   bool hasPTWRITE() const { return HasPTWRITE; }
   bool isSHLDSlow() const { return IsSHLDSlow; }
   bool isPMULLDSlow() const { return IsPMULLDSlow; }
+  bool isPMADDWDSlow() const { return IsPMADDWDSlow; }
   bool isUnalignedMem16Slow() const { return IsUAMem16Slow; }
   bool isUnalignedMem32Slow() const { return IsUAMem32Slow; }
   int getGatherOverhead() const { return GatherOverhead; }
@@ -619,6 +635,8 @@ public:
   bool hasFastVectorFSQRT() const { return HasFastVectorFSQRT; }
   bool hasFastLZCNT() const { return HasFastLZCNT; }
   bool hasFastSHLDRotate() const { return HasFastSHLDRotate; }
+  bool hasFastBEXTR() const { return HasFastBEXTR; }
+  bool hasFastHorizontalOps() const { return HasFastHorizontalOps; }
   bool hasMacroFusion() const { return HasMacroFusion; }
   bool hasERMSB() const { return HasERMSB; }
   bool hasSlowDivide32() const { return HasSlowDivide32; }
@@ -648,8 +666,12 @@ public:
   bool hasWAITPKG() const { return HasWAITPKG; }
   bool hasPCONFIG() const { return HasPCONFIG; }
   bool hasSGX() const { return HasSGX; }
+  bool threewayBranchProfitable() const { return ThreewayBranchProfitable; }
   bool hasINVPCID() const { return HasINVPCID; }
-  bool useRetpoline() const { return UseRetpoline; }
+  bool useRetpolineIndirectCalls() const { return UseRetpolineIndirectCalls; }
+  bool useRetpolineIndirectBranches() const {
+    return UseRetpolineIndirectBranches;
+  }
   bool useRetpolineExternalThunk() const { return UseRetpolineExternalThunk; }
 
   unsigned getPreferVectorWidth() const { return PreferVectorWidth; }
@@ -804,7 +826,9 @@ public:
 
   /// If we are using retpolines, we need to expand indirectbr to avoid it
   /// lowering to an actual indirect jump.
-  bool enableIndirectBrExpand() const override { return useRetpoline(); }
+  bool enableIndirectBrExpand() const override {
+    return useRetpolineIndirectBranches();
+  }
 
   /// Enable the MachineScheduler pass for all X86 subtargets.
   bool enableMachineScheduler() const override { return true; }

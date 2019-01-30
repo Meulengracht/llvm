@@ -1,9 +1,8 @@
 //===- SimplifyLibCalls.h - Library call simplifier -------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -77,21 +76,34 @@ private:
   OptimizationRemarkEmitter &ORE;
   bool UnsafeFPShrink;
   function_ref<void(Instruction *, Value *)> Replacer;
+  function_ref<void(Instruction *)> Eraser;
 
   /// Internal wrapper for RAUW that is the default implementation.
   ///
   /// Other users may provide an alternate function with this signature instead
   /// of this one.
-  static void replaceAllUsesWithDefault(Instruction *I, Value *With);
+  static void replaceAllUsesWithDefault(Instruction *I, Value *With) {
+    I->replaceAllUsesWith(With);
+  }
+
+  /// Internal wrapper for eraseFromParent that is the default implementation.
+  static void eraseFromParentDefault(Instruction *I) { I->eraseFromParent(); }
 
   /// Replace an instruction's uses with a value using our replacer.
   void replaceAllUsesWith(Instruction *I, Value *With);
 
+  /// Erase an instruction from its parent with our eraser.
+  void eraseFromParent(Instruction *I);
+
+  Value *foldMallocMemset(CallInst *Memset, IRBuilder<> &B);
+
 public:
-  LibCallSimplifier(const DataLayout &DL, const TargetLibraryInfo *TLI,
-                    OptimizationRemarkEmitter &ORE,
-                    function_ref<void(Instruction *, Value *)> Replacer =
-                        &replaceAllUsesWithDefault);
+  LibCallSimplifier(
+      const DataLayout &DL, const TargetLibraryInfo *TLI,
+      OptimizationRemarkEmitter &ORE,
+      function_ref<void(Instruction *, Value *)> Replacer =
+          &replaceAllUsesWithDefault,
+      function_ref<void(Instruction *)> Eraser = &eraseFromParentDefault);
 
   /// optimizeCall - Take the given call instruction and return a more
   /// optimal value to replace the instruction with or 0 if a more
@@ -131,8 +143,8 @@ private:
 
   // Math Library Optimizations
   Value *optimizeCAbs(CallInst *CI, IRBuilder<> &B);
-  Value *optimizeCos(CallInst *CI, IRBuilder<> &B);
   Value *optimizePow(CallInst *CI, IRBuilder<> &B);
+  Value *replacePowWithExp(CallInst *Pow, IRBuilder<> &B);
   Value *replacePowWithSqrt(CallInst *Pow, IRBuilder<> &B);
   Value *optimizeExp2(CallInst *CI, IRBuilder<> &B);
   Value *optimizeFMinFMax(CallInst *CI, IRBuilder<> &B);

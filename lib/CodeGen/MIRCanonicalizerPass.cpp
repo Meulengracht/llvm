@@ -1,9 +1,8 @@
 //===-------------- MIRCanonicalizer.cpp - MIR Canonicalizer --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -134,10 +133,10 @@ rescheduleLexographically(std::vector<MachineInstr *> instructions,
     StringInstrMap.push_back({(i == std::string::npos) ? S : S.substr(i), II});
   }
 
-  std::sort(StringInstrMap.begin(), StringInstrMap.end(),
-            [](const StringInstrPair &a, const StringInstrPair &b) -> bool {
-              return (a.first < b.first);
-            });
+  llvm::sort(StringInstrMap,
+             [](const StringInstrPair &a, const StringInstrPair &b) -> bool {
+               return (a.first < b.first);
+             });
 
   for (auto &II : StringInstrMap) {
 
@@ -677,8 +676,7 @@ static bool runOnBasicBlock(MachineBasicBlock *MBB,
 
   std::vector<MachineInstr *> Candidates = populateCandidates(MBB);
   std::vector<MachineInstr *> VisitedMIs;
-  std::copy(Candidates.begin(), Candidates.end(),
-            std::back_inserter(VisitedMIs));
+  llvm::copy(Candidates, std::back_inserter(VisitedMIs));
 
   std::vector<TypedVReg> VRegs;
   for (auto candidate : Candidates) {

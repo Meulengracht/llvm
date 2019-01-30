@@ -1,9 +1,8 @@
 //===-- X86InstrCMovSetCC.td - Conditional Move and SetCC --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -38,7 +37,7 @@ multiclass CMOV<bits<8> opc, string Mnemonic, X86FoldableSchedWrite Sched,
   }
 
   let Uses = [EFLAGS], Predicates = [HasCMov], Constraints = "$src1 = $dst",
-      SchedRW = [Sched.Folded, ReadAfterLd] in {
+      SchedRW = [Sched.Folded, Sched.ReadAfterFold] in {
     def NAME#16rm
       : I<opc, MRMSrcMem, (outs GR16:$dst), (ins GR16:$src1, i16mem:$src2),
           !strconcat(Mnemonic, "{w}\t{$src2, $dst|$dst, $src2}"),

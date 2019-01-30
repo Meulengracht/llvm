@@ -1,9 +1,8 @@
 //===------ PPCLoopPreIncPrep.cpp - Loop Pre-Inc. AM Prep. Pass -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -360,7 +359,7 @@ bool PPCLoopPreIncPrep::runOnLoop(Loop *L) {
     // generate direct offsets from both the pre-incremented and
     // post-incremented pointer values. Thus, we'll pick the first non-prefetch
     // instruction in each bucket, and adjust the recurrence and other offsets
-    // accordingly. 
+    // accordingly.
     for (int j = 0, je = Buckets[i].Elements.size(); j != je; ++j) {
       if (auto *II = dyn_cast<IntrinsicInst>(Buckets[i].Elements[j].Instr))
         if (II->getIntrinsicID() == Intrinsic::prefetch)

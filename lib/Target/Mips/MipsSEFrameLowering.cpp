@@ -1,9 +1,8 @@
 //===- MipsSEFrameLowering.cpp - Mips32/64 Frame Information --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -299,8 +298,12 @@ bool ExpandPseudo::expandBuildPairF64(MachineBasicBlock &MBB,
   // register). Unfortunately, we have to make this decision before register
   // allocation so for now we use a spill/reload sequence for all
   // double-precision values in regardless of being an odd/even register.
-  if ((Subtarget.isABI_FPXX() && !Subtarget.hasMTHC1()) ||
-      (FP64 && !Subtarget.useOddSPReg())) {
+  //
+  // For the cases that should be covered here MipsSEISelDAGToDAG adds $sp as
+  // implicit operand, so other passes (like ShrinkWrapping) are aware that
+  // stack is used.
+  if (I->getNumOperands() == 4 && I->getOperand(3).isReg()
+      && I->getOperand(3).getReg() == Mips::SP) {
     unsigned DstReg = I->getOperand(0).getReg();
     unsigned LoReg = I->getOperand(1).getReg();
     unsigned HiReg = I->getOperand(2).getReg();
@@ -360,9 +363,12 @@ bool ExpandPseudo::expandExtractElementF64(MachineBasicBlock &MBB,
   // register). Unfortunately, we have to make this decision before register
   // allocation so for now we use a spill/reload sequence for all
   // double-precision values in regardless of being an odd/even register.
-
-  if ((Subtarget.isABI_FPXX() && !Subtarget.hasMTHC1()) ||
-      (FP64 && !Subtarget.useOddSPReg())) {
+  //
+  // For the cases that should be covered here MipsSEISelDAGToDAG adds $sp as
+  // implicit operand, so other passes (like ShrinkWrapping) are aware that
+  // stack is used.
+  if (I->getNumOperands() == 4 && I->getOperand(3).isReg()
+      && I->getOperand(3).getReg() == Mips::SP) {
     unsigned DstReg = I->getOperand(0).getReg();
     unsigned SrcReg = Op1.getReg();
     unsigned N = Op2.getImm();

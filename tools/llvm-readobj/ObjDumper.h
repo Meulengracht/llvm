@@ -1,9 +1,8 @@
 //===-- ObjDumper.h ---------------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -14,6 +13,7 @@
 #include <system_error>
 
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Object/ObjectFile.h"
 
 namespace llvm {
 namespace object {
@@ -32,10 +32,14 @@ public:
   virtual ~ObjDumper();
 
   virtual void printFileHeaders() = 0;
-  virtual void printSections() = 0;
+  virtual void printSectionHeaders() = 0;
   virtual void printRelocations() = 0;
-  virtual void printSymbols() = 0;
-  virtual void printDynamicSymbols() = 0;
+  virtual void printSymbols(bool PrintSymbols, bool PrintDynamicSymbols) {
+    if (PrintSymbols)
+      printSymbols();
+    if (PrintDynamicSymbols)
+      printDynamicSymbols();
+  }
   virtual void printUnwindInfo() = 0;
 
   // Only implemented for ELF at this time.
@@ -43,15 +47,16 @@ public:
   virtual void printDynamicTable() { }
   virtual void printNeededLibraries() { }
   virtual void printProgramHeaders() { }
-  virtual void printSectionAsString(StringRef SectionName) {}
   virtual void printSectionAsHex(StringRef SectionName) {}
   virtual void printHashTable() { }
   virtual void printGnuHashTable() { }
+  virtual void printHashSymbols() {}
   virtual void printLoadName() {}
   virtual void printVersionInfo() {}
   virtual void printGroupSections() {}
   virtual void printHashHistogram() {}
   virtual void printCGProfile() {}
+  virtual void printAddrsig() {}
   virtual void printNotes() {}
   virtual void printELFLinkerOptions() {}
 
@@ -87,9 +92,15 @@ public:
 
   virtual void printStackMap() const = 0;
 
+  void printSectionAsString(const object::ObjectFile *Obj, StringRef SecName);
+  void printSectionAsHex(const object::ObjectFile *Obj, StringRef SecName);
+
 protected:
   ScopedPrinter &W;
-  void SectionHexDump(StringRef SecName, const uint8_t *Section, size_t Size);
+
+private:
+  virtual void printSymbols() {};
+  virtual void printDynamicSymbols() {};
 };
 
 std::error_code createCOFFDumper(const object::ObjectFile *Obj,

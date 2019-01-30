@@ -1,9 +1,8 @@
 //===-- AMDGPUAsmPrinter.h - Print AMDGPU assembly code ---------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -56,7 +55,7 @@ private:
   SIProgramInfo CurrentProgramInfo;
   DenseMap<const Function *, SIFunctionResourceInfo> CallGraphResourceInfo;
 
-  AMDGPU::HSAMD::MetadataStreamer HSAMetadataStream;
+  std::unique_ptr<AMDGPU::HSAMD::MetadataStreamer> HSAMetadataStream;
   std::map<uint32_t, uint32_t> PALMetadataMap;
 
   uint64_t getFunctionCodeSize(const MachineFunction &MF) const;
@@ -143,7 +142,6 @@ public:
 protected:
   mutable std::vector<std::string> DisasmLines, HexLines;
   mutable size_t DisasmLineMaxLen;
-  AMDGPUAS AMDGPUASI;
 };
 
 } // end namespace llvm

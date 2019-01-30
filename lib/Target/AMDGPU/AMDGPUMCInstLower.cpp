@@ -1,9 +1,8 @@
 //===- AMDGPUMCInstLower.cpp - Lower AMDGPU MachineInstr to an MCInst -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -300,6 +299,26 @@ void AMDGPUAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     MCInst TmpInst;
     MCInstLowering.lower(MI, TmpInst);
     EmitToStreamer(*OutStreamer, TmpInst);
+
+#ifdef EXPENSIVE_CHECKS
+    // Sanity-check getInstSizeInBytes on explicitly specified CPUs (it cannot
+    // work correctly for the generic CPU).
+    //
+    // The isPseudo check really shouldn't be here, but unfortunately there are
+    // some negative lit tests that depend on being able to continue through
+    // here even when pseudo instructions haven't been lowered.
+    if (!MI->isPseudo() && STI.isCPUStringValid(STI.getCPU())) {
+      SmallVector<MCFixup, 4> Fixups;
+      SmallVector<char, 16> CodeBytes;
+      raw_svector_ostream CodeStream(CodeBytes);
+
+      std::unique_ptr<MCCodeEmitter> InstEmitter(createSIMCCodeEmitter(
+          *STI.getInstrInfo(), *OutContext.getRegisterInfo(), OutContext));
+      InstEmitter->encodeInstruction(TmpInst, CodeStream, Fixups, STI);
+
+      assert(CodeBytes.size() == STI.getInstrInfo()->getInstSizeInBytes(*MI));
+    }
+#endif
 
     if (STI.dumpCode()) {
       // Disassemble instruction/operands to text.

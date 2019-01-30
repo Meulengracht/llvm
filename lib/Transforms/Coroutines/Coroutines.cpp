@@ -1,9 +1,8 @@
 //===- Coroutines.cpp -----------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Transforms/Coroutines.h"
+#include "llvm-c/Transforms/Coroutines.h"
 #include "CoroInstr.h"
 #include "CoroInternal.h"
 #include "llvm/ADT/SmallVector.h"
@@ -343,4 +343,20 @@ void coro::Shape::buildFrom(Function &F) {
   // Remove orphaned coro.saves.
   for (CoroSaveInst *CoroSave : UnusedCoroSaves)
     CoroSave->eraseFromParent();
+}
+
+void LLVMAddCoroEarlyPass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createCoroEarlyPass());
+}
+
+void LLVMAddCoroSplitPass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createCoroSplitPass());
+}
+
+void LLVMAddCoroElidePass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createCoroElidePass());
+}
+
+void LLVMAddCoroCleanupPass(LLVMPassManagerRef PM) {
+  unwrap(PM)->add(createCoroCleanupPass());
 }

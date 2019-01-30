@@ -1,9 +1,8 @@
 //===-- SlotIndexes.cpp - Slot Indexes Pass  ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -95,7 +94,7 @@ bool SlotIndexes::runOnMachineFunction(MachineFunction &fn) {
   }
 
   // Sort the Idx2MBBMap
-  llvm::sort(idx2MBBMap.begin(), idx2MBBMap.end(), Idx2MBBCompare());
+  llvm::sort(idx2MBBMap, Idx2MBBCompare());
 
   LLVM_DEBUG(mf->print(dbgs(), this));
 

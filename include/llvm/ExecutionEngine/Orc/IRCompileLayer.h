@@ -1,9 +1,8 @@
 //===- IRCompileLayer.h -- Eagerly compile IR for JIT -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -28,21 +27,20 @@ class Module;
 
 namespace orc {
 
-class IRCompileLayer2 : public IRLayer {
+class IRCompileLayer : public IRLayer {
 public:
   using CompileFunction =
       std::function<Expected<std::unique_ptr<MemoryBuffer>>(Module &)>;
 
   using NotifyCompiledFunction =
-      std::function<void(VModuleKey K, std::unique_ptr<Module>)>;
+      std::function<void(VModuleKey K, ThreadSafeModule TSM)>;
 
-  IRCompileLayer2(ExecutionSession &ES, ObjectLayer &BaseLayer,
-                  CompileFunction Compile);
+  IRCompileLayer(ExecutionSession &ES, ObjectLayer &BaseLayer,
+                 CompileFunction Compile);
 
   void setNotifyCompiled(NotifyCompiledFunction NotifyCompiled);
 
-  void emit(MaterializationResponsibility R, VModuleKey K,
-            std::unique_ptr<Module> M) override;
+  void emit(MaterializationResponsibility R, ThreadSafeModule TSM) override;
 
 private:
   mutable std::mutex IRLayerMutex;
@@ -57,15 +55,15 @@ private:
 /// object file and adds this module file to the layer below, which must
 /// implement the object layer concept.
 template <typename BaseLayerT, typename CompileFtor>
-class IRCompileLayer {
+class LegacyIRCompileLayer {
 public:
   /// Callback type for notifications when modules are compiled.
   using NotifyCompiledCallback =
       std::function<void(VModuleKey K, std::unique_ptr<Module>)>;
 
-  /// Construct an IRCompileLayer with the given BaseLayer, which must
+  /// Construct an LegacyIRCompileLayer with the given BaseLayer, which must
   ///        implement the ObjectLayer concept.
-  IRCompileLayer(
+  LegacyIRCompileLayer(
       BaseLayerT &BaseLayer, CompileFtor Compile,
       NotifyCompiledCallback NotifyCompiled = NotifyCompiledCallback())
       : BaseLayer(BaseLayer), Compile(std::move(Compile)),

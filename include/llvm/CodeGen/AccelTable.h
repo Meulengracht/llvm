@@ -1,9 +1,8 @@
 //==- include/llvm/CodeGen/AccelTable.h - Accelerator Tables -----*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -122,8 +121,8 @@ public:
     return order() < Other.order();
   }
 
-  // Subclasses should implement:
-  // static uint32_t hash(StringRef Name);
+    // Subclasses should implement:
+    // static uint32_t hash(StringRef Name);
 
 #ifndef NDEBUG
   virtual void print(raw_ostream &OS) const = 0;
@@ -261,11 +260,37 @@ public:
 #endif
 
   const DIE &getDie() const { return Die; }
+  uint64_t getDieOffset() const { return Die.getOffset(); }
+  unsigned getDieTag() const { return Die.getTag(); }
 
 protected:
   const DIE &Die;
 
   uint64_t order() const override { return Die.getOffset(); }
+};
+
+class DWARF5AccelTableStaticData : public AccelTableData {
+public:
+  static uint32_t hash(StringRef Name) { return caseFoldingDjbHash(Name); }
+
+  DWARF5AccelTableStaticData(uint64_t DieOffset, unsigned DieTag,
+                             unsigned CUIndex)
+      : DieOffset(DieOffset), DieTag(DieTag), CUIndex(CUIndex) {}
+
+#ifndef NDEBUG
+  void print(raw_ostream &OS) const override;
+#endif
+
+  uint64_t getDieOffset() const { return DieOffset; }
+  unsigned getDieTag() const { return DieTag; }
+  unsigned getCUIndex() const { return CUIndex; }
+
+protected:
+  uint64_t DieOffset;
+  unsigned DieTag;
+  unsigned CUIndex;
+
+  uint64_t order() const override { return DieOffset; }
 };
 
 void emitAppleAccelTableImpl(AsmPrinter *Asm, AccelTableBase &Contents,
@@ -287,11 +312,17 @@ void emitDWARF5AccelTable(AsmPrinter *Asm,
                           const DwarfDebug &DD,
                           ArrayRef<std::unique_ptr<DwarfCompileUnit>> CUs);
 
+void emitDWARF5AccelTable(
+    AsmPrinter *Asm, AccelTable<DWARF5AccelTableStaticData> &Contents,
+    ArrayRef<MCSymbol *> CUs,
+    llvm::function_ref<unsigned(const DWARF5AccelTableStaticData &)>
+        getCUIndexForEntry);
+
 /// Accelerator table data implementation for simple Apple accelerator tables
 /// with just a DIE reference.
 class AppleAccelTableOffsetData : public AppleAccelTableData {
 public:
-  AppleAccelTableOffsetData(const DIE *D) : Die(D) {}
+  AppleAccelTableOffsetData(const DIE &D) : Die(D) {}
 
   void emit(AsmPrinter *Asm) const override;
 
@@ -308,15 +339,15 @@ public:
   void print(raw_ostream &OS) const override;
 #endif
 protected:
-  uint64_t order() const override { return Die->getOffset(); }
+  uint64_t order() const override { return Die.getOffset(); }
 
-  const DIE *Die;
+  const DIE &Die;
 };
 
 /// Accelerator table data implementation for Apple type accelerator tables.
 class AppleAccelTableTypeData : public AppleAccelTableOffsetData {
 public:
-  AppleAccelTableTypeData(const DIE *D) : AppleAccelTableOffsetData(D) {}
+  AppleAccelTableTypeData(const DIE &D) : AppleAccelTableOffsetData(D) {}
 
   void emit(AsmPrinter *Asm) const override;
 

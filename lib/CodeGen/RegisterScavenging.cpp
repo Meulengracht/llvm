@@ -1,9 +1,8 @@
 //===- RegisterScavenging.cpp - Machine register scavenging ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -162,8 +161,8 @@ void RegScavenger::unprocess() {
     determineKillsAndDefs();
 
     // Commit the changes.
-    setUsed(KillRegUnits);
     setUnused(DefRegUnits);
+    setUsed(KillRegUnits);
   }
 
   if (MBBI == MBB->begin()) {
@@ -594,7 +593,8 @@ unsigned RegScavenger::scavengeRegisterBackwards(const TargetRegisterClass &RC,
     MachineBasicBlock::iterator ReloadAfter =
       RestoreAfter ? std::next(MBBI) : MBBI;
     MachineBasicBlock::iterator ReloadBefore = std::next(ReloadAfter);
-    LLVM_DEBUG(dbgs() << "Reload before: " << *ReloadBefore << '\n');
+    if (ReloadBefore != MBB.end())
+      LLVM_DEBUG(dbgs() << "Reload before: " << *ReloadBefore << '\n');
     ScavengedInfo &Scavenged = spill(Reg, RC, SPAdj, SpillBefore, ReloadBefore);
     Scavenged.Restore = &*std::prev(SpillBefore);
     LiveUnits.removeReg(Reg);

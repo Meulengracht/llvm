@@ -1,9 +1,8 @@
 //===-- NVPTXAsmPrinter.h - NVPTX LLVM assembly writer ----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -248,7 +247,7 @@ protected:
 
 private:
   bool GlobalsEmitted;
-  
+
   // This is specific per MachineFunction.
   const MachineRegisterInfo *MRI;
   // The contents are specific for each
@@ -257,9 +256,6 @@ private:
   typedef DenseMap<unsigned, unsigned> VRegMap;
   typedef DenseMap<const TargetRegisterClass *, VRegMap> VRegRCMap;
   VRegRCMap VRegMapping;
-
-  // Cache the subtarget here.
-  const NVPTXSubtarget *nvptxSubtarget;
 
   // List of variables demoted to a function scope.
   std::map<const Function *, std::vector<const GlobalVariable *>> localDecls;
@@ -310,6 +306,8 @@ public:
   }
 
   std::string getVirtualRegisterName(unsigned) const;
+
+  const MCSymbol *getFunctionFrameSymbol() const override;
 };
 
 } // end namespace llvm

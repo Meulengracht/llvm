@@ -1,9 +1,8 @@
 //===--------------------- AMDKernelCodeTInfo.h ---------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -46,6 +45,7 @@
    int64_t Value = 0; \
    if (!expectAbsExpression(MCParser, Value, Err)) \
      return false; \
+   C.compute_pgm_resource_registers &= ~(SetMacro(0xFFFFFFFFFFFFFFFFULL) << Shift); \
    C.compute_pgm_resource_registers |= SetMacro(Value) << Shift; \
    return true; \
 }

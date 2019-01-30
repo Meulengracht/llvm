@@ -1,9 +1,8 @@
 //===- CGSCCPassManager.h - Call graph pass management ----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -364,6 +363,10 @@ public:
                             InvalidSCCSet,       nullptr,   nullptr,
                             InlinedInternalEdges};
 
+    // Request PassInstrumentation from analysis manager, will use it to run
+    // instrumenting callbacks for the passes later.
+    PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(M);
+
     PreservedAnalyses PA = PreservedAnalyses::all();
     CG.buildRefSCCs();
     for (auto RCI = CG.postorder_ref_scc_begin(),
@@ -428,7 +431,19 @@ public:
 
             UR.UpdatedRC = nullptr;
             UR.UpdatedC = nullptr;
+
+            // Check the PassInstrumentation's BeforePass callbacks before
+            // running the pass, skip its execution completely if asked to
+            // (callback returns false).
+            if (!PI.runBeforePass<LazyCallGraph::SCC>(Pass, *C))
+              continue;
+
             PreservedAnalyses PassPA = Pass.run(*C, CGAM, CG, UR);
+
+            if (UR.InvalidatedSCCs.count(C))
+              PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass);
+            else
+              PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C);
 
             // Update the SCC and RefSCC if necessary.
             C = UR.UpdatedC ? UR.UpdatedC : C;
@@ -615,12 +630,20 @@ public:
       if (CG.lookupSCC(*N) != CurrentC)
         continue;
 
-      PreservedAnalyses PassPA = Pass.run(N->getFunction(), FAM);
+      Function &F = N->getFunction();
+
+      PassInstrumentation PI = FAM.getResult<PassInstrumentationAnalysis>(F);
+      if (!PI.runBeforePass<Function>(Pass, F))
+        continue;
+
+      PreservedAnalyses PassPA = Pass.run(F, FAM);
+
+      PI.runAfterPass<Function>(Pass, F);
 
       // We know that the function pass couldn't have invalidated any other
       // function's analyses (that's the contract of a function pass), so
       // directly handle the function analysis manager's invalidation here.
-      FAM.invalidate(N->getFunction(), PassPA);
+      FAM.invalidate(F, PassPA);
 
       // Then intersect the preserved set so that invalidation of module
       // analyses will eventually occur when the module pass completes.
@@ -690,6 +713,8 @@ public:
   PreservedAnalyses run(LazyCallGraph::SCC &InitialC, CGSCCAnalysisManager &AM,
                         LazyCallGraph &CG, CGSCCUpdateResult &UR) {
     PreservedAnalyses PA = PreservedAnalyses::all();
+    PassInstrumentation PI =
+        AM.getResult<PassInstrumentationAnalysis>(InitialC, CG);
 
     // The SCC may be refined while we are running passes over it, so set up
     // a pointer that we can update.
@@ -733,7 +758,16 @@ public:
     auto CallCounts = ScanSCC(*C, CallHandles);
 
     for (int Iteration = 0;; ++Iteration) {
+
+      if (!PI.runBeforePass<LazyCallGraph::SCC>(Pass, *C))
+        continue;
+
       PreservedAnalyses PassPA = Pass.run(*C, AM, CG, UR);
+
+      if (UR.InvalidatedSCCs.count(C))
+        PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass);
+      else
+        PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C);
 
       // If the SCC structure has changed, bail immediately and let the outer
       // CGSCC layer handle any iteration to reflect the refined structure.

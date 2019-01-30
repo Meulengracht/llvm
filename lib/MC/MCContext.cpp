@@ -1,9 +1,8 @@
 //===- lib/MC/MCContext.cpp - Machine Code Context ------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -593,7 +592,7 @@ bool MCContext::isValidDwarfFileNumber(unsigned FileNumber, unsigned CUID) {
   return !LineTable.getMCDwarfFiles()[FileNumber].Name.empty();
 }
 
-/// Remove empty sections from SectionStartEndSyms, to avoid generating
+/// Remove empty sections from SectionsForRanges, to avoid generating
 /// useless debug info for them.
 void MCContext::finalizeDwarfSections(MCStreamer &MCOS) {
   SectionsForRanges.remove_if(
@@ -604,11 +603,6 @@ CodeViewContext &MCContext::getCVContext() {
   if (!CVContext.get())
     CVContext.reset(new CodeViewContext);
   return *CVContext.get();
-}
-
-void MCContext::clearCVLocSeen() {
-  if (CVContext)
-    CVContext->clearCVLocSeen();
 }
 
 //===----------------------------------------------------------------------===//

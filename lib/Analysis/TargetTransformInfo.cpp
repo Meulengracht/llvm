@@ -1,9 +1,8 @@
 //===- llvm/Analysis/TargetTransformInfo.cpp ------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -268,6 +267,10 @@ bool TargetTransformInfo::enableInterleavedAccessVectorization() const {
   return TTIImpl->enableInterleavedAccessVectorization();
 }
 
+bool TargetTransformInfo::enableMaskedInterleavedAccessVectorization() const {
+  return TTIImpl->enableMaskedInterleavedAccessVectorization();
+}
+
 bool TargetTransformInfo::isFPVectorizationPotentiallyUnsafe() const {
   return TTIImpl->isFPVectorizationPotentiallyUnsafe();
 }
@@ -384,6 +387,55 @@ unsigned TargetTransformInfo::getMaxInterleaveFactor(unsigned VF) const {
   return TTIImpl->getMaxInterleaveFactor(VF);
 }
 
+TargetTransformInfo::OperandValueKind
+TargetTransformInfo::getOperandInfo(Value *V, OperandValueProperties &OpProps) {
+  OperandValueKind OpInfo = OK_AnyValue;
+  OpProps = OP_None;
+
+  if (auto *CI = dyn_cast<ConstantInt>(V)) {
+    if (CI->getValue().isPowerOf2())
+      OpProps = OP_PowerOf2;
+    return OK_UniformConstantValue;
+  }
+
+  // A broadcast shuffle creates a uniform value.
+  // TODO: Add support for non-zero index broadcasts.
+  // TODO: Add support for different source vector width.
+  if (auto *ShuffleInst = dyn_cast<ShuffleVectorInst>(V))
+    if (ShuffleInst->isZeroEltSplat())
+      OpInfo = OK_UniformValue;
+
+  const Value *Splat = getSplatValue(V);
+
+  // Check for a splat of a constant or for a non uniform vector of constants
+  // and check if the constant(s) are all powers of two.
+  if (isa<ConstantVector>(V) || isa<ConstantDataVector>(V)) {
+    OpInfo = OK_NonUniformConstantValue;
+    if (Splat) {
+      OpInfo = OK_UniformConstantValue;
+      if (auto *CI = dyn_cast<ConstantInt>(Splat))
+        if (CI->getValue().isPowerOf2())
+          OpProps = OP_PowerOf2;
+    } else if (auto *CDS = dyn_cast<ConstantDataSequential>(V)) {
+      OpProps = OP_PowerOf2;
+      for (unsigned I = 0, E = CDS->getNumElements(); I != E; ++I) {
+        if (auto *CI = dyn_cast<ConstantInt>(CDS->getElementAsConstant(I)))
+          if (CI->getValue().isPowerOf2())
+            continue;
+        OpProps = OP_None;
+        break;
+      }
+    }
+  }
+
+  // Check for a splat of a uniform value. This is not loop aware, so return
+  // true only for the obviously uniform cases (argument, globalvalue)
+  if (Splat && (isa<Argument>(Splat) || isa<GlobalValue>(Splat)))
+    OpInfo = OK_UniformValue;
+
+  return OpInfo;
+}
+
 int TargetTransformInfo::getArithmeticInstrCost(
     unsigned Opcode, Type *Ty, OperandValueKind Opd1Info,
     OperandValueKind Opd2Info, OperandValueProperties Opd1PropInfo,
@@ -472,9 +524,12 @@ int TargetTransformInfo::getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
 
 int TargetTransformInfo::getInterleavedMemoryOpCost(
     unsigned Opcode, Type *VecTy, unsigned Factor, ArrayRef<unsigned> Indices,
-    unsigned Alignment, unsigned AddressSpace) const {
+    unsigned Alignment, unsigned AddressSpace, bool UseMaskForCond,
+    bool UseMaskForGaps) const {
   int Cost = TTIImpl->getInterleavedMemoryOpCost(Opcode, VecTy, Factor, Indices,
-                                                 Alignment, AddressSpace);
+                                                 Alignment, AddressSpace,
+                                                 UseMaskForCond,
+                                                 UseMaskForGaps);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -569,6 +624,12 @@ bool TargetTransformInfo::areInlineCompatible(const Function *Caller,
   return TTIImpl->areInlineCompatible(Caller, Callee);
 }
 
+bool TargetTransformInfo::areFunctionArgsABICompatible(
+    const Function *Caller, const Function *Callee,
+    SmallPtrSetImpl<Argument *> &Args) const {
+  return TTIImpl->areFunctionArgsABICompatible(Caller, Callee, Args);
+}
+
 bool TargetTransformInfo::isIndexedLoadLegal(MemIndexedMode Mode,
                                              Type *Ty) const {
   return TTIImpl->isIndexedLoadLegal(Mode, Ty);
@@ -630,49 +691,6 @@ int TargetTransformInfo::getInstructionLatency(const Instruction *I) const {
   return TTIImpl->getInstructionLatency(I);
 }
 
-static TargetTransformInfo::OperandValueKind
-getOperandInfo(Value *V, TargetTransformInfo::OperandValueProperties &OpProps) {
-  TargetTransformInfo::OperandValueKind OpInfo =
-      TargetTransformInfo::OK_AnyValue;
-  OpProps = TargetTransformInfo::OP_None;
-
-  if (auto *CI = dyn_cast<ConstantInt>(V)) {
-    if (CI->getValue().isPowerOf2())
-      OpProps = TargetTransformInfo::OP_PowerOf2;
-    return TargetTransformInfo::OK_UniformConstantValue;
-  }
-
-  const Value *Splat = getSplatValue(V);
-
-  // Check for a splat of a constant or for a non uniform vector of constants
-  // and check if the constant(s) are all powers of two.
-  if (isa<ConstantVector>(V) || isa<ConstantDataVector>(V)) {
-    OpInfo = TargetTransformInfo::OK_NonUniformConstantValue;
-    if (Splat) {
-      OpInfo = TargetTransformInfo::OK_UniformConstantValue;
-      if (auto *CI = dyn_cast<ConstantInt>(Splat))
-        if (CI->getValue().isPowerOf2())
-          OpProps = TargetTransformInfo::OP_PowerOf2;
-    } else if (auto *CDS = dyn_cast<ConstantDataSequential>(V)) {
-      OpProps = TargetTransformInfo::OP_PowerOf2;
-      for (unsigned I = 0, E = CDS->getNumElements(); I != E; ++I) {
-        if (auto *CI = dyn_cast<ConstantInt>(CDS->getElementAsConstant(I)))
-          if (CI->getValue().isPowerOf2())
-            continue;
-        OpProps = TargetTransformInfo::OP_None;
-        break;
-      }
-    }
-  }
-
-  // Check for a splat of a uniform value. This is not loop aware, so return
-  // true only for the obviously uniform cases (argument, globalvalue)
-  if (Splat && (isa<Argument>(Splat) || isa<GlobalValue>(Splat)))
-    OpInfo = TargetTransformInfo::OK_UniformValue;
-
-  return OpInfo;
-}
-
 static bool matchPairwiseShuffleMask(ShuffleVectorInst *SI, bool IsLeft,
                                      unsigned Level) {
   // We don't need a shuffle if we just want to have element 0 in position 0 of
@@ -721,7 +739,7 @@ struct ReductionData {
 static Optional<ReductionData> getReductionData(Instruction *I) {
   Value *L, *R;
   if (m_BinOp(m_Value(L), m_Value(R)).match(I))
-    return ReductionData(RK_Arithmetic, I->getOpcode(), L, R); 
+    return ReductionData(RK_Arithmetic, I->getOpcode(), L, R);
   if (auto *SI = dyn_cast<SelectInst>(I)) {
     if (m_SMin(m_Value(L), m_Value(R)).match(SI) ||
         m_SMax(m_Value(L), m_Value(R)).match(SI) ||
@@ -730,8 +748,8 @@ static Optional<ReductionData> getReductionData(Instruction *I) {
         m_UnordFMin(m_Value(L), m_Value(R)).match(SI) ||
         m_UnordFMax(m_Value(L), m_Value(R)).match(SI)) {
       auto *CI = cast<CmpInst>(SI->getCondition());
-      return ReductionData(RK_MinMax, CI->getOpcode(), L, R); 
-    }   
+      return ReductionData(RK_MinMax, CI->getOpcode(), L, R);
+    }
     if (m_UMin(m_Value(L), m_Value(R)).match(SI) ||
         m_UMax(m_Value(L), m_Value(R)).match(SI)) {
       auto *CI = cast<CmpInst>(SI->getCondition());
@@ -851,11 +869,11 @@ static ReductionKind matchPairwiseReduction(const ExtractElementInst *ReduxRoot,
 
   // We look for a sequence of shuffle,shuffle,add triples like the following
   // that builds a pairwise reduction tree.
-  //  
+  //
   //  (X0, X1, X2, X3)
   //   (X0 + X1, X2 + X3, undef, undef)
   //    ((X0 + X1) + (X2 + X3), undef, undef, undef)
-  //  
+  //
   // %rdx.shuf.0.0 = shufflevector <4 x float> %rdx, <4 x float> undef,
   //       <4 x i32> <i32 0, i32 2 , i32 undef, i32 undef>
   // %rdx.shuf.0.1 = shufflevector <4 x float> %rdx, <4 x float> undef,
@@ -916,7 +934,7 @@ matchVectorSplittingReduction(const ExtractElementInst *ReduxRoot,
 
   // We look for a sequence of shuffles and adds like the following matching one
   // fadd, shuffle vector pair at a time.
-  //  
+  //
   // %rdx.shuf = shufflevector <4 x float> %rdx, <4 x float> undef,
   //                           <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
   // %bin.rdx = fadd <4 x float> %rdx, %rdx.shuf
@@ -927,7 +945,7 @@ matchVectorSplittingReduction(const ExtractElementInst *ReduxRoot,
 
   unsigned MaskStart = 1;
   Instruction *RdxOp = RdxStart;
-  SmallVector<int, 32> ShuffleMask(NumVecElems, 0); 
+  SmallVector<int, 32> ShuffleMask(NumVecElems, 0);
   unsigned NumVecElemsRemain = NumVecElems;
   while (NumVecElemsRemain - 1) {
     // Check for the right reduction operation.
@@ -1093,7 +1111,7 @@ int TargetTransformInfo::getInstructionThroughput(const Instruction *I) const {
   case Instruction::InsertElement: {
     const InsertElementInst * IE = cast<InsertElementInst>(I);
     ConstantInt *CI = dyn_cast<ConstantInt>(IE->getOperand(2));
-    unsigned Idx = -1; 
+    unsigned Idx = -1;
     if (CI)
       Idx = CI->getZExtValue();
     return getVectorInstrCost(I->getOpcode(),
@@ -1101,14 +1119,20 @@ int TargetTransformInfo::getInstructionThroughput(const Instruction *I) const {
   }
   case Instruction::ShuffleVector: {
     const ShuffleVectorInst *Shuffle = cast<ShuffleVectorInst>(I);
-    // TODO: Identify and add costs for insert/extract subvector, etc.
+    Type *Ty = Shuffle->getType();
+    Type *SrcTy = Shuffle->getOperand(0)->getType();
+
+    // TODO: Identify and add costs for insert subvector, etc.
+    int SubIndex;
+    if (Shuffle->isExtractSubvectorMask(SubIndex))
+      return TTIImpl->getShuffleCost(SK_ExtractSubvector, SrcTy, SubIndex, Ty);
+
     if (Shuffle->changesLength())
       return -1;
-    
+
     if (Shuffle->isIdentity())
       return 0;
 
-    Type *Ty = Shuffle->getType();
     if (Shuffle->isReverse())
       return TTIImpl->getShuffleCost(SK_Reverse, Ty, 0, nullptr);
 

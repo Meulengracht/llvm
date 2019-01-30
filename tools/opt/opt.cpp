@@ -1,9 +1,8 @@
 //===- opt.cpp - The LLVM Modular Optimizer -------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "BreakpointPrinter.h"
+#include "Debugify.h"
 #include "NewPMDriver.h"
 #include "PassPrinters.h"
 #include "llvm/ADT/Triple.h"
@@ -101,6 +101,10 @@ OutputAssembly("S", cl::desc("Write output as LLVM assembly"));
 static cl::opt<bool>
     OutputThinLTOBC("thinlto-bc",
                     cl::desc("Write output as ThinLTO-ready bitcode"));
+
+static cl::opt<bool>
+    SplitLTOUnit("thinlto-split-lto-unit",
+                 cl::desc("Enable splitting of a ThinLTO LTOUnit"));
 
 static cl::opt<std::string> ThinLinkBitcodeFile(
     "thin-link-bitcode-file", cl::value_desc("filename"),
@@ -216,6 +220,11 @@ static cl::opt<bool> DebugifyEach(
     cl::desc(
         "Start each pass with debugify and end it with check-debugify"));
 
+static cl::opt<std::string>
+    DebugifyExport("debugify-export",
+                   cl::desc("Export per-pass debugify statistics to this file"),
+                   cl::value_desc("filename"), cl::init(""));
+
 static cl::opt<bool>
 PrintBreakpoints("print-breakpoints-for-testing",
                  cl::desc("Print select breakpoints location for testing"));
@@ -265,35 +274,59 @@ static cl::opt<std::string>
                     cl::desc("YAML output filename for pass remarks"),
                     cl::value_desc("filename"));
 
+cl::opt<PGOKind>
+    PGOKindFlag("pgo-kind", cl::init(NoPGO), cl::Hidden,
+                cl::desc("The kind of profile guided optimization"),
+                cl::values(clEnumValN(NoPGO, "nopgo", "Do not use PGO."),
+                           clEnumValN(InstrGen, "pgo-instr-gen-pipeline",
+                                      "Instrument the IR to generate profile."),
+                           clEnumValN(InstrUse, "pgo-instr-use-pipeline",
+                                      "Use instrumented profile to guide PGO."),
+                           clEnumValN(SampleUse, "pgo-sample-use-pipeline",
+                                      "Use sampled profile to guide PGO.")));
+cl::opt<std::string> ProfileFile("profile-file",
+                                 cl::desc("Path to the profile."), cl::Hidden);
+
 class OptCustomPassManager : public legacy::PassManager {
+  DebugifyStatsMap DIStatsMap;
+
 public:
   using super = legacy::PassManager;
 
   void add(Pass *P) override {
+    // Wrap each pass with (-check)-debugify passes if requested, making
+    // exceptions for passes which shouldn't see -debugify instrumentation.
     bool WrapWithDebugify = DebugifyEach && !P->getAsImmutablePass() &&
                             !isIRPrintingPass(P) && !isBitcodeWriterPass(P);
     if (!WrapWithDebugify) {
       super::add(P);
       return;
     }
+
+    // Apply -debugify/-check-debugify before/after each pass and collect
+    // debug info loss statistics.
     PassKind Kind = P->getPassKind();
+    StringRef Name = P->getPassName();
+
     // TODO: Implement Debugify for BasicBlockPass, LoopPass.
     switch (Kind) {
       case PT_Function:
         super::add(createDebugifyFunctionPass());
         super::add(P);
-        super::add(createCheckDebugifyFunctionPass(true, P->getPassName()));
+        super::add(createCheckDebugifyFunctionPass(true, Name, &DIStatsMap));
         break;
       case PT_Module:
         super::add(createDebugifyModulePass());
         super::add(P);
-        super::add(createCheckDebugifyModulePass(true, P->getPassName()));
+        super::add(createCheckDebugifyModulePass(true, Name, &DIStatsMap));
         break;
       default:
         super::add(P);
         break;
     }
   }
+
+  const DebugifyStatsMap &getDebugifyStatsMap() const { return DIStatsMap; }
 };
 
 static inline void addPass(legacy::PassManagerBase &PM, Pass *P) {
@@ -347,6 +380,21 @@ static void AddOptimizationPasses(legacy::PassManagerBase &MPM,
 
   if (Coroutines)
     addCoroutinePassesToExtensionPoints(Builder);
+
+  switch (PGOKindFlag) {
+  case InstrGen:
+    Builder.EnablePGOInstrGen = true;
+    Builder.PGOInstrGen = ProfileFile;
+    break;
+  case InstrUse:
+    Builder.PGOInstrUse = ProfileFile;
+    break;
+  case SampleUse:
+    Builder.PGOSampleUse = ProfileFile;
+    break;
+  default:
+    break;
+  }
 
   Builder.populateFunctionPassManager(FPM);
   Builder.populateModulePassManager(MPM);
@@ -446,6 +494,7 @@ int main(int argc, char **argv) {
   initializePreISelIntrinsicLoweringLegacyPassPass(Registry);
   initializeGlobalMergePass(Registry);
   initializeIndirectBrExpandPassPass(Registry);
+  initializeInterleavedLoadCombinePass(Registry);
   initializeInterleavedAccessPass(Registry);
   initializeEntryExitInstrumenterPass(Registry);
   initializePostInlineEntryExitInstrumenterPass(Registry);
@@ -577,6 +626,9 @@ int main(int argc, char **argv) {
   if (!Force && !NoOutput && !AnalyzeOnly && !OutputAssembly)
     if (CheckBitcodeOutputToConsole(Out->os(), !Quiet))
       NoOutput = true;
+
+  if (OutputThinLTOBC)
+    M->addModuleFlag(Module::Error, "EnableSplitLTOUnit", SplitLTOUnit);
 
   if (PassPipeline.getNumOccurrences() > 0) {
     OutputKind OK = OK_NoOutput;
@@ -837,6 +889,9 @@ int main(int argc, char **argv) {
     }
     Out->os() << BOS->str();
   }
+
+  if (DebugifyEach && !DebugifyExport.empty())
+    exportDebugifyStats(DebugifyExport, Passes.getDebugifyStatsMap());
 
   // Declare success.
   if (!NoOutput || PrintBreakpoints)

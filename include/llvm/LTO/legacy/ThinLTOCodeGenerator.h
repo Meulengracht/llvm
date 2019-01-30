@@ -1,9 +1,8 @@
 //===-ThinLTOCodeGenerator.h - LLVM Link Time Optimizer -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -187,7 +186,7 @@ public:
   /// Cache policy: the maximum size for the cache directory in bytes. A value
   /// over the amount of available space on the disk will be reduced to the
   /// amount of available space. A value of 0 will be ignored.
-  void setCacheMaxSizeBytes(unsigned MaxSizeBytes) {
+  void setCacheMaxSizeBytes(uint64_t MaxSizeBytes) {
     if (MaxSizeBytes)
       CacheOptions.Policy.MaxSizeBytes = MaxSizeBytes;
   }
@@ -273,8 +272,8 @@ public:
   /**
    * Compute and emit the imported files for module at \p ModulePath.
    */
-  static void emitImports(StringRef ModulePath, StringRef OutputName,
-                          ModuleSummaryIndex &Index);
+  void emitImports(Module &Module, StringRef OutputName,
+                   ModuleSummaryIndex &Index);
 
   /**
    * Perform cross-module importing for the module identified by
@@ -285,8 +284,8 @@ public:
   /**
    * Compute the list of summaries needed for importing into module.
    */
-  static void gatherImportedSummariesForModule(
-      StringRef ModulePath, ModuleSummaryIndex &Index,
+  void gatherImportedSummariesForModule(
+      Module &Module, ModuleSummaryIndex &Index,
       std::map<std::string, GVSummaryMapTy> &ModuleToSummariesForIndex);
 
   /**
@@ -298,11 +297,6 @@ public:
    * Perform post-importing ThinLTO optimizations.
    */
   void optimize(Module &Module);
-
-  /**
-   * Perform ThinLTO CodeGen.
-   */
-  std::unique_ptr<MemoryBuffer> codegen(Module &Module);
 
   /**@}*/
 

@@ -1,9 +1,8 @@
 //===- DWARFFormValue.h -----------------------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -61,7 +60,6 @@ public:
 
   dwarf::Form getForm() const { return Form; }
   uint64_t getRawUValue() const { return Value.uval; }
-  uint64_t getSectionIndex() const { return Value.SectionIndex; }
   void setForm(dwarf::Form F) { Form = F; }
   void setUValue(uint64_t V) { Value.uval = V; }
   void setSValue(int64_t V) { Value.sval = V; }
@@ -75,6 +73,10 @@ public:
   bool isFormClass(FormClass FC) const;
   const DWARFUnit *getUnit() const { return U; }
   void dump(raw_ostream &OS, DIDumpOptions DumpOpts = DIDumpOptions()) const;
+  void dumpSectionedAddress(raw_ostream &OS, DIDumpOptions DumpOpts,
+                            SectionedAddress SA) const;
+  static void dumpAddressSection(const DWARFObject &Obj, raw_ostream &OS,
+                                 DIDumpOptions DumpOpts, uint64_t SectionIndex);
 
   /// Extracts a value in \p Data at offset \p *OffsetPtr. The information
   /// in \p FormParams is needed to interpret some forms. The optional
@@ -101,6 +103,7 @@ public:
   Optional<int64_t> getAsSignedConstant() const;
   Optional<const char *> getAsCString() const;
   Optional<uint64_t> getAsAddress() const;
+  Optional<SectionedAddress> getAsSectionedAddress() const;
   Optional<uint64_t> getAsSectionOffset() const;
   Optional<ArrayRef<uint8_t>> getAsBlock() const;
   Optional<uint64_t> getAsCStringOffset() const;
@@ -235,6 +238,13 @@ inline int64_t toSigned(const Optional<DWARFFormValue> &V, int64_t Default) {
 inline Optional<uint64_t> toAddress(const Optional<DWARFFormValue> &V) {
   if (V)
     return V->getAsAddress();
+  return None;
+}
+
+inline Optional<SectionedAddress>
+toSectionedAddress(const Optional<DWARFFormValue> &V) {
+  if (V)
+    return V->getAsSectionedAddress();
   return None;
 }
 

@@ -1,9 +1,8 @@
 //===-- AMDGPUInstPrinter.h - AMDGPU MC Inst -> ASM interface ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -80,7 +79,7 @@ private:
                   raw_ostream &O);
   void printDA(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
                raw_ostream &O);
-  void printR128(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
+  void printR128A16(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
                  raw_ostream &O);
   void printLWE(const MCInst *MI, unsigned OpNo,
                 const MCSubtargetInfo &STI, raw_ostream &O);
@@ -90,10 +89,8 @@ private:
                      const MCSubtargetInfo &STI, raw_ostream &O);
   void printExpVM(const MCInst *MI, unsigned OpNo,
                   const MCSubtargetInfo &STI, raw_ostream &O);
-  void printDFMT(const MCInst *MI, unsigned OpNo,
-                 const MCSubtargetInfo &STI, raw_ostream &O);
-  void printNFMT(const MCInst *MI, unsigned OpNo,
-                 const MCSubtargetInfo &STI, raw_ostream &O);
+  void printFORMAT(const MCInst *MI, unsigned OpNo,
+                   const MCSubtargetInfo &STI, raw_ostream &O);
 
   void printRegOperand(unsigned RegNo, raw_ostream &O);
   void printVOPDst(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,

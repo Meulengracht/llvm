@@ -1,9 +1,8 @@
 //===- unittest/Support/OptionParsingTest.cpp - OptTable tests ------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -96,6 +95,10 @@ TEST(Option, OptionParsing) {
   raw_string_ostream RSO(Help);
   T.PrintHelp(RSO, "test", "title!");
   EXPECT_NE(std::string::npos, Help.find("-A"));
+
+  // Check usage line.
+  T.PrintHelp(RSO, "name [options] file...", "title!");
+  EXPECT_NE(std::string::npos, Help.find("USAGE: name [options] file...\n"));
 
   // Test aliases.
   auto Cs = AL.filtered(OPT_C);

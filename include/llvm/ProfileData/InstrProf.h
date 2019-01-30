@@ -1,9 +1,8 @@
 //===- InstrProf.h - Instrumented profiling format support ------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -544,9 +543,9 @@ Error InstrProfSymtab::create(const NameIterRange &IterRange) {
 void InstrProfSymtab::finalizeSymtab() {
   if (Sorted)
     return;
-  llvm::sort(MD5NameMap.begin(), MD5NameMap.end(), less_first());
-  llvm::sort(MD5FuncMap.begin(), MD5FuncMap.end(), less_first());
-  llvm::sort(AddrToMD5Map.begin(), AddrToMD5Map.end(), less_first());
+  llvm::sort(MD5NameMap, less_first());
+  llvm::sort(MD5FuncMap, less_first());
+  llvm::sort(AddrToMD5Map, less_first());
   AddrToMD5Map.erase(std::unique(AddrToMD5Map.begin(), AddrToMD5Map.end()),
                      AddrToMD5Map.end());
   Sorted = true;
@@ -1021,7 +1020,7 @@ template <> inline uint64_t getMagic<uint32_t>() {
 // compiler-rt/lib/profile/InstrProfiling.h.
 // It should also match the synthesized type in
 // Transforms/Instrumentation/InstrProfiling.cpp:getOrCreateRegionCounters.
-template <class IntPtrT> struct LLVM_ALIGNAS(8) ProfileData {
+template <class IntPtrT> struct alignas(8) ProfileData {
   #define INSTR_PROF_DATA(Type, LLVMType, Name, Init) Type Name;
   #include "llvm/ProfileData/InstrProfData.inc"
 };

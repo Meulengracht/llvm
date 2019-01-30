@@ -1,9 +1,8 @@
 //===-- Analysis/CFG.h - BasicBlock Analyses --------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -25,7 +24,6 @@ class DominatorTree;
 class Function;
 class Instruction;
 class LoopInfo;
-class TerminatorInst;
 
 /// Analyze the specified function to find all of the loop backedges in the
 /// function and return them.  This is a relatively cheap (compared to
@@ -46,7 +44,7 @@ unsigned GetSuccessorNumber(const BasicBlock *BB, const BasicBlock *Succ);
 /// edges from a block with multiple successors to a block with multiple
 /// predecessors.
 ///
-bool isCriticalEdge(const TerminatorInst *TI, unsigned SuccNum,
+bool isCriticalEdge(const Instruction *TI, unsigned SuccNum,
                     bool AllowIdenticalEdges = false);
 
 /// Determine whether instruction 'To' is reachable from 'From',

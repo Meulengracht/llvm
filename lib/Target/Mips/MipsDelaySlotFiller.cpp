@@ -1,9 +1,8 @@
 //===- MipsDelaySlotFiller.cpp - Mips Delay Slot Filler -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -728,9 +727,10 @@ bool MipsDelaySlotFiller::searchRange(MachineBasicBlock &MBB, IterTy Begin,
         (Opcode == Mips::JR || Opcode == Mips::PseudoIndirectBranch ||
          Opcode == Mips::PseudoReturn || Opcode == Mips::TAILCALL))
       continue;
-     // Instructions LWP/SWP should not be in a delay slot as that
+     // Instructions LWP/SWP and MOVEP should not be in a delay slot as that
      // results in unpredictable behaviour
-     if (InMicroMipsMode && (Opcode == Mips::LWP_MM || Opcode == Mips::SWP_MM))
+     if (InMicroMipsMode && (Opcode == Mips::LWP_MM || Opcode == Mips::SWP_MM ||
+                             Opcode == Mips::MOVEP_MM))
        continue;
 
     Filler = CurrI;

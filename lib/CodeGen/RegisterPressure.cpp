@@ -1,9 +1,8 @@
 //===- RegisterPressure.cpp - Dynamic Register Pressure -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -681,8 +680,7 @@ void PressureDiff::addPressureChange(unsigned RegUnit, bool IsDec,
       PressureDiff::iterator J;
       for (J = std::next(I); J != E && J->isValid(); ++J, ++I)
         *I = *J;
-      if (J != E)
-        *I = *J;
+      *I = PressureChange();
     }
   }
 }

@@ -1,9 +1,8 @@
 //==- MicroMipsInstrFPU.td - microMIPS FPU Instruction Info -*- tablegen -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -124,7 +123,7 @@ multiclass ABSS_MMM<string opstr, InstrItinClass Itin,
 defm FSQRT : ABSS_MMM<"sqrt.d", II_SQRT_D, fsqrt>, ROUND_W_FM_MM<1, 0x28>;
 defm FABS : ABSS_MMM<"abs.d", II_SQRT_D, fabs>, ABS_FM_MM<1, 0xd>;
 
-let DecoderNamespace = "MicroMips" in {
+let DecoderNamespace = "MicroMips", AdditionalPredicates = [UseAbs] in {
   def FABS_S_MM : MMRel, ABSS_FT<"abs.s", FGR32Opnd, FGR32Opnd, II_ABS, fabs>,
                   ABS_FM_MM<0, 0xd>, ISA_MICROMIPS;
 }
@@ -243,6 +242,8 @@ let DecoderNamespace = "MicroMipsFP64" in {
                      MFC1_FM_MM<0xe0>, ISA_MICROMIPS, FGR_64;
   def MFHC1_D64_MM : MFC1_FT<"mfhc1", GPR32Opnd, FGR64Opnd, II_MFHC1>,
                      MFC1_FM_MM<0xc0>, ISA_MICROMIPS, FGR_64;
+  def MTC1_D64_MM : MTC1_FT<"mtc1", FGR64Opnd, GPR32Opnd, II_MTC1>,
+                    MFC1_FM_MM<0xa0>, ISA_MICROMIPS, FGR_64;
 }
 
 let DecoderNamespace = "MicroMips" in {
@@ -405,6 +406,13 @@ let AddedComplexity = 40 in {
   def : StoreRegImmPat<SWC1_MM, f32>, ISA_MICROMIPS;
 }
 
+def : MipsPat<(MipsMTC1_D64 GPR32Opnd:$src),
+              (MTC1_D64_MM GPR32Opnd:$src)>, ISA_MICROMIPS, FGR_64;
+
+def : MipsPat<(f32 fpimm0), (MTC1_MM ZERO)>, ISA_MICROMIPS32_NOT_MIPS32R6;
+def : MipsPat<(f32 fpimm0neg), (FNEG_S_MM (MTC1_MM ZERO))>,
+      ISA_MICROMIPS32_NOT_MIPS32R6;
+
 def : MipsPat<(f32 (fpround FGR64Opnd:$src)),
               (CVT_S_D64_MM FGR64Opnd:$src)>, ISA_MICROMIPS, FGR_64;
 def : MipsPat<(f64 (fpextend FGR32Opnd:$src)),
@@ -413,6 +421,9 @@ def : MipsPat<(f32 (fpround AFGR64Opnd:$src)),
               (CVT_S_D32_MM AFGR64Opnd:$src)>, ISA_MICROMIPS, FGR_32;
 def : MipsPat<(f64 (fpextend FGR32Opnd:$src)),
               (CVT_D32_S_MM FGR32Opnd:$src)>, ISA_MICROMIPS, FGR_32;
+def : MipsPat<(MipsTruncIntFP AFGR64Opnd:$src),
+              (TRUNC_W_MM AFGR64Opnd:$src)>, ISA_MICROMIPS32_NOT_MIPS32R6,
+              FGR_32;
 
 // Selects
 defm : MovzPats0<GPR32, FGR32, MOVZ_I_S_MM, SLT_MM, SLTu_MM, SLTi_MM, SLTiu_MM>,

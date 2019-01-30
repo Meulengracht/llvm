@@ -1,9 +1,8 @@
 //===- VPRecipeBuilder.h - Helper class to build recipes --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -69,7 +68,8 @@ public:
   /// \return value is <true, nullptr>, as it is handled by another recipe.
   /// \p Range.End may be decreased to ensure same decision from \p Range.Start
   /// to \p Range.End.
-  VPInterleaveRecipe *tryToInterleaveMemory(Instruction *I, VFRange &Range);
+  VPInterleaveRecipe *tryToInterleaveMemory(Instruction *I, VFRange &Range,
+                                            VPlanPtr &Plan);
 
   /// Check if \I is a memory instruction to be widened for \p Range.Start and
   /// potentially masked. Such instructions are handled by a recipe that takes

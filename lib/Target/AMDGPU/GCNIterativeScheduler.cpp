@@ -1,9 +1,8 @@
 //===- GCNIterativeScheduler.cpp ------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -434,8 +433,7 @@ void GCNIterativeScheduler::scheduleRegion(Region &R, Range &&Schedule,
 // Sort recorded regions by pressure - highest at the front
 void GCNIterativeScheduler::sortRegionsByPressure(unsigned TargetOcc) {
   const auto &ST = MF.getSubtarget<GCNSubtarget>();
-  llvm::sort(Regions.begin(), Regions.end(),
-    [&ST, TargetOcc](const Region *R1, const Region *R2) {
+  llvm::sort(Regions, [&ST, TargetOcc](const Region *R1, const Region *R2) {
     return R2->MaxPressure.less(ST, R1->MaxPressure, TargetOcc);
   });
 }

@@ -1,9 +1,8 @@
 //===- ARMConstantIslandPass.cpp - ARM constant islands -------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1420,6 +1419,22 @@ void ARMConstantIslands::createNewWater(unsigned CPUserIndex,
       MI = LastIT;
   }
 
+  // Avoid splitting a MOVW+MOVT pair with a relocation on Windows.
+  // On Windows, this instruction pair is covered by one single
+  // IMAGE_REL_ARM_MOV32T relocation which covers both instructions. If a
+  // constant island is injected inbetween them, the relocation will clobber
+  // the instruction and fail to update the MOVT instruction.
+  // (These instructions are bundled up until right before the ConstantIslands
+  // pass.)
+  if (STI->isTargetWindows() && isThumb && MI->getOpcode() == ARM::t2MOVTi16 &&
+      (MI->getOperand(2).getTargetFlags() & ARMII::MO_OPTION_MASK) ==
+          ARMII::MO_HI16) {
+    --MI;
+    assert(MI->getOpcode() == ARM::t2MOVi16 &&
+           (MI->getOperand(1).getTargetFlags() & ARMII::MO_OPTION_MASK) ==
+               ARMII::MO_LO16);
+  }
+
   // We really must not split an IT block.
   LLVM_DEBUG(unsigned PredReg; assert(
                  !isThumb || getITInstrPredicate(*MI, PredReg) == ARMCC::AL));
@@ -2128,7 +2143,7 @@ bool ARMConstantIslands::optimizeThumb2JumpTables() {
     unsigned DeadSize = 0;
     bool CanDeleteLEA = false;
     bool BaseRegKill = false;
-    
+
     unsigned IdxReg = ~0U;
     bool IdxRegKill = true;
     if (isThumb2) {

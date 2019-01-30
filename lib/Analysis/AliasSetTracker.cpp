@@ -1,9 +1,8 @@
 //===- AliasSetTracker.cpp - Alias Sets Tracker implementation-------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -13,9 +12,9 @@
 
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/MemoryLocation.h"
 #include "llvm/Config/llvm-config.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/Function.h"
@@ -24,6 +23,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Value.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/AtomicOrdering.h"
@@ -55,7 +55,6 @@ void AliasSet::mergeSetIn(AliasSet &AS, AliasSetTracker &AST) {
   // Update the alias and access types of this set...
   Access |= AS.Access;
   Alias  |= AS.Alias;
-  Volatile |= AS.Volatile;
 
   if (Alias == SetMustAlias) {
     // Check that these two merged sets really are must aliases.  Since both
@@ -113,10 +112,9 @@ void AliasSetTracker::removeAliasSet(AliasSet *AS) {
   if (AliasSet *Fwd = AS->Forward) {
     Fwd->dropRef(*this);
     AS->Forward = nullptr;
-  }
-
-  if (AS->Alias == AliasSet::SetMayAlias)
-    TotalMayAliasSetSize -= AS->size();
+  } else // Update TotalMayAliasSetSize only if not forwarding.
+      if (AS->Alias == AliasSet::SetMayAlias)
+        TotalMayAliasSetSize -= AS->size();
 
   AliasSets.erase(AS);
 }
@@ -142,7 +140,7 @@ void AliasSet::addPointer(AliasSetTracker &AST, PointerRec &Entry,
         Alias = SetMayAlias;
         AST.TotalMayAliasSetSize += size();
       } else {
-        // First entry of must alias must have maximum size!        
+        // First entry of must alias must have maximum size!
         P->updateSizeAndAAInfo(Size, AAInfo);
       }
       assert(Result != NoAlias && "Cannot be part of must set!");
@@ -169,7 +167,12 @@ void AliasSet::addUnknownInst(Instruction *I, AliasAnalysis &AA) {
     addRef();
   UnknownInsts.emplace_back(I);
 
-  if (!I->mayWriteToMemory()) {
+  // Guards are marked as modifying memory for control flow modelling purposes,
+  // but don't actually modify any specific memory location.
+  using namespace PatternMatch;
+  bool MayWriteMemory = I->mayWriteToMemory() && !isGuard(I) &&
+    !(I->use_empty() && match(I, m_Intrinsic<Intrinsic::invariant_start>()));
+  if (!MayWriteMemory) {
     Alias = SetMayAlias;
     Access |= RefAccess;
     return;
@@ -180,14 +183,15 @@ void AliasSet::addUnknownInst(Instruction *I, AliasAnalysis &AA) {
   Access = ModRefAccess;
 }
 
-/// aliasesPointer - Return true if the specified pointer "may" (or must)
-/// alias one of the members in the set.
+/// aliasesPointer - If the specified pointer "may" (or must) alias one of the
+/// members in the set return the appropriate AliasResult. Otherwise return
+/// NoAlias.
 ///
-bool AliasSet::aliasesPointer(const Value *Ptr, LocationSize Size,
-                              const AAMDNodes &AAInfo,
-                              AliasAnalysis &AA) const {
+AliasResult AliasSet::aliasesPointer(const Value *Ptr, LocationSize Size,
+                                     const AAMDNodes &AAInfo,
+                                     AliasAnalysis &AA) const {
   if (AliasAny)
-    return true;
+    return MayAlias;
 
   if (Alias == SetMustAlias) {
     assert(UnknownInsts.empty() && "Illegal must alias set!");
@@ -204,9 +208,10 @@ bool AliasSet::aliasesPointer(const Value *Ptr, LocationSize Size,
   // If this is a may-alias set, we have to check all of the pointers in the set
   // to be sure it doesn't alias the set...
   for (iterator I = begin(), E = end(); I != E; ++I)
-    if (AA.alias(MemoryLocation(Ptr, Size, AAInfo),
-                 MemoryLocation(I.getPointer(), I.getSize(), I.getAAInfo())))
-      return true;
+    if (AliasResult AR = AA.alias(
+            MemoryLocation(Ptr, Size, AAInfo),
+            MemoryLocation(I.getPointer(), I.getSize(), I.getAAInfo())))
+      return AR;
 
   // Check the unknown instructions...
   if (!UnknownInsts.empty()) {
@@ -214,10 +219,10 @@ bool AliasSet::aliasesPointer(const Value *Ptr, LocationSize Size,
       if (auto *Inst = getUnknownInst(i))
         if (isModOrRefSet(
                 AA.getModRefInfo(Inst, MemoryLocation(Ptr, Size, AAInfo))))
-          return true;
+          return MayAlias;
   }
 
-  return false;
+  return NoAlias;
 }
 
 bool AliasSet::aliasesUnknownInst(const Instruction *Inst,
@@ -226,12 +231,13 @@ bool AliasSet::aliasesUnknownInst(const Instruction *Inst,
   if (AliasAny)
     return true;
 
-  if (!Inst->mayReadOrWriteMemory())
-    return false;
+  assert(Inst->mayReadOrWriteMemory() &&
+         "Instruction must either read or write memory.");
 
   for (unsigned i = 0, e = UnknownInsts.size(); i != e; ++i) {
     if (auto *UnknownInst = getUnknownInst(i)) {
-      ImmutableCallSite C1(UnknownInst), C2(Inst);
+      const auto *C1 = dyn_cast<CallBase>(UnknownInst);
+      const auto *C2 = dyn_cast<CallBase>(Inst);
       if (!C1 || !C2 || isModOrRefSet(AA.getModRefInfo(C1, C2)) ||
           isModOrRefSet(AA.getModRefInfo(C2, C1)))
         return true;
@@ -246,14 +252,39 @@ bool AliasSet::aliasesUnknownInst(const Instruction *Inst,
   return false;
 }
 
+Instruction* AliasSet::getUniqueInstruction() {
+  if (AliasAny)
+    // May have collapses alias set
+    return nullptr;
+  if (begin() != end()) {
+    if (!UnknownInsts.empty())
+      // Another instruction found
+      return nullptr;
+    if (std::next(begin()) != end())
+      // Another instruction found
+      return nullptr;
+    Value *Addr = begin()->getValue();
+    assert(!Addr->user_empty() &&
+           "where's the instruction which added this pointer?");
+    if (std::next(Addr->user_begin()) != Addr->user_end())
+      // Another instruction found -- this is really restrictive
+      // TODO: generalize!
+      return nullptr;
+    return cast<Instruction>(*(Addr->user_begin()));
+  }
+  if (1 != UnknownInsts.size())
+    return nullptr;
+  return cast<Instruction>(UnknownInsts[0]);
+}
+
 void AliasSetTracker::clear() {
   // Delete all the PointerRec entries.
   for (PointerMapType::iterator I = PointerMap.begin(), E = PointerMap.end();
        I != E; ++I)
     I->second->eraseFromList();
-  
+
   PointerMap.clear();
-  
+
   // The alias sets should all be clear now.
   AliasSets.clear();
 }
@@ -269,22 +300,17 @@ AliasSet *AliasSetTracker::mergeAliasSetsForPointer(const Value *Ptr,
   for (iterator I = begin(), E = end(); I != E;) {
     iterator Cur = I++;
     if (Cur->Forward || !Cur->aliasesPointer(Ptr, Size, AAInfo, AA)) continue;
-    
-    if (!FoundSet) {      // If this is the first alias set ptr can go into.
-      FoundSet = &*Cur;   // Remember it.
-    } else {              // Otherwise, we must merge the sets.
-      FoundSet->mergeSetIn(*Cur, *this);     // Merge in contents.
+
+    if (!FoundSet) {
+      // If this is the first alias set ptr can go into, remember it.
+      FoundSet = &*Cur;
+    } else {
+      // Otherwise, we must merge the sets.
+      FoundSet->mergeSetIn(*Cur, *this);
     }
   }
 
   return FoundSet;
-}
-
-bool AliasSetTracker::containsUnknown(const Instruction *Inst) const {
-  for (const AliasSet &AS : *this)
-    if (!AS.Forward && AS.aliasesUnknownInst(Inst, AA))
-      return true;
-  return false;
 }
 
 AliasSet *AliasSetTracker::findAliasSetForUnknownInst(Instruction *Inst) {
@@ -293,19 +319,23 @@ AliasSet *AliasSetTracker::findAliasSetForUnknownInst(Instruction *Inst) {
     iterator Cur = I++;
     if (Cur->Forward || !Cur->aliasesUnknownInst(Inst, AA))
       continue;
-    if (!FoundSet)            // If this is the first alias set ptr can go into.
-      FoundSet = &*Cur;       // Remember it.
-    else if (!Cur->Forward)   // Otherwise, we must merge the sets.
-      FoundSet->mergeSetIn(*Cur, *this);     // Merge in contents.
+    if (!FoundSet) {
+      // If this is the first alias set ptr can go into, remember it.
+      FoundSet = &*Cur;
+    } else {
+      // Otherwise, we must merge the sets.
+      FoundSet->mergeSetIn(*Cur, *this);
+    }
   }
   return FoundSet;
 }
 
-/// getAliasSetForPointer - Return the alias set that the specified pointer
-/// lives in.
-AliasSet &AliasSetTracker::getAliasSetForPointer(Value *Pointer,
-                                                 LocationSize Size,
-                                                 const AAMDNodes &AAInfo) {
+AliasSet &AliasSetTracker::getAliasSetFor(const MemoryLocation &MemLoc) {
+
+  Value * const Pointer = const_cast<Value*>(MemLoc.Ptr);
+  const LocationSize Size = MemLoc.Size;
+  const AAMDNodes &AAInfo = MemLoc.AATags;
+
   AliasSet::PointerRec &Entry = getEntryFor(Pointer);
 
   if (AliasAnyAS) {
@@ -336,13 +366,13 @@ AliasSet &AliasSetTracker::getAliasSetForPointer(Value *Pointer,
     // Return the set!
     return *Entry.getAliasSet(*this)->getForwardedTarget(*this);
   }
-  
+
   if (AliasSet *AS = mergeAliasSetsForPointer(Pointer, Size, AAInfo)) {
     // Add it to the alias set it aliases.
     AS->addPointer(*this, Entry, Size, AAInfo);
     return *AS;
   }
-  
+
   // Otherwise create a new alias set to hold the loaded pointer.
   AliasSets.push_back(new AliasSet());
   AliasSets.back().addPointer(*this, Entry, Size, AAInfo);
@@ -351,83 +381,32 @@ AliasSet &AliasSetTracker::getAliasSetForPointer(Value *Pointer,
 
 void AliasSetTracker::add(Value *Ptr, LocationSize Size,
                           const AAMDNodes &AAInfo) {
-  addPointer(Ptr, Size, AAInfo, AliasSet::NoAccess);
+  addPointer(MemoryLocation(Ptr, Size, AAInfo), AliasSet::NoAccess);
 }
 
 void AliasSetTracker::add(LoadInst *LI) {
-  if (isStrongerThanMonotonic(LI->getOrdering())) return addUnknown(LI);
-
-  AAMDNodes AAInfo;
-  LI->getAAMetadata(AAInfo);
-
-  AliasSet::AccessLattice Access = AliasSet::RefAccess;
-  const DataLayout &DL = LI->getModule()->getDataLayout();
-  AliasSet &AS = addPointer(LI->getOperand(0),
-                            DL.getTypeStoreSize(LI->getType()), AAInfo, Access);
-  if (LI->isVolatile()) AS.setVolatile();
+  if (isStrongerThanMonotonic(LI->getOrdering()))
+    return addUnknown(LI);
+  addPointer(MemoryLocation::get(LI), AliasSet::RefAccess);
 }
 
 void AliasSetTracker::add(StoreInst *SI) {
-  if (isStrongerThanMonotonic(SI->getOrdering())) return addUnknown(SI);
-
-  AAMDNodes AAInfo;
-  SI->getAAMetadata(AAInfo);
-
-  AliasSet::AccessLattice Access = AliasSet::ModAccess;
-  const DataLayout &DL = SI->getModule()->getDataLayout();
-  Value *Val = SI->getOperand(0);
-  AliasSet &AS = addPointer(
-      SI->getOperand(1), DL.getTypeStoreSize(Val->getType()), AAInfo, Access);
-  if (SI->isVolatile()) AS.setVolatile();
+  if (isStrongerThanMonotonic(SI->getOrdering()))
+    return addUnknown(SI);
+  addPointer(MemoryLocation::get(SI), AliasSet::ModAccess);
 }
 
 void AliasSetTracker::add(VAArgInst *VAAI) {
-  AAMDNodes AAInfo;
-  VAAI->getAAMetadata(AAInfo);
-
-  addPointer(VAAI->getOperand(0), MemoryLocation::UnknownSize, AAInfo,
-             AliasSet::ModRefAccess);
+  addPointer(MemoryLocation::get(VAAI), AliasSet::ModRefAccess);
 }
 
 void AliasSetTracker::add(AnyMemSetInst *MSI) {
-  AAMDNodes AAInfo;
-  MSI->getAAMetadata(AAInfo);
-
-  uint64_t Len;
-
-  if (ConstantInt *C = dyn_cast<ConstantInt>(MSI->getLength()))
-    Len = C->getZExtValue();
-  else
-    Len = MemoryLocation::UnknownSize;
-
-  AliasSet &AS =
-      addPointer(MSI->getRawDest(), Len, AAInfo, AliasSet::ModAccess);
-  auto *MS = dyn_cast<MemSetInst>(MSI);
-  if (MS && MS->isVolatile())
-    AS.setVolatile();
+  addPointer(MemoryLocation::getForDest(MSI), AliasSet::ModAccess);
 }
 
 void AliasSetTracker::add(AnyMemTransferInst *MTI) {
-  AAMDNodes AAInfo;
-  MTI->getAAMetadata(AAInfo);
-
-  uint64_t Len;
-  if (ConstantInt *C = dyn_cast<ConstantInt>(MTI->getLength()))
-    Len = C->getZExtValue();
-  else
-    Len = MemoryLocation::UnknownSize;
-
-  AliasSet &ASSrc =
-      addPointer(MTI->getRawSource(), Len, AAInfo, AliasSet::RefAccess);
-
-  AliasSet &ASDst =
-      addPointer(MTI->getRawDest(), Len, AAInfo, AliasSet::ModAccess);
-
-  auto* MT = dyn_cast<MemTransferInst>(MTI);
-  if (MT && MT->isVolatile()) {
-    ASSrc.setVolatile();
-    ASDst.setVolatile();
-  }
+  addPointer(MemoryLocation::getForDest(MTI), AliasSet::ModAccess);
+  addPointer(MemoryLocation::getForSource(MTI), AliasSet::RefAccess);
 }
 
 void AliasSetTracker::addUnknown(Instruction *Inst) {
@@ -471,6 +450,46 @@ void AliasSetTracker::add(Instruction *I) {
     return add(MSI);
   if (AnyMemTransferInst *MTI = dyn_cast<AnyMemTransferInst>(I))
     return add(MTI);
+
+  // Handle all calls with known mod/ref sets genericall
+  if (auto *Call = dyn_cast<CallBase>(I))
+    if (Call->onlyAccessesArgMemory()) {
+      auto getAccessFromModRef = [](ModRefInfo MRI) {
+        if (isRefSet(MRI) && isModSet(MRI))
+          return AliasSet::ModRefAccess;
+        else if (isModSet(MRI))
+          return AliasSet::ModAccess;
+        else if (isRefSet(MRI))
+          return AliasSet::RefAccess;
+        else
+          return AliasSet::NoAccess;
+      };
+
+      ModRefInfo CallMask = createModRefInfo(AA.getModRefBehavior(Call));
+
+      // Some intrinsics are marked as modifying memory for control flow
+      // modelling purposes, but don't actually modify any specific memory
+      // location.
+      using namespace PatternMatch;
+      if (Call->use_empty() &&
+          match(Call, m_Intrinsic<Intrinsic::invariant_start>()))
+        CallMask = clearMod(CallMask);
+
+      for (auto IdxArgPair : enumerate(Call->args())) {
+        int ArgIdx = IdxArgPair.index();
+        const Value *Arg = IdxArgPair.value();
+        if (!Arg->getType()->isPointerTy())
+          continue;
+        MemoryLocation ArgLoc =
+            MemoryLocation::getForArgument(Call, ArgIdx, nullptr);
+        ModRefInfo ArgMask = AA.getArgModRefInfo(Call, ArgIdx);
+        ArgMask = intersectModRef(CallMask, ArgMask);
+        if (!isNoModRef(ArgMask))
+          addPointer(ArgLoc, getAccessFromModRef(ArgMask));
+      }
+      return;
+    }
+
   return addUnknown(I);
 }
 
@@ -496,12 +515,10 @@ void AliasSetTracker::add(const AliasSetTracker &AST) {
         add(Inst);
 
     // Loop over all of the pointers in this alias set.
-    for (AliasSet::iterator ASI = AS.begin(), E = AS.end(); ASI != E; ++ASI) {
-      AliasSet &NewAS =
-          addPointer(ASI.getPointer(), ASI.getSize(), ASI.getAAInfo(),
-                     (AliasSet::AccessLattice)AS.Access);
-      if (AS.isVolatile()) NewAS.setVolatile();
-    }
+    for (AliasSet::iterator ASI = AS.begin(), E = AS.end(); ASI != E; ++ASI)
+      addPointer(
+          MemoryLocation(ASI.getPointer(), ASI.getSize(), ASI.getAAInfo()),
+          (AliasSet::AccessLattice)AS.Access);
   }
 }
 
@@ -526,10 +543,10 @@ void AliasSetTracker::deleteValue(Value *PtrVal) {
     AS->SetSize--;
     TotalMayAliasSetSize--;
   }
-  
+
   // Stop using the alias set.
   AS->dropRef(*this);
-  
+
   PointerMap.erase(I);
 }
 
@@ -594,10 +611,9 @@ AliasSet &AliasSetTracker::mergeAllAliasSets() {
   return *AliasAnyAS;
 }
 
-AliasSet &AliasSetTracker::addPointer(Value *P, LocationSize Size,
-                                      const AAMDNodes &AAInfo,
+AliasSet &AliasSetTracker::addPointer(MemoryLocation Loc,
                                       AliasSet::AccessLattice E) {
-  AliasSet &AS = getAliasSetForPointer(P, Size, AAInfo);
+  AliasSet &AS = getAliasSetFor(Loc);
   AS.Access |= E;
 
   if (!AliasAnyAS && (TotalMayAliasSetSize > SaturationThreshold)) {
@@ -623,7 +639,6 @@ void AliasSet::print(raw_ostream &OS) const {
   case ModRefAccess: OS << "Mod/Ref   "; break;
   default: llvm_unreachable("Bad value for Access!");
   }
-  if (isVolatile()) OS << "[volatile] ";
   if (Forward)
     OS << " forwarding to " << (void*)Forward;
 
@@ -632,7 +647,10 @@ void AliasSet::print(raw_ostream &OS) const {
     for (iterator I = begin(), E = end(); I != E; ++I) {
       if (I != begin()) OS << ", ";
       I.getPointer()->printAsOperand(OS << "(");
-      OS << ", " << I.getSize() << ")";
+      if (I.getSize() == LocationSize::unknown())
+        OS << ", unknown)";
+      else 
+        OS << ", " << I.getSize() << ")";
     }
   }
   if (!UnknownInsts.empty()) {

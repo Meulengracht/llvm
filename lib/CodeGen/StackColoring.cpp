@@ -1,9 +1,8 @@
 //===- StackColoring.cpp --------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -445,7 +444,7 @@ public:
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
-  bool runOnMachineFunction(MachineFunction &MF) override;
+  bool runOnMachineFunction(MachineFunction &Func) override;
 
 private:
   /// Used in collectMarkers
@@ -1022,9 +1021,7 @@ void StackColoring::remapInstructions(DenseMap<int, int> &SlotRemap) {
       }
 
       // We adjust AliasAnalysis information for merged stack slots.
-      MachineSDNode::mmo_iterator NewMemOps =
-          MF->allocateMemRefsArray(I.getNumMemOperands());
-      unsigned MemOpIdx = 0;
+      SmallVector<MachineMemOperand *, 2> NewMMOs;
       bool ReplaceMemOps = false;
       for (MachineMemOperand *MMO : I.memoperands()) {
         // If this memory location can be a slot remapped here,
@@ -1051,17 +1048,17 @@ void StackColoring::remapInstructions(DenseMap<int, int> &SlotRemap) {
           }
         }
         if (MayHaveConflictingAAMD) {
-          NewMemOps[MemOpIdx++] = MF->getMachineMemOperand(MMO, AAMDNodes());
+          NewMMOs.push_back(MF->getMachineMemOperand(MMO, AAMDNodes()));
           ReplaceMemOps = true;
+        } else {
+          NewMMOs.push_back(MMO);
         }
-        else
-          NewMemOps[MemOpIdx++] = MMO;
       }
 
       // If any memory operand is updated, set memory references of
       // this instruction.
       if (ReplaceMemOps)
-        I.setMemRefs(std::make_pair(NewMemOps, I.getNumMemOperands()));
+        I.setMemRefs(*MF, NewMMOs);
     }
 
   // Update the location of C++ catch objects for the MSVC personality routine.
@@ -1233,7 +1230,7 @@ bool StackColoring::runOnMachineFunction(MachineFunction &Func) {
   });
 
   for (auto &s : LiveStarts)
-    llvm::sort(s.begin(), s.end());
+    llvm::sort(s);
 
   bool Changed = true;
   while (Changed) {

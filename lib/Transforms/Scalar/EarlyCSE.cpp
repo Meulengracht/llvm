@@ -1,9 +1,8 @@
 //===- EarlyCSE.cpp - Simple and fast CSE pass ----------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -22,6 +21,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/GlobalsModRef.h"
+#include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/MemorySSAUpdater.h"
@@ -54,6 +54,7 @@
 #include "llvm/Support/RecyclingAllocator.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/GuardUtils.h"
 #include <cassert>
 #include <deque>
 #include <memory>
@@ -384,7 +385,7 @@ public:
                       LoadMapAllocator>;
 
   LoadHTType AvailableLoads;
-  
+
   // A scoped hash table mapping memory locations (represented as typed
   // addresses) to generation numbers at which that memory location became
   // (henceforth indefinitely) invariant.
@@ -602,6 +603,8 @@ private:
   void removeMSSA(Instruction *Inst) {
     if (!MSSA)
       return;
+    if (VerifyMemorySSA)
+      MSSA->verifyMemorySSA();
     // Removing a store here can leave MemorySSA in an unoptimized state by
     // creating MemoryPhis that have identical arguments and by creating
     // MemoryUses whose defining access is not an actual clobber.  We handle the
@@ -808,7 +811,8 @@ bool EarlyCSE::processNode(DomTreeNode *Node) {
         LLVM_DEBUG(dbgs() << "Skipping due to debug counter\n");
         continue;
       }
-      salvageDebugInfo(*Inst);
+      if (!salvageDebugInfo(*Inst))
+        replaceDbgUsesWithUndef(Inst);
       removeMSSA(Inst);
       Inst->eraseFromParent();
       Changed = true;
@@ -844,7 +848,7 @@ bool EarlyCSE::processNode(DomTreeNode *Node) {
     // start a scope in the current generaton which is true for all future
     // generations.  Also, we dont need to consume the last store since the
     // semantics of invariant.start allow us to perform   DSE of the last
-    // store, if there was a store following invariant.start. Consider: 
+    // store, if there was a store following invariant.start. Consider:
     //
     // store 30, i8* p
     // invariant.start(p)
@@ -852,7 +856,7 @@ bool EarlyCSE::processNode(DomTreeNode *Node) {
     // We can DSE the store to 30, since the store 40 to invariant location p
     // causes undefined behaviour.
     if (match(Inst, m_Intrinsic<Intrinsic::invariant_start>())) {
-      // If there are any uses, the scope might end.  
+      // If there are any uses, the scope might end.
       if (!Inst->use_empty())
         continue;
       auto *CI = cast<CallInst>(Inst);
@@ -863,7 +867,7 @@ bool EarlyCSE::processNode(DomTreeNode *Node) {
       continue;
     }
 
-    if (match(Inst, m_Intrinsic<Intrinsic::experimental_guard>())) {
+    if (isGuard(Inst)) {
       if (auto *CondI =
               dyn_cast<Instruction>(cast<CallInst>(Inst)->getArgOperand(0))) {
         if (SimpleValue::canHandle(CondI)) {

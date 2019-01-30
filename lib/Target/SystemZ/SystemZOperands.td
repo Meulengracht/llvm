@@ -1,9 +1,8 @@
 //===-- SystemZOperands.td - SystemZ instruction operands ----*- tblgen-*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -357,6 +356,7 @@ def imm32zx16 : Immediate<i32, [{
 }], UIMM16, "U16Imm">;
 
 def imm32sx16trunc : Immediate<i32, [{}], SIMM16, "S16Imm">;
+def imm32zx16trunc : Immediate<i32, [{}], UIMM16, "U16Imm">;
 
 // Full 32-bit immediates.  we need both signed and unsigned versions
 // because the assembler is picky.  E.g. AFI requires signed operands

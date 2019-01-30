@@ -1,9 +1,8 @@
 //===----------------------- SIFrameLowering.cpp --------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //==-----------------------------------------------------------------------===//
 
@@ -289,7 +288,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
     AMDGPUFunctionArgInfo::PRIVATE_SEGMENT_WAVE_BYTE_OFFSET);
 
   unsigned PreloadedPrivateBufferReg = AMDGPU::NoRegister;
-  if (ST.isAmdCodeObjectV2(F)) {
+  if (ST.isAmdHsaOrMesa(F)) {
     PreloadedPrivateBufferReg = MFI->getPreloadedReg(
       AMDGPUFunctionArgInfo::PRIVATE_SEGMENT_BUFFER);
   }
@@ -308,7 +307,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
   }
 
   if (ResourceRegUsed && PreloadedPrivateBufferReg != AMDGPU::NoRegister) {
-    assert(ST.isAmdCodeObjectV2(F) || ST.isMesaGfxShader(F));
+    assert(ST.isAmdHsaOrMesa(F) || ST.isMesaGfxShader(F));
     MRI.addLiveIn(PreloadedPrivateBufferReg);
     MBB.addLiveIn(PreloadedPrivateBufferReg);
   }
@@ -333,7 +332,7 @@ void SIFrameLowering::emitEntryFunctionPrologue(MachineFunction &MF,
 
   bool CopyBuffer = ResourceRegUsed &&
     PreloadedPrivateBufferReg != AMDGPU::NoRegister &&
-    ST.isAmdCodeObjectV2(F) &&
+    ST.isAmdHsaOrMesa(F) &&
     ScratchRsrcReg != PreloadedPrivateBufferReg;
 
   // This needs to be careful of the copying order to avoid overwriting one of
@@ -433,7 +432,7 @@ void SIFrameLowering::emitEntryFunctionScratchSetup(const GCNSubtarget &ST,
   }
   if (ST.isMesaGfxShader(Fn)
       || (PreloadedPrivateBufferReg == AMDGPU::NoRegister)) {
-    assert(!ST.isAmdCodeObjectV2(Fn));
+    assert(!ST.isAmdHsaOrMesa(Fn));
     const MCInstrDesc &SMovB32 = TII->get(AMDGPU::S_MOV_B32);
 
     unsigned Rsrc2 = TRI->getSubReg(ScratchRsrcReg, AMDGPU::sub2);

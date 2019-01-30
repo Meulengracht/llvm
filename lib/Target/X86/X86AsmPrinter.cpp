@@ -1,9 +1,8 @@
 //===-- X86AsmPrinter.cpp - Convert X86 LLVM code to AT&T assembly --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -88,19 +87,19 @@ bool X86AsmPrinter::runOnMachineFunction(MachineFunction &MF) {
 
 void X86AsmPrinter::EmitFunctionBodyStart() {
   if (EmitFPOData) {
-    X86TargetStreamer *XTS =
-        static_cast<X86TargetStreamer *>(OutStreamer->getTargetStreamer());
-    unsigned ParamsSize =
-        MF->getInfo<X86MachineFunctionInfo>()->getArgumentStackSize();
-    XTS->emitFPOProc(CurrentFnSym, ParamsSize);
+    if (auto *XTS =
+        static_cast<X86TargetStreamer *>(OutStreamer->getTargetStreamer()))
+      XTS->emitFPOProc(
+          CurrentFnSym,
+          MF->getInfo<X86MachineFunctionInfo>()->getArgumentStackSize());
   }
 }
 
 void X86AsmPrinter::EmitFunctionBodyEnd() {
   if (EmitFPOData) {
-    X86TargetStreamer *XTS =
-        static_cast<X86TargetStreamer *>(OutStreamer->getTargetStreamer());
-    XTS->emitFPOEndProc();
+    if (auto *XTS =
+            static_cast<X86TargetStreamer *>(OutStreamer->getTargetStreamer()))
+      XTS->emitFPOEndProc();
   }
 }
 
@@ -129,6 +128,9 @@ static void printSymbolOperand(X86AsmPrinter &P, const MachineOperand &MO,
     if (MO.getTargetFlags() == X86II::MO_DLLIMPORT)
       GVSym =
           P.OutContext.getOrCreateSymbol(Twine("__imp_") + GVSym->getName());
+    else if (MO.getTargetFlags() == X86II::MO_COFFSTUB)
+      GVSym =
+          P.OutContext.getOrCreateSymbol(Twine(".refptr.") + GVSym->getName());
 
     if (MO.getTargetFlags() == X86II::MO_DARWIN_NONLAZY ||
         MO.getTargetFlags() == X86II::MO_DARWIN_NONLAZY_PIC_BASE) {
@@ -161,6 +163,7 @@ static void printSymbolOperand(X86AsmPrinter &P, const MachineOperand &MO,
     break;
   case X86II::MO_DARWIN_NONLAZY:
   case X86II::MO_DLLIMPORT:
+  case X86II::MO_COFFSTUB:
     // These affect the name of the symbol, not any suffix.
     break;
   case X86II::MO_GOT_ABSOLUTE_ADDRESS:
@@ -568,9 +571,9 @@ void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
 
       // Emitting an Elf_Prop for the CET properties.
       OutStreamer->EmitIntValue(ELF::GNU_PROPERTY_X86_FEATURE_1_AND, 4);
-      OutStreamer->EmitIntValue(WordSize, 4);               // data size
-      OutStreamer->EmitIntValue(FeatureFlagsAnd, WordSize); // data
-      EmitAlignment(WordSize == 4 ? 2 : 3);                 // padding
+      OutStreamer->EmitIntValue(4, 4);               // data size
+      OutStreamer->EmitIntValue(FeatureFlagsAnd, 4); // data
+      EmitAlignment(WordSize == 4 ? 2 : 3);          // padding
 
       OutStreamer->endSection(Nt);
       OutStreamer->SwitchSection(Cur);
@@ -583,21 +586,28 @@ void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
   if (TT.isOSBinFormatCOFF()) {
     // Emit an absolute @feat.00 symbol.  This appears to be some kind of
     // compiler features bitfield read by link.exe.
+    MCSymbol *S = MMI->getContext().getOrCreateSymbol(StringRef("@feat.00"));
+    OutStreamer->BeginCOFFSymbolDef(S);
+    OutStreamer->EmitCOFFSymbolStorageClass(COFF::IMAGE_SYM_CLASS_STATIC);
+    OutStreamer->EmitCOFFSymbolType(COFF::IMAGE_SYM_DTYPE_NULL);
+    OutStreamer->EndCOFFSymbolDef();
+    int64_t Feat00Flags = 0;
+
     if (TT.getArch() == Triple::x86) {
-      MCSymbol *S = MMI->getContext().getOrCreateSymbol(StringRef("@feat.00"));
-      OutStreamer->BeginCOFFSymbolDef(S);
-      OutStreamer->EmitCOFFSymbolStorageClass(COFF::IMAGE_SYM_CLASS_STATIC);
-      OutStreamer->EmitCOFFSymbolType(COFF::IMAGE_SYM_DTYPE_NULL);
-      OutStreamer->EndCOFFSymbolDef();
       // According to the PE-COFF spec, the LSB of this value marks the object
       // for "registered SEH".  This means that all SEH handler entry points
       // must be registered in .sxdata.  Use of any unregistered handlers will
       // cause the process to terminate immediately.  LLVM does not know how to
       // register any SEH handlers, so its object files should be safe.
-      OutStreamer->EmitSymbolAttribute(S, MCSA_Global);
-      OutStreamer->EmitAssignment(
-          S, MCConstantExpr::create(int64_t(1), MMI->getContext()));
+      Feat00Flags |= 1;
     }
+
+    if (M.getModuleFlag("cfguardtable"))
+      Feat00Flags |= 0x800; // Object is CFG-aware.
+
+    OutStreamer->EmitSymbolAttribute(S, MCSA_Global);
+    OutStreamer->EmitAssignment(
+        S, MCConstantExpr::create(Feat00Flags, MMI->getContext()));
   }
   OutStreamer->EmitSyntaxDirective();
 
@@ -606,29 +616,6 @@ void X86AsmPrinter::EmitStartOfAsmFile(Module &M) {
   bool is16 = TT.getEnvironment() == Triple::CODE16;
   if (M.getModuleInlineAsm().empty() && is16)
     OutStreamer->EmitAssemblerFlag(MCAF_Code16);
-}
-
-MCSymbol *X86AsmPrinter::GetCPISymbol(unsigned CPID) const {
-  if (Subtarget->isTargetKnownWindowsMSVC()) {
-    const MachineConstantPoolEntry &CPE =
-        MF->getConstantPool()->getConstants()[CPID];
-    if (!CPE.isMachineConstantPoolEntry()) {
-      const DataLayout &DL = MF->getDataLayout();
-      SectionKind Kind = CPE.getSectionKind(&DL);
-      const Constant *C = CPE.Val.ConstVal;
-      unsigned Align = CPE.Alignment;
-      if (const MCSectionCOFF *S = dyn_cast<MCSectionCOFF>(
-              getObjFileLowering().getSectionForConstant(DL, Kind, C, Align))) {
-        if (MCSymbol *Sym = S->getCOMDATSymbol()) {
-          if (Sym->isUndefined())
-            OutStreamer->EmitSymbolAttribute(Sym, MCSA_Global);
-          return Sym;
-        }
-      }
-    }
-  }
-
-  return AsmPrinter::GetCPISymbol(CPID);
 }
 
 static void
@@ -686,7 +673,7 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
     emitNonLazyStubs(MMI, *OutStreamer);
 
     // Emit stack and fault map information.
-    SM.serializeToStackMapSection();
+    emitStackMaps(SM);
     FM.serializeToFaultMapSection();
 
     // This flag tells the linker that no global symbols contain code that fall
@@ -695,26 +682,31 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
     // stripping. Since LLVM never generates code that does this, it is always
     // safe to set.
     OutStreamer->EmitAssemblerFlag(MCAF_SubsectionsViaSymbols);
-    return;
-  }
-
-  if (TT.isKnownWindowsMSVCEnvironment() && MMI->usesVAFloatArgument()) {
-    StringRef SymbolName =
-        (TT.getArch() == Triple::x86_64) ? "_fltused" : "__fltused";
-    MCSymbol *S = MMI->getContext().getOrCreateSymbol(SymbolName);
-    OutStreamer->EmitSymbolAttribute(S, MCSA_Global);
-    return;
-  }
-
-  if (TT.isOSBinFormatCOFF()) {
-    SM.serializeToStackMapSection();
-    return;
-  }
-
-  if (TT.isOSBinFormatELF()) {
-    SM.serializeToStackMapSection();
+  } else if (TT.isOSBinFormatCOFF()) {
+    if (MMI->usesMSVCFloatingPoint()) {
+      // In Windows' libcmt.lib, there is a file which is linked in only if the
+      // symbol _fltused is referenced. Linking this in causes some
+      // side-effects:
+      //
+      // 1. For x86-32, it will set the x87 rounding mode to 53-bit instead of
+      // 64-bit mantissas at program start.
+      //
+      // 2. It links in support routines for floating-point in scanf and printf.
+      //
+      // MSVC emits an undefined reference to _fltused when there are any
+      // floating point operations in the program (including calls). A program
+      // that only has: `scanf("%f", &global_float);` may fail to trigger this,
+      // but oh well...that's a documented issue.
+      StringRef SymbolName =
+          (TT.getArch() == Triple::x86) ? "__fltused" : "_fltused";
+      MCSymbol *S = MMI->getContext().getOrCreateSymbol(SymbolName);
+      OutStreamer->EmitSymbolAttribute(S, MCSA_Global);
+      return;
+    }
+    emitStackMaps(SM);
+  } else if (TT.isOSBinFormatELF()) {
+    emitStackMaps(SM);
     FM.serializeToFaultMapSection();
-    return;
   }
 }
 

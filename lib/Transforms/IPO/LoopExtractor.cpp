@@ -1,9 +1,8 @@
 //===- LoopExtractor.cpp - Extract each loop into a new function ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -104,8 +103,8 @@ bool LoopExtractor::runOnLoop(Loop *L, LPPassManager &LPM) {
   bool ShouldExtractLoop = false;
 
   // Extract the loop if the entry block doesn't branch to the loop header.
-  TerminatorInst *EntryTI =
-    L->getHeader()->getParent()->getEntryBlock().getTerminator();
+  Instruction *EntryTI =
+      L->getHeader()->getParent()->getEntryBlock().getTerminator();
   if (!isa<BranchInst>(EntryTI) ||
       !cast<BranchInst>(EntryTI)->isUnconditional() ||
       EntryTI->getSuccessor(0) != L->getHeader()) {

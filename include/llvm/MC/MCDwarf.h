@@ -1,9 +1,8 @@
 //===- MCDwarf.h - Machine Code Dwarf support -------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -362,6 +361,13 @@ public:
   static void Encode(MCContext &Context, MCDwarfLineTableParams Params,
                      int64_t LineDelta, uint64_t AddrDelta, raw_ostream &OS);
 
+  /// Utility function to encode a Dwarf pair of LineDelta and AddrDeltas using
+  /// fixed length operands.
+  static bool FixedEncode(MCContext &Context,
+                          MCDwarfLineTableParams Params,
+                          int64_t LineDelta, uint64_t AddrDelta,
+                          raw_ostream &OS, uint32_t *Offset, uint32_t *Size);
+
   /// Utility function to emit the encoding to a streamer.
   static void Emit(MCStreamer *MCOS, MCDwarfLineTableParams Params,
                    int64_t LineDelta, uint64_t AddrDelta);
@@ -423,6 +429,7 @@ public:
     OpUndefined,
     OpRegister,
     OpWindowSave,
+    OpNegateRAState,
     OpGnuArgsSize
   };
 
@@ -500,6 +507,11 @@ public:
   /// .cfi_window_save SPARC register window is saved.
   static MCCFIInstruction createWindowSave(MCSymbol *L) {
     return MCCFIInstruction(OpWindowSave, L, 0, 0, "");
+  }
+
+  /// .cfi_negate_ra_state AArch64 negate RA state.
+  static MCCFIInstruction createNegateRAState(MCSymbol *L) {
+    return MCCFIInstruction(OpNegateRAState, L, 0, 0, "");
   }
 
   /// .cfi_restore says that the rule for Register is now the same as it
@@ -586,6 +598,7 @@ struct MCDwarfFrameInfo {
   bool IsSignalFrame = false;
   bool IsSimple = false;
   unsigned RAReg = static_cast<unsigned>(INT_MAX);
+  bool IsBKeyFrame = false;
 };
 
 class MCDwarfFrameEmitter {

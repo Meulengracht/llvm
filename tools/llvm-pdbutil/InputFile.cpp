@@ -1,9 +1,8 @@
 //===- InputFile.cpp ------------------------------------------ *- C++ --*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -41,6 +40,10 @@ getModuleDebugStream(PDBFile &File, StringRef &ModuleName, uint32_t Index) {
 
   auto &Dbi = Err(File.getPDBDbiStream());
   const auto &Modules = Dbi.modules();
+  if (Index >= Modules.getModuleCount())
+    return make_error<RawError>(raw_error_code::index_out_of_bounds,
+                                "Invalid module index");
+
   auto Modi = Modules.getModuleDescriptor(Index);
 
   ModuleName = Modi.getModuleName();
@@ -112,10 +115,6 @@ static std::string formatChecksumKind(FileChecksumKind Kind) {
   return formatUnknownEnum(Kind);
 }
 
-static const DebugStringTableSubsectionRef &extractStringTable(PDBFile &File) {
-  return cantFail(File.getStringTable()).getStringTable();
-}
-
 template <typename... Args>
 static void formatInternal(LinePrinter &Printer, bool Append, Args &&... args) {
   if (Append)
@@ -164,8 +163,13 @@ void SymbolGroup::initializeForPdb(uint32_t Modi) {
 
   // PDB always uses the same string table, but each module has its own
   // checksums.  So we only set the strings if they're not already set.
-  if (!SC.hasStrings())
-    SC.setStrings(extractStringTable(File->pdb()));
+  if (!SC.hasStrings()) {
+    auto StringTable = File->pdb().getStringTable();
+    if (StringTable)
+      SC.setStrings(StringTable->getStringTable());
+    else
+      consumeError(StringTable.takeError());
+  }
 
   SC.resetChecksums();
   auto MDS = getModuleDebugStream(File->pdb(), Name, Modi);

@@ -1,9 +1,8 @@
 //===--- MemoryBuffer.cpp - Memory Buffer implementation ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -152,7 +151,7 @@ MemoryBuffer::getFileOrSTDIN(const Twine &Filename, int64_t FileSize,
 }
 
 ErrorOr<std::unique_ptr<MemoryBuffer>>
-MemoryBuffer::getFileSlice(const Twine &FilePath, uint64_t MapSize, 
+MemoryBuffer::getFileSlice(const Twine &FilePath, uint64_t MapSize,
                            uint64_t Offset, bool IsVolatile) {
   return getFileAux<MemoryBuffer>(FilePath, -1, MapSize, Offset, false,
                                   IsVolatile);
@@ -533,5 +532,4 @@ MemoryBufferRef MemoryBuffer::getMemBufferRef() const {
   return MemoryBufferRef(Data, Identifier);
 }
 
-void MemoryBuffer::anchor() {}
-void SmallVectorMemoryBuffer::anchor() {}
+SmallVectorMemoryBuffer::~SmallVectorMemoryBuffer() {}

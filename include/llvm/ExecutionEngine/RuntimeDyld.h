@@ -1,9 +1,8 @@
 //===- RuntimeDyld.h - Run-time dynamic linker for MC-JIT -------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -250,6 +249,16 @@ public:
   void finalizeWithMemoryManagerLocking();
 
 private:
+  friend void
+  jitLinkForORC(object::ObjectFile &Obj,
+                std::unique_ptr<MemoryBuffer> UnderlyingBuffer,
+                RuntimeDyld::MemoryManager &MemMgr, JITSymbolResolver &Resolver,
+                bool ProcessAllSections,
+                std::function<Error(std::unique_ptr<LoadedObjectInfo>,
+                                    std::map<StringRef, JITEvaluatedSymbol>)>
+                    OnLoaded,
+                std::function<void(Error)> OnEmitted);
+
   // RuntimeDyldImpl is the actual class. RuntimeDyld is just the public
   // interface.
   std::unique_ptr<RuntimeDyldImpl> Dyld;
@@ -258,6 +267,21 @@ private:
   bool ProcessAllSections;
   RuntimeDyldCheckerImpl *Checker;
 };
+
+// Asynchronous JIT link for ORC.
+//
+// Warning: This API is experimental and probably should not be used by anyone
+// but ORC's RTDyldObjectLinkingLayer2. Internally it constructs a RuntimeDyld
+// instance and uses continuation passing to perform the fix-up and finalize
+// steps asynchronously.
+void jitLinkForORC(object::ObjectFile &Obj,
+                   std::unique_ptr<MemoryBuffer> UnderlyingBuffer,
+                   RuntimeDyld::MemoryManager &MemMgr,
+                   JITSymbolResolver &Resolver, bool ProcessAllSections,
+                   std::function<Error(std::unique_ptr<LoadedObjectInfo>,
+                                       std::map<StringRef, JITEvaluatedSymbol>)>
+                       OnLoaded,
+                   std::function<void(Error)> OnEmitted);
 
 } // end namespace llvm
 

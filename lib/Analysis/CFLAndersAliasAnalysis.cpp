@@ -1,9 +1,8 @@
 //===- CFLAndersAliasAnalysis.cpp - Unification-based Alias Analysis ------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -395,7 +394,7 @@ populateAliasMap(DenseMap<const Value *, std::vector<OffsetValue>> &AliasMap,
     }
 
     // Sort AliasList for faster lookup
-    llvm::sort(AliasList.begin(), AliasList.end());
+    llvm::sort(AliasList);
   }
 }
 
@@ -479,7 +478,7 @@ static void populateExternalRelations(
   }
 
   // Remove duplicates in ExtRelations
-  llvm::sort(ExtRelations.begin(), ExtRelations.end());
+  llvm::sort(ExtRelations);
   ExtRelations.erase(std::unique(ExtRelations.begin(), ExtRelations.end()),
                      ExtRelations.end());
 }
@@ -515,10 +514,9 @@ CFLAndersAAResult::FunctionInfo::getAttrs(const Value *V) const {
   return None;
 }
 
-bool CFLAndersAAResult::FunctionInfo::mayAlias(const Value *LHS,
-                                               LocationSize LHSSize,
-                                               const Value *RHS,
-                                               LocationSize RHSSize) const {
+bool CFLAndersAAResult::FunctionInfo::mayAlias(
+    const Value *LHS, LocationSize MaybeLHSSize, const Value *RHS,
+    LocationSize MaybeRHSSize) const {
   assert(LHS && RHS);
 
   // Check if we've seen LHS and RHS before. Sometimes LHS or RHS can be created
@@ -557,10 +555,13 @@ bool CFLAndersAAResult::FunctionInfo::mayAlias(const Value *LHS,
                                       OffsetValue{RHS, 0}, Comparator);
 
     if (RangePair.first != RangePair.second) {
-      // Be conservative about UnknownSize
-      if (LHSSize == MemoryLocation::UnknownSize ||
-          RHSSize == MemoryLocation::UnknownSize)
+      // Be conservative about unknown sizes
+      if (MaybeLHSSize == LocationSize::unknown() ||
+          MaybeRHSSize == LocationSize::unknown())
         return true;
+
+      const uint64_t LHSSize = MaybeLHSSize.getValue();
+      const uint64_t RHSSize = MaybeRHSSize.getValue();
 
       for (const auto &OVal : make_range(RangePair)) {
         // Be conservative about UnknownOffset

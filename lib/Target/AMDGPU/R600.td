@@ -1,9 +1,8 @@
 //===-- R600.td - R600 Tablegen files ----------------------*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -51,9 +50,4 @@ def CC_R600 : CallingConv<[
     T23_XYZW, T24_XYZW, T25_XYZW, T26_XYZW, T27_XYZW, T28_XYZW, T29_XYZW,
     T30_XYZW, T31_XYZW, T32_XYZW
   ]>>>
-]>;
-
-// Calling convention for compute kernels
-def CC_R600_Kernel : CallingConv<[
-  CCCustom<"allocateKernArg">
 ]>;

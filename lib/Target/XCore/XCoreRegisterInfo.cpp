@@ -1,9 +1,8 @@
 //===-- XCoreRegisterInfo.cpp - XCore Register Information ----------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -296,12 +295,12 @@ XCoreRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   // fold constant into offset.
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
   MI.getOperand(FIOperandNum + 1).ChangeToImmediate(0);
-  
+
   assert(Offset%4 == 0 && "Misaligned stack offset");
   LLVM_DEBUG(errs() << "Offset             : " << Offset << "\n"
                     << "<--------->\n");
   Offset/=4;
-  
+
   unsigned Reg = MI.getOperand(0).getReg();
   assert(XCore::GRRegsRegClass.contains(Reg) && "Unexpected register operand");
 

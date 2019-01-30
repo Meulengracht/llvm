@@ -1,9 +1,8 @@
 //===- SSAUpdater.h - Unstructured SSA Update Tool --------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -75,6 +74,10 @@ public:
   /// Return true if the SSAUpdater already has a value for the specified
   /// block.
   bool HasValueForBlock(BasicBlock *BB) const;
+
+  /// Return the value for the specified block if the SSAUpdater has one,
+  /// otherwise return nullptr.
+  Value *FindValueForBlock(BasicBlock *BB) const;
 
   /// Construct SSA form, materializing a value that is live at the end
   /// of the specified block.

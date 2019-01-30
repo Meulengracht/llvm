@@ -1,9 +1,8 @@
 //===- AMDGPULibCalls.cpp -------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1333,8 +1332,7 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
   // for OpenCL 2.0 we have only generic implementation of sincos
   // function.
   AMDGPULibFunc nf(AMDGPULibFunc::EI_SINCOS, fInfo);
-  const AMDGPUAS AS = AMDGPU::getAMDGPUAS(*M);
-  nf.getLeads()[0].PtrKind = AMDGPULibFunc::getEPtrKindFromAddrSpace(AS.FLAT_ADDRESS);
+  nf.getLeads()[0].PtrKind = AMDGPULibFunc::getEPtrKindFromAddrSpace(AMDGPUAS::FLAT_ADDRESS);
   Function *Fsincos = dyn_cast_or_null<Function>(getFunction(M, nf));
   if (!Fsincos) return false;
 
@@ -1347,7 +1345,7 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
   // The allocaInst allocates the memory in private address space. This need
   // to be bitcasted to point to the address space of cos pointer type.
   // In OpenCL 2.0 this is generic, while in 1.2 that is private.
-  if (PTy->getPointerAddressSpace() != AS.PRIVATE_ADDRESS)
+  if (PTy->getPointerAddressSpace() != AMDGPUAS::PRIVATE_ADDRESS)
     P = B.CreateAddrSpaceCast(Alloc, PTy);
   CallInst *Call = CreateCallEx2(B, Fsincos, UI->getArgOperand(0), P);
 

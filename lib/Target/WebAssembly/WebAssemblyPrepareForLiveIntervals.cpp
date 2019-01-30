@@ -1,9 +1,8 @@
 //===- WebAssemblyPrepareForLiveIntervals.cpp - Prepare for LiveIntervals -===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -70,7 +69,8 @@ static bool HasArgumentDef(unsigned Reg, const MachineRegisterInfo &MRI) {
   return false;
 }
 
-bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(MachineFunction &MF) {
+bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(
+    MachineFunction &MF) {
   LLVM_DEBUG({
     dbgs() << "********** Prepare For LiveIntervals **********\n"
            << "********** Function: " << MF.getName() << '\n';
@@ -112,7 +112,7 @@ bool WebAssemblyPrepareForLiveIntervals::runOnMachineFunction(MachineFunction &M
 
   // Move ARGUMENT_* instructions to the top of the entry block, so that their
   // liveness reflects the fact that these really are live-in values.
-  for (auto MII = Entry.begin(), MIE = Entry.end(); MII != MIE; ) {
+  for (auto MII = Entry.begin(), MIE = Entry.end(); MII != MIE;) {
     MachineInstr &MI = *MII++;
     if (WebAssembly::isArgument(MI)) {
       MI.removeFromParent();

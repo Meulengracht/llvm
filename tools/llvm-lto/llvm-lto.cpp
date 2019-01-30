@@ -1,9 +1,8 @@
 //===- llvm-lto: a simple command-line program to link modules with LTO ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -158,13 +157,17 @@ static cl::opt<int>
     ThinLTOCachePruningInterval("thinlto-cache-pruning-interval",
     cl::init(1200), cl::desc("Set ThinLTO cache pruning interval."));
 
-static cl::opt<int>
+static cl::opt<unsigned long long>
     ThinLTOCacheMaxSizeBytes("thinlto-cache-max-size-bytes",
     cl::desc("Set ThinLTO cache pruning directory maximum size in bytes."));
 
 static cl::opt<int>
     ThinLTOCacheMaxSizeFiles("thinlto-cache-max-size-files", cl::init(1000000),
     cl::desc("Set ThinLTO cache pruning directory maximum number of files."));
+
+static cl::opt<unsigned>
+    ThinLTOCacheEntryExpiration("thinlto-cache-entry-expiration", cl::init(604800) /* 1w */,
+    cl::desc("Set ThinLTO cache entry expiration time."));
 
 static cl::opt<std::string> ThinLTOSaveTempsPrefix(
     "thinlto-save-temps",
@@ -481,6 +484,7 @@ public:
     ThinGenerator.setTargetOptions(Options);
     ThinGenerator.setCacheDir(ThinLTOCacheDir);
     ThinGenerator.setCachePruningInterval(ThinLTOCachePruningInterval);
+    ThinGenerator.setCacheEntryExpiration(ThinLTOCacheEntryExpiration);
     ThinGenerator.setCacheMaxSizeFiles(ThinLTOCacheMaxSizeFiles);
     ThinGenerator.setCacheMaxSizeBytes(ThinLTOCacheMaxSizeBytes);
     ThinGenerator.setFreestanding(EnableFreestanding);
@@ -557,11 +561,14 @@ private:
 
     auto Index = loadCombinedIndex();
     for (auto &Filename : InputFilenames) {
+      LLVMContext Ctx;
+      auto TheModule = loadModule(Filename, Ctx);
+
       // Build a map of module to the GUIDs and summary objects that should
       // be written to its index.
       std::map<std::string, GVSummaryMapTy> ModuleToSummariesForIndex;
-      ThinLTOCodeGenerator::gatherImportedSummariesForModule(
-          Filename, *Index, ModuleToSummariesForIndex);
+      ThinGenerator.gatherImportedSummariesForModule(*TheModule, *Index,
+                                                     ModuleToSummariesForIndex);
 
       std::string OutputName = OutputFilename;
       if (OutputName.empty()) {
@@ -589,12 +596,14 @@ private:
 
     auto Index = loadCombinedIndex();
     for (auto &Filename : InputFilenames) {
+      LLVMContext Ctx;
+      auto TheModule = loadModule(Filename, Ctx);
       std::string OutputName = OutputFilename;
       if (OutputName.empty()) {
         OutputName = Filename + ".imports";
       }
       OutputName = getThinLTOOutputFile(OutputName, OldPrefix, NewPrefix);
-      ThinLTOCodeGenerator::emitImports(Filename, OutputName, *Index);
+      ThinGenerator.emitImports(*TheModule, OutputName, *Index);
     }
   }
 

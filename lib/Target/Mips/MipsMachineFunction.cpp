@@ -1,9 +1,8 @@
 //===-- MipsMachineFunctionInfo.cpp - Private data used for Mips ----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -29,25 +28,27 @@ bool MipsFunctionInfo::globalBaseRegSet() const {
   return GlobalBaseReg;
 }
 
+static const TargetRegisterClass &getGlobalBaseRegClass(MachineFunction &MF) {
+  auto &STI = static_cast<const MipsSubtarget &>(MF.getSubtarget());
+  auto &TM = static_cast<const MipsTargetMachine &>(MF.getTarget());
+
+  if (STI.inMips16Mode())
+    return Mips::CPU16RegsRegClass;
+
+  if (STI.inMicroMipsMode())
+    return Mips::GPRMM16RegClass;
+
+  if (TM.getABI().IsN64())
+    return Mips::GPR64RegClass;
+
+  return Mips::GPR32RegClass;
+}
+
 unsigned MipsFunctionInfo::getGlobalBaseReg() {
-  // Return if it has already been initialized.
-  if (GlobalBaseReg)
-    return GlobalBaseReg;
-
-  MipsSubtarget const &STI =
-      static_cast<const MipsSubtarget &>(MF.getSubtarget());
-
-  const TargetRegisterClass *RC =
-      STI.inMips16Mode()
-          ? &Mips::CPU16RegsRegClass
-          : STI.inMicroMipsMode()
-                ? &Mips::GPRMM16RegClass
-                : static_cast<const MipsTargetMachine &>(MF.getTarget())
-                          .getABI()
-                          .IsN64()
-                      ? &Mips::GPR64RegClass
-                      : &Mips::GPR32RegClass;
-  return GlobalBaseReg = MF.getRegInfo().createVirtualRegister(RC);
+  if (!GlobalBaseReg)
+    GlobalBaseReg =
+        MF.getRegInfo().createVirtualRegister(&getGlobalBaseRegClass(MF));
+  return GlobalBaseReg;
 }
 
 void MipsFunctionInfo::createEhDataRegsFI() {

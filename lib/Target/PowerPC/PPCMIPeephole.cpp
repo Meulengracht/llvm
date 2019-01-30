@@ -1,9 +1,8 @@
 //===-------------- PPCMIPeephole.cpp - MI Peephole Cleanups -------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===---------------------------------------------------------------------===//
 //
@@ -891,7 +890,7 @@ static bool eligibleForCompareElimination(MachineBasicBlock &MBB,
     auto BII = BB.getFirstInstrTerminator();
     // We optimize BBs ending with a conditional branch.
     // We check only for BCC here, not BCCLR, because BCCLR
-    // will be formed only later in the pipeline. 
+    // will be formed only later in the pipeline.
     if (BB.succ_size() == 2 &&
         BII != BB.instr_end() &&
         (*BII).getOpcode() == PPC::BCC &&

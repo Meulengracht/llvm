@@ -1,9 +1,8 @@
 //===- SIMemoryLegalizer.cpp ----------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -202,8 +201,6 @@ public:
 
 class SIMemOpAccess final {
 private:
-
-  AMDGPUAS SIAddrSpaceInfo;
   AMDGPUMachineModuleInfo *MMI = nullptr;
 
   /// Reports unsupported message \p Msg for \p MI to LLVM context.
@@ -255,7 +252,7 @@ protected:
   /// Instruction info.
   const SIInstrInfo *TII = nullptr;
 
-  IsaInfo::IsaVersion IV;
+  IsaVersion IV;
 
   SICacheControl(const GCNSubtarget &ST);
 
@@ -453,22 +450,21 @@ SIMemOpAccess::toSIAtomicScope(SyncScope::ID SSID,
 }
 
 SIAtomicAddrSpace SIMemOpAccess::toSIAtomicAddrSpace(unsigned AS) const {
-  if (AS == SIAddrSpaceInfo.FLAT_ADDRESS)
+  if (AS == AMDGPUAS::FLAT_ADDRESS)
     return SIAtomicAddrSpace::FLAT;
-  if (AS == SIAddrSpaceInfo.GLOBAL_ADDRESS)
+  if (AS == AMDGPUAS::GLOBAL_ADDRESS)
     return SIAtomicAddrSpace::GLOBAL;
-  if (AS == SIAddrSpaceInfo.LOCAL_ADDRESS)
+  if (AS == AMDGPUAS::LOCAL_ADDRESS)
     return SIAtomicAddrSpace::LDS;
-  if (AS == SIAddrSpaceInfo.PRIVATE_ADDRESS)
+  if (AS == AMDGPUAS::PRIVATE_ADDRESS)
     return SIAtomicAddrSpace::SCRATCH;
-  if (AS == SIAddrSpaceInfo.REGION_ADDRESS)
+  if (AS == AMDGPUAS::REGION_ADDRESS)
     return SIAtomicAddrSpace::GDS;
 
   return SIAtomicAddrSpace::OTHER;
 }
 
 SIMemOpAccess::SIMemOpAccess(MachineFunction &MF) {
-  SIAddrSpaceInfo = getAMDGPUAS(MF.getTarget());
   MMI = &MF.getMMI().getObjFileInfo<AMDGPUMachineModuleInfo>();
 }
 
@@ -608,7 +604,7 @@ Optional<SIMemOpInfo> SIMemOpAccess::getAtomicCmpxchgOrRmwInfo(
 
 SICacheControl::SICacheControl(const GCNSubtarget &ST) {
   TII = ST.getInstrInfo();
-  IV = IsaInfo::getIsaVersion(ST.getFeatureBits());
+  IV = getIsaVersion(ST.getCPU());
 }
 
 /* static */
@@ -737,7 +733,7 @@ bool SIGfx6CacheControl::insertWait(MachineBasicBlock::iterator &MI,
     case SIAtomicScope::WAVEFRONT:
     case SIAtomicScope::SINGLETHREAD:
       // The L1 cache keeps all memory operations in order for
-      // wavesfronts in the same work-group.
+      // wavefronts in the same work-group.
       break;
     default:
       llvm_unreachable("Unsupported synchronization scope");
@@ -815,6 +811,12 @@ bool SIGfx7CacheControl::insertCacheInvalidate(MachineBasicBlock::iterator &MI,
   MachineBasicBlock &MBB = *MI->getParent();
   DebugLoc DL = MI->getDebugLoc();
 
+  const GCNSubtarget &STM = MBB.getParent()->getSubtarget<GCNSubtarget>();
+
+  const unsigned Flush = STM.isAmdPalOS() || STM.isMesa3DOS()
+                             ? AMDGPU::BUFFER_WBINVL1
+                             : AMDGPU::BUFFER_WBINVL1_VOL;
+
   if (Pos == Position::AFTER)
     ++MI;
 
@@ -822,7 +824,7 @@ bool SIGfx7CacheControl::insertCacheInvalidate(MachineBasicBlock::iterator &MI,
     switch (Scope) {
     case SIAtomicScope::SYSTEM:
     case SIAtomicScope::AGENT:
-      BuildMI(MBB, MI, DL, TII->get(AMDGPU::BUFFER_WBINVL1_VOL));
+      BuildMI(MBB, MI, DL, TII->get(Flush));
       Changed = true;
       break;
     case SIAtomicScope::WORKGROUP:

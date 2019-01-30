@@ -1,9 +1,8 @@
 //===-- llvm/IntrinsicInst.h - Intrinsic Instruction Wrappers ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -66,6 +65,27 @@ namespace llvm {
   /// This is the common base class for debug info intrinsics.
   class DbgInfoIntrinsic : public IntrinsicInst {
   public:
+    /// \name Casting methods
+    /// @{
+    static bool classof(const IntrinsicInst *I) {
+      switch (I->getIntrinsicID()) {
+      case Intrinsic::dbg_declare:
+      case Intrinsic::dbg_value:
+      case Intrinsic::dbg_addr:
+      case Intrinsic::dbg_label:
+        return true;
+      default: return false;
+      }
+    }
+    static bool classof(const Value *V) {
+      return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+    }
+    /// @}
+  };
+
+  /// This is the common base class for debug info intrinsics for variables.
+  class DbgVariableIntrinsic : public DbgInfoIntrinsic {
+  public:
     /// Get the location corresponding to the variable referenced by the debug
     /// info intrinsic.  Depending on the intrinsic, this could be the
     /// variable's value or its address.
@@ -104,7 +124,6 @@ namespace llvm {
       case Intrinsic::dbg_declare:
       case Intrinsic::dbg_value:
       case Intrinsic::dbg_addr:
-      case Intrinsic::dbg_label:
         return true;
       default: return false;
       }
@@ -116,7 +135,7 @@ namespace llvm {
   };
 
   /// This represents the llvm.dbg.declare instruction.
-  class DbgDeclareInst : public DbgInfoIntrinsic {
+  class DbgDeclareInst : public DbgVariableIntrinsic {
   public:
     Value *getAddress() const { return getVariableLocation(); }
 
@@ -132,7 +151,7 @@ namespace llvm {
   };
 
   /// This represents the llvm.dbg.addr instruction.
-  class DbgAddrIntrinsic : public DbgInfoIntrinsic {
+  class DbgAddrIntrinsic : public DbgVariableIntrinsic {
   public:
     Value *getAddress() const { return getVariableLocation(); }
 
@@ -147,7 +166,7 @@ namespace llvm {
   };
 
   /// This represents the llvm.dbg.value instruction.
-  class DbgValueInst : public DbgInfoIntrinsic {
+  class DbgValueInst : public DbgVariableIntrinsic {
   public:
     Value *getValue() const {
       return getVariableLocation(/* AllowNullOp = */ false);
@@ -168,15 +187,11 @@ namespace llvm {
   class DbgLabelInst : public DbgInfoIntrinsic {
   public:
     DILabel *getLabel() const {
-      return cast<DILabel>(getRawVariable());
+      return cast<DILabel>(getRawLabel());
     }
 
-    Metadata *getRawVariable() const {
+    Metadata *getRawLabel() const {
       return cast<MetadataAsValue>(getArgOperand(0))->getMetadata();
-    }
-
-    Metadata *getRawExpression() const {
-      return nullptr;
     }
 
     /// Methods for support type inquiry through isa, cast, and dyn_cast:
@@ -235,6 +250,12 @@ namespace llvm {
       case Intrinsic::experimental_constrained_log2:
       case Intrinsic::experimental_constrained_rint:
       case Intrinsic::experimental_constrained_nearbyint:
+      case Intrinsic::experimental_constrained_maxnum:
+      case Intrinsic::experimental_constrained_minnum:
+      case Intrinsic::experimental_constrained_ceil:
+      case Intrinsic::experimental_constrained_floor:
+      case Intrinsic::experimental_constrained_round:
+      case Intrinsic::experimental_constrained_trunc:
         return true;
       default: return false;
       }

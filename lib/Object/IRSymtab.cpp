@@ -1,9 +1,8 @@
 //===- IRSymtab.cpp - implementation of IR symbol tables ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -41,6 +40,12 @@
 
 using namespace llvm;
 using namespace irsymtab;
+
+static const char *LibcallRoutineNames[] = {
+#define HANDLE_LIBCALL(code, name) name,
+#include "llvm/IR/RuntimeLibcalls.def"
+#undef HANDLE_LIBCALL
+};
 
 namespace {
 
@@ -226,7 +231,13 @@ Error Builder::addSymbol(const ModuleSymbolTable &Msymtab,
 
   setStr(Sym.IRName, GV->getName());
 
-  if (Used.count(GV))
+  bool IsBuiltinFunc = false;
+
+  for (const char *LibcallName : LibcallRoutineNames)
+    if (GV->getName() == LibcallName)
+      IsBuiltinFunc = true;
+
+  if (Used.count(GV) || IsBuiltinFunc)
     Sym.Flags |= 1 << storage::Symbol::FB_used;
   if (GV->isThreadLocal())
     Sym.Flags |= 1 << storage::Symbol::FB_tls;

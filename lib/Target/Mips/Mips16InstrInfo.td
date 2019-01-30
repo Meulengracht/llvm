@@ -1,9 +1,8 @@
 //===- Mips16InstrInfo.td - Target Description for Mips16  -*- tablegen -*-=//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1858,10 +1857,11 @@ def : Mips16Pat<(MipsHi tglobaladdr:$in),
                 (SllX16 (LiRxImmX16 tglobaladdr:$in), 16)>;
 def : Mips16Pat<(MipsHi tjumptable:$in),
                 (SllX16 (LiRxImmX16 tjumptable:$in), 16)>;
-def : Mips16Pat<(MipsHi tglobaltlsaddr:$in),
-                (SllX16 (LiRxImmX16 tglobaltlsaddr:$in), 16)>;
 
 def : Mips16Pat<(MipsLo tblockaddress:$in), (LiRxImmX16 tblockaddress:$in)>;
+
+def : Mips16Pat<(MipsTlsHi tglobaltlsaddr:$in),
+                (SllX16 (LiRxImmX16 tglobaltlsaddr:$in), 16)>;
 
 // wrapper_pic
 class Wrapper16Pat<SDNode node, Instruction ADDiuOp, RegisterClass RC>:

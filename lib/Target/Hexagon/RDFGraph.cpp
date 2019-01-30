@@ -1,9 +1,8 @@
 //===- RDFGraph.cpp -------------------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1471,7 +1470,7 @@ void DataFlowGraph::buildPhis(BlockRefsMap &PhiM, RegisterSet &AllRefs,
   // and add a def for each S in the closure.
 
   // Sort the refs so that the phis will be created in a deterministic order.
-  llvm::sort(MaxRefs.begin(), MaxRefs.end());
+  llvm::sort(MaxRefs);
   // Remove duplicates.
   auto NewEnd = std::unique(MaxRefs.begin(), MaxRefs.end());
   MaxRefs.erase(NewEnd, MaxRefs.end());

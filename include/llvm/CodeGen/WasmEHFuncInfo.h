@@ -1,9 +1,8 @@
 //===--- llvm/CodeGen/WasmEHFuncInfo.h --------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -14,12 +13,14 @@
 #ifndef LLVM_CODEGEN_WASMEHFUNCINFO_H
 #define LLVM_CODEGEN_WASMEHFUNCINFO_H
 
-#include "llvm/ADT/PointerUnion.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/IR/BasicBlock.h"
 
 namespace llvm {
+
+enum EventTag { CPP_EXCEPTION = 0, C_LONGJMP = 1 };
 
 using BBOrMBB = PointerUnion<const BasicBlock *, MachineBasicBlock *>;
 
@@ -73,7 +74,7 @@ struct WasmEHFuncInfo {
 };
 
 // Analyze the IR in the given function to build WasmEHFuncInfo.
-void calculateWasmEHInfo(const Function *F, WasmEHFuncInfo &FuncInfo);
+void calculateWasmEHInfo(const Function *F, WasmEHFuncInfo &EHInfo);
 
 } // namespace llvm
 

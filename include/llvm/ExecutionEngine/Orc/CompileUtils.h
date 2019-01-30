@@ -1,9 +1,8 @@
 //===- CompileUtils.h - Utilities for compiling IR in the JIT ---*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -16,7 +15,7 @@
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ExecutionEngine/ObjectCache.h"
-#include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Object/ObjectFile.h"
@@ -38,7 +37,7 @@ namespace orc {
 
 /// Simple compile functor: Takes a single IR module and returns an ObjectFile.
 /// This compiler supports a single compilation thread and LLVMContext only.
-/// For multithreaded compilation, use MultiThreadedSimpleCompiler below.
+/// For multithreaded compilation, use ConcurrentIRCompiler below.
 class SimpleCompiler {
 public:
   using CompileResult = std::unique_ptr<MemoryBuffer>;
@@ -105,10 +104,10 @@ private:
 ///
 /// This class creates a new TargetMachine and SimpleCompiler instance for each
 /// compile.
-class MultiThreadedSimpleCompiler {
+class ConcurrentIRCompiler {
 public:
-  MultiThreadedSimpleCompiler(JITTargetMachineBuilder JTMB,
-                              ObjectCache *ObjCache = nullptr)
+  ConcurrentIRCompiler(JITTargetMachineBuilder JTMB,
+                       ObjectCache *ObjCache = nullptr)
       : JTMB(std::move(JTMB)), ObjCache(ObjCache) {}
 
   void setObjectCache(ObjectCache *ObjCache) { this->ObjCache = ObjCache; }

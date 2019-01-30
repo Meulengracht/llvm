@@ -1,9 +1,8 @@
 // WebAssemblyInstrExceptRef.td-WebAssembly except_ref codegen --*- tablegen -*-
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -11,8 +10,6 @@
 /// WebAssembly except_ref operand code-gen constructs.
 ///
 //===----------------------------------------------------------------------===//
-
-let Defs = [ARGUMENTS] in {
 
 defm SELECT_EXCEPT_REF : I<(outs EXCEPT_REF:$dst),
                            (ins EXCEPT_REF:$lhs, EXCEPT_REF:$rhs, I32:$cond),
@@ -22,8 +19,6 @@ defm SELECT_EXCEPT_REF : I<(outs EXCEPT_REF:$dst),
                              EXCEPT_REF:$rhs))],
                            "except_ref.select\t$dst, $lhs, $rhs, $cond",
                            "except_ref.select", 0x1b>;
-
-} // Defs = [ARGUMENTS]
 
 def : Pat<(select (i32 (setne I32:$cond, 0)), EXCEPT_REF:$lhs, EXCEPT_REF:$rhs),
           (SELECT_EXCEPT_REF EXCEPT_REF:$lhs, EXCEPT_REF:$rhs, I32:$cond)>;

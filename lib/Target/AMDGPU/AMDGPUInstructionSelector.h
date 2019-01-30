@@ -1,9 +1,8 @@
 //===- AMDGPUInstructionSelector --------------------------------*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 /// \file
@@ -68,6 +67,8 @@ private:
   bool selectG_GEP(MachineInstr &I) const;
   bool selectG_IMPLICIT_DEF(MachineInstr &I) const;
   bool selectG_INTRINSIC(MachineInstr &I, CodeGenCoverage &CoverageInfo) const;
+  bool selectG_INTRINSIC_W_SIDE_EFFECTS(MachineInstr &I,
+                                        CodeGenCoverage &CoverageInfo) const;
   bool hasVgprParts(ArrayRef<GEPInfo> AddrInfo) const;
   void getAddrModeInfo(const MachineInstr &Load, const MachineRegisterInfo &MRI,
                        SmallVectorImpl<GEPInfo> &AddrInfo) const;
@@ -103,9 +104,6 @@ private:
 #define GET_GLOBALISEL_TEMPORARIES_DECL
 #include "AMDGPUGenGlobalISel.inc"
 #undef GET_GLOBALISEL_TEMPORARIES_DECL
-
-protected:
-  AMDGPUAS AMDGPUASI;
 };
 
 } // End llvm namespace.

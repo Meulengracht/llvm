@@ -1,9 +1,8 @@
 //===- OptTable.cpp - Option Table Implementation -------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -521,19 +520,17 @@ static const char *getOptionHelpGroup(const OptTable &Opts, OptSpecifier Id) {
   return getOptionHelpGroup(Opts, GroupID);
 }
 
-void OptTable::PrintHelp(raw_ostream &OS, const char *Name, const char *Title,
+void OptTable::PrintHelp(raw_ostream &OS, const char *Usage, const char *Title,
                          bool ShowHidden, bool ShowAllAliases) const {
-  PrintHelp(OS, Name, Title, /*Include*/ 0, /*Exclude*/
+  PrintHelp(OS, Usage, Title, /*Include*/ 0, /*Exclude*/
             (ShowHidden ? 0 : HelpHidden), ShowAllAliases);
 }
 
-void OptTable::PrintHelp(raw_ostream &OS, const char *Name, const char *Title,
+void OptTable::PrintHelp(raw_ostream &OS, const char *Usage, const char *Title,
                          unsigned FlagsToInclude, unsigned FlagsToExclude,
                          bool ShowAllAliases) const {
-  OS << "OVERVIEW: " << Title << "\n";
-  OS << '\n';
-  OS << "USAGE: " << Name << " [options] <inputs>\n";
-  OS << '\n';
+  OS << "OVERVIEW: " << Title << "\n\n";
+  OS << "USAGE: " << Usage << "\n\n";
 
   // Render help text into a map of group-name to a list of (option, help)
   // pairs.

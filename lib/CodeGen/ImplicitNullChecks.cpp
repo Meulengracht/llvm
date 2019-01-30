@@ -1,9 +1,8 @@
 //===- ImplicitNullChecks.cpp - Fold null checks into memory accesses -----===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -90,7 +89,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
   /// A data type for representing the result computed by \c
   /// computeDependence.  States whether it is okay to reorder the
   /// instruction passed to \c computeDependence with at most one
-  /// depednency.
+  /// dependency.
   struct DependenceResult {
     /// Can we actually re-order \p MI with \p Insts (see \c
     /// computeDependence).
@@ -115,7 +114,7 @@ class ImplicitNullChecks : public MachineFunctionPass {
   /// \c canHandle should return true for all instructions in \p
   /// Insts.
   DependenceResult computeDependence(const MachineInstr *MI,
-                                     ArrayRef<MachineInstr *> Insts);
+                                     ArrayRef<MachineInstr *> Block);
 
   /// Represents one null check that can be made implicit.
   class NullCheck {
@@ -344,11 +343,11 @@ ImplicitNullChecks::areMemoryOpsAliased(MachineInstr &MI,
           return AR_MayAlias;
         continue;
       }
-      llvm::AliasResult AAResult = AA->alias(
-          MemoryLocation(MMO1->getValue(), MemoryLocation::UnknownSize,
-                         MMO1->getAAInfo()),
-          MemoryLocation(MMO2->getValue(), MemoryLocation::UnknownSize,
-                         MMO2->getAAInfo()));
+      llvm::AliasResult AAResult =
+          AA->alias(MemoryLocation(MMO1->getValue(), LocationSize::unknown(),
+                                   MMO1->getAAInfo()),
+                    MemoryLocation(MMO2->getValue(), LocationSize::unknown(),
+                                   MMO2->getAAInfo()));
       if (AAResult != NoAlias)
         return AR_MayAlias;
     }
@@ -360,10 +359,10 @@ ImplicitNullChecks::SuitabilityResult
 ImplicitNullChecks::isSuitableMemoryOp(MachineInstr &MI, unsigned PointerReg,
                                        ArrayRef<MachineInstr *> PrevInsts) {
   int64_t Offset;
-  unsigned BaseReg;
+  MachineOperand *BaseOp;
 
-  if (!TII->getMemOpBaseRegImmOfs(MI, BaseReg, Offset, TRI) ||
-      BaseReg != PointerReg)
+  if (!TII->getMemOperandWithOffset(MI, BaseOp, Offset, TRI) ||
+      !BaseOp->isReg() || BaseOp->getReg() != PointerReg)
     return SR_Unsuitable;
 
   // We want the mem access to be issued at a sane offset from PointerReg,
@@ -651,7 +650,7 @@ MachineInstr *ImplicitNullChecks::insertFaultingInstr(
     }
   }
 
-  MIB.setMemRefs(MI->memoperands_begin(), MI->memoperands_end());
+  MIB.setMemRefs(MI->memoperands());
 
   return MIB;
 }

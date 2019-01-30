@@ -1,9 +1,8 @@
 //===-- RuntimeDyldImpl.h - Run-time dynamic linker for MC-JIT --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -370,7 +369,7 @@ protected:
   void writeBytesUnaligned(uint64_t Value, uint8_t *Dst, unsigned Size) const;
 
   /// Generate JITSymbolFlags from a libObject symbol.
-  virtual JITSymbolFlags getJITSymbolFlags(const BasicSymbolRef &Sym);
+  virtual Expected<JITSymbolFlags> getJITSymbolFlags(const SymbolRef &Sym);
 
   /// Modify the given target address based on the given symbol flags.
   /// This can be used by subclasses to tweak addresses based on symbol flags,
@@ -432,6 +431,9 @@ protected:
   processRelocationRef(unsigned SectionID, relocation_iterator RelI,
                        const ObjectFile &Obj, ObjSectionToIDMap &ObjSectionToID,
                        StubMap &Stubs) = 0;
+
+  void applyExternalSymbolRelocations(
+      const StringMap<JITEvaluatedSymbol> ExternalSymbolMap);
 
   /// Resolve relocations to external symbols.
   Error resolveExternalSymbols();
@@ -535,6 +537,12 @@ public:
   }
 
   void resolveRelocations();
+
+  void resolveLocalRelocations();
+
+  static void finalizeAsync(std::unique_ptr<RuntimeDyldImpl> This,
+                            std::function<void(Error)> OnEmitted,
+                            std::unique_ptr<MemoryBuffer> UnderlyingBuffer);
 
   void reassignSectionAddress(unsigned SectionID, uint64_t Addr);
 

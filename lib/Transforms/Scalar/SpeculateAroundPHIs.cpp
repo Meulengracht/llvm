@@ -1,9 +1,8 @@
 //===- SpeculateAroundPHIs.cpp --------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -33,7 +32,7 @@ STATISTIC(NumSpeculatedInstructions,
 STATISTIC(NumNewRedundantInstructions,
           "Number of new, redundant instructions inserted");
 
-/// Check wether speculating the users of a PHI node around the PHI
+/// Check whether speculating the users of a PHI node around the PHI
 /// will be safe.
 ///
 /// This checks both that all of the users are safe and also that all of their

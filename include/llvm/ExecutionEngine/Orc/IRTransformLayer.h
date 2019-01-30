@@ -1,9 +1,8 @@
 //===- IRTransformLayer.h - Run all IR through a functor --------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,24 +22,24 @@ namespace llvm {
 class Module;
 namespace orc {
 
-class IRTransformLayer2 : public IRLayer {
+class IRTransformLayer : public IRLayer {
 public:
+  using TransformFunction = std::function<Expected<ThreadSafeModule>(
+      ThreadSafeModule, const MaterializationResponsibility &R)>;
 
-  using TransformFunction =
-    std::function<Expected<std::unique_ptr<Module>>(std::unique_ptr<Module>)>;
-
-  IRTransformLayer2(ExecutionSession &ES, IRLayer &BaseLayer,
-                    TransformFunction Transform = identityTransform);
+  IRTransformLayer(ExecutionSession &ES, IRLayer &BaseLayer,
+                   TransformFunction Transform = identityTransform);
 
   void setTransform(TransformFunction Transform) {
     this->Transform = std::move(Transform);
   }
 
-  void emit(MaterializationResponsibility R, VModuleKey K,
-            std::unique_ptr<Module> M) override;
+  void emit(MaterializationResponsibility R, ThreadSafeModule TSM) override;
 
-  static std::unique_ptr<Module> identityTransform(std::unique_ptr<Module> M) {
-    return M;
+  static ThreadSafeModule
+  identityTransform(ThreadSafeModule TSM,
+                    const MaterializationResponsibility &R) {
+    return TSM;
   }
 
 private:
@@ -53,11 +52,11 @@ private:
 ///   This layer applies a user supplied transform to each module that is added,
 /// then adds the transformed module to the layer below.
 template <typename BaseLayerT, typename TransformFtor>
-class IRTransformLayer {
+class LegacyIRTransformLayer {
 public:
 
-  /// Construct an IRTransformLayer with the given BaseLayer
-  IRTransformLayer(BaseLayerT &BaseLayer,
+  /// Construct an LegacyIRTransformLayer with the given BaseLayer
+  LegacyIRTransformLayer(BaseLayerT &BaseLayer,
                    TransformFtor Transform = TransformFtor())
     : BaseLayer(BaseLayer), Transform(std::move(Transform)) {}
 

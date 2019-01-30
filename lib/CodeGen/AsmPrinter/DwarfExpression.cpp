@@ -1,9 +1,8 @@
 //===- llvm/CodeGen/DwarfExpression.cpp - Dwarf Debug Framework -----------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -23,6 +22,20 @@
 #include <cstdint>
 
 using namespace llvm;
+
+void DwarfExpression::emitConstu(uint64_t Value) {
+  if (Value < 32)
+    emitOp(dwarf::DW_OP_lit0 + Value);
+  else if (Value == std::numeric_limits<uint64_t>::max()) {
+    // Only do this for 64-bit values as the DWARF expression stack uses
+    // target-address-size values.
+    emitOp(dwarf::DW_OP_lit0);
+    emitOp(dwarf::DW_OP_not);
+  } else {
+    emitOp(dwarf::DW_OP_constu);
+    emitUnsigned(Value);
+  }
+}
 
 void DwarfExpression::addReg(int DwarfReg, const char *Comment) {
  assert(DwarfReg >= 0 && "invalid negative dwarf register number");
@@ -72,14 +85,12 @@ void DwarfExpression::addOpPiece(unsigned SizeInBits, unsigned OffsetInBits) {
 }
 
 void DwarfExpression::addShr(unsigned ShiftBy) {
-  emitOp(dwarf::DW_OP_constu);
-  emitUnsigned(ShiftBy);
+  emitConstu(ShiftBy);
   emitOp(dwarf::DW_OP_shr);
 }
 
 void DwarfExpression::addAnd(unsigned Mask) {
-  emitOp(dwarf::DW_OP_constu);
-  emitUnsigned(Mask);
+  emitConstu(Mask);
   emitOp(dwarf::DW_OP_and);
 }
 
@@ -181,8 +192,7 @@ void DwarfExpression::addSignedConstant(int64_t Value) {
 void DwarfExpression::addUnsignedConstant(uint64_t Value) {
   assert(LocationKind == Implicit || LocationKind == Unknown);
   LocationKind = Implicit;
-  emitOp(dwarf::DW_OP_constu);
-  emitUnsigned(Value);
+  emitConstu(Value);
 }
 
 void DwarfExpression::addUnsignedConstant(const APInt &Value) {
@@ -243,10 +253,9 @@ bool DwarfExpression::addMachineRegExpression(const TargetRegisterInfo &TRI,
 
   // Don't emit locations that cannot be expressed without DW_OP_stack_value.
   if (DwarfVersion < 4)
-    if (std::any_of(ExprCursor.begin(), ExprCursor.end(),
-                    [](DIExpression::ExprOperand Op) -> bool {
-                      return Op.getOp() == dwarf::DW_OP_stack_value;
-                    })) {
+    if (any_of(ExprCursor, [](DIExpression::ExprOperand Op) -> bool {
+          return Op.getOp() == dwarf::DW_OP_stack_value;
+        })) {
       DwarfRegs.clear();
       LocationKind = Unknown;
       return false;
@@ -373,8 +382,7 @@ void DwarfExpression::addExpression(DIExpressionCursor &&ExprCursor,
       break;
     case dwarf::DW_OP_constu:
       assert(LocationKind != Register);
-      emitOp(dwarf::DW_OP_constu);
-      emitUnsigned(Op->getArg(0));
+      emitConstu(Op->getArg(0));
       break;
     case dwarf::DW_OP_stack_value:
       LocationKind = Implicit;

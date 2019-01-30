@@ -1,9 +1,8 @@
 //===- HexagonAsmPrinter.cpp - Print machine instrs to Hexagon assembly ---===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -755,7 +754,6 @@ void HexagonAsmPrinter::EmitInstruction(const MachineInstr *MI) {
   const MCInstrInfo &MCII = *Subtarget->getInstrInfo();
 
   if (MI->isBundle()) {
-    assert(Subtarget->usePackets() && "Support for packets is disabled");
     const MachineBasicBlock* MBB = MI->getParent();
     MachineBasicBlock::const_instr_iterator MII = MI->getIterator();
 

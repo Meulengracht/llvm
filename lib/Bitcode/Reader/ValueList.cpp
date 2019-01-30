@@ -1,9 +1,8 @@
 //===- ValueList.cpp - Internal BitcodeReader implementation --------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
@@ -144,7 +143,7 @@ Value *BitcodeReaderValueList::getValueFwdRef(unsigned Idx, Type *Ty) {
 void BitcodeReaderValueList::resolveConstantForwardRefs() {
   // Sort the values by-pointer so that they are efficient to look up with a
   // binary search.
-  llvm::sort(ResolveConstants.begin(), ResolveConstants.end());
+  llvm::sort(ResolveConstants);
 
   SmallVector<Constant *, 64> NewOps;
 

@@ -1,9 +1,8 @@
 //===-- X86CallingConv.td - Calling Conventions X86 32/64 --*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -477,6 +476,7 @@ def RetCC_X86_64 : CallingConv<[
 ]>;
 
 // This is the return-value convention used for the entire X86 backend.
+let Entry = 1 in
 def RetCC_X86 : CallingConv<[
 
   // Check if this is the Intel OpenCL built-ins calling convention
@@ -590,8 +590,10 @@ def CC_X86_64_HHVM_C : CallingConv<[
 
 // Calling convention used on Win64
 def CC_X86_Win64_C : CallingConv<[
-  // FIXME: Handle byval stuff.
   // FIXME: Handle varargs.
+
+  // Byval aggregates are passed by pointer
+  CCIfByVal<CCPassIndirect<i64>>,
 
   // Promote i1/v1i1 arguments to i8.
   CCIfType<[i1, v1i1], CCPromoteToType<i8>>,
@@ -1037,6 +1039,7 @@ def CC_X86_64 : CallingConv<[
 ]>;
 
 // This is the argument convention used for the entire X86 backend.
+let Entry = 1 in
 def CC_X86 : CallingConv<[
   CCIfCC<"CallingConv::Intel_OCL_BI", CCDelegateTo<CC_Intel_OCL_BI>>,
   CCIfSubtarget<"is64Bit()", CCDelegateTo<CC_X86_64>>,

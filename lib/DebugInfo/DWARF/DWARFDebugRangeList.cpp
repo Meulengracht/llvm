@@ -1,29 +1,20 @@
 //===- DWARFDebugRangesList.cpp -------------------------------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugRangeList.h"
 #include "llvm/DebugInfo/DWARF/DWARFContext.h"
+#include "llvm/Support/Errc.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cinttypes>
 #include <cstdint>
 
 using namespace llvm;
-
-// FIXME: There are several versions of this. Consolidate them.
-template <typename... Ts>
-static Error createError(char const *Fmt, const Ts &... Vals) {
-  std::string Buffer;
-  raw_string_ostream Stream(Buffer);
-  Stream << format(Fmt, Vals...);
-  return make_error<StringError>(Stream.str(), inconvertibleErrorCode());
-}
 
 void DWARFDebugRangeList::clear() {
   Offset = -1U;
@@ -35,11 +26,13 @@ Error DWARFDebugRangeList::extract(const DWARFDataExtractor &data,
                                    uint32_t *offset_ptr) {
   clear();
   if (!data.isValidOffset(*offset_ptr))
-    return createError("invalid range list offset 0x%" PRIx32, *offset_ptr);
+    return createStringError(errc::invalid_argument,
+                       "invalid range list offset 0x%" PRIx32, *offset_ptr);
 
   AddressSize = data.getAddressSize();
   if (AddressSize != 4 && AddressSize != 8)
-    return createError("invalid address size: %d", AddressSize);
+    return createStringError(errc::invalid_argument,
+                       "invalid address size: %" PRIu8, AddressSize);
   Offset = *offset_ptr;
   while (true) {
     RangeListEntry Entry;
@@ -53,7 +46,8 @@ Error DWARFDebugRangeList::extract(const DWARFDataExtractor &data,
     // Check that both values were extracted correctly.
     if (*offset_ptr != prev_offset + 2 * AddressSize) {
       clear();
-      return createError("invalid range list entry at offset 0x%" PRIx32,
+      return createStringError(errc::invalid_argument,
+                         "invalid range list entry at offset 0x%" PRIx32,
                          prev_offset);
     }
     if (Entry.isEndOfListEntry())
@@ -74,7 +68,7 @@ void DWARFDebugRangeList::dump(raw_ostream &OS) const {
 }
 
 DWARFAddressRangesVector DWARFDebugRangeList::getAbsoluteRanges(
-    llvm::Optional<BaseAddress> BaseAddr) const {
+    llvm::Optional<SectionedAddress> BaseAddr) const {
   DWARFAddressRangesVector Res;
   for (const RangeListEntry &RLE : Entries) {
     if (RLE.isBaseAddressSelectionEntry(AddressSize)) {

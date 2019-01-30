@@ -1,9 +1,8 @@
 //==- llvm/CodeGen/MachineMemOperand.h - MachineMemOperand class -*- C++ -*-==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -184,7 +183,7 @@ public:
   /// atomic operations the atomic ordering requirements when store does not
   /// occur must also be specified.
   MachineMemOperand(MachinePointerInfo PtrInfo, Flags flags, uint64_t s,
-                    uint64_t base_alignment,
+                    uint64_t a,
                     const AAMDNodes &AAInfo = AAMDNodes(),
                     const MDNode *Ranges = nullptr,
                     SyncScope::ID SSID = SyncScope::System,

@@ -1,9 +1,8 @@
 //===- StackSlotColoring.cpp - Stack slot coloring pass. ------------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -214,7 +213,7 @@ void StackSlotColoring::InitializeSlots() {
   Intervals.reserve(LS->getNumIntervals());
   for (auto &I : *LS)
     Intervals.push_back(&I);
-  llvm::sort(Intervals.begin(), Intervals.end(),
+  llvm::sort(Intervals,
              [](Pair *LHS, Pair *RHS) { return LHS->first < RHS->first; });
 
   // Gather all spill slots into a list.

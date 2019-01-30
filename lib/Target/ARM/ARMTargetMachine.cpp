@@ -1,9 +1,8 @@
 //===-- ARMTargetMachine.cpp - Define TargetMachine for ARM ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -90,6 +89,7 @@ extern "C" void LLVMInitializeARMTarget() {
   initializeARMLoadStoreOptPass(Registry);
   initializeARMPreAllocLoadStoreOptPass(Registry);
   initializeARMParallelDSPPass(Registry);
+  initializeARMCodeGenPreparePass(Registry);
   initializeARMConstantIslandsPass(Registry);
   initializeARMExecutionDomainFixPass(Registry);
   initializeARMExpandPseudoPass(Registry);
@@ -195,12 +195,6 @@ static Reloc::Model getEffectiveRelocModel(const Triple &TT,
   return *RM;
 }
 
-static CodeModel::Model getEffectiveCodeModel(Optional<CodeModel::Model> CM) {
-  if (CM)
-    return *CM;
-  return CodeModel::Small;
-}
-
 /// Create an ARM architecture model.
 ///
 ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
@@ -211,17 +205,13 @@ ARMBaseTargetMachine::ARMBaseTargetMachine(const Target &T, const Triple &TT,
                                            CodeGenOpt::Level OL, bool isLittle)
     : LLVMTargetMachine(T, computeDataLayout(TT, CPU, Options, isLittle), TT,
                         CPU, FS, Options, getEffectiveRelocModel(TT, RM),
-                        getEffectiveCodeModel(CM), OL),
+                        getEffectiveCodeModel(CM, CodeModel::Small), OL),
       TargetABI(computeTargetABI(TT, CPU, Options)),
       TLOF(createTLOF(getTargetTriple())), isLittle(isLittle) {
 
   // Default to triple-appropriate float ABI
   if (Options.FloatABIType == FloatABI::Default) {
-    if (TargetTriple.getEnvironment() == Triple::GNUEABIHF ||
-        TargetTriple.getEnvironment() == Triple::MuslEABIHF ||
-        TargetTriple.getEnvironment() == Triple::EABIHF ||
-        TargetTriple.isOSWindows() || TargetTriple.isOSVali() ||
-        TargetABI == ARMBaseTargetMachine::ARM_ABI_AAPCS16)
+    if (isTargetHardFloat())
       this->Options.FloatABIType = FloatABI::Hard;
     else
       this->Options.FloatABIType = FloatABI::Soft;
@@ -352,6 +342,7 @@ public:
   }
 
   void addIRPasses() override;
+  void addCodeGenPrepare() override;
   bool addPreISel() override;
   bool addInstSelector() override;
   bool addIRTranslator() override;
@@ -406,6 +397,12 @@ void ARMPassConfig::addIRPasses() {
   // Match interleaved memory accesses to ldN/stN intrinsics.
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createInterleavedAccessPass());
+}
+
+void ARMPassConfig::addCodeGenPrepare() {
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createARMCodeGenPreparePass());
+  TargetPassConfig::addCodeGenPrepare();
 }
 
 bool ARMPassConfig::addPreISel() {

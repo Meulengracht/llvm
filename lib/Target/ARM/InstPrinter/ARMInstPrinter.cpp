@@ -1,9 +1,8 @@
 //===-- ARMInstPrinter.cpp - Convert ARM MCInst to assembly syntax --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -272,6 +271,21 @@ void ARMInstPrinter::printInst(const MCInst *MI, raw_ostream &O,
   case ARM::TSB:
   case ARM::t2TSB:
     O << "\ttsb\tcsync";
+    return;
+  case ARM::t2DSB:
+    switch (MI->getOperand(0).getImm()) {
+    default:
+      if (!printAliasInstr(MI, STI, O))
+        printInstruction(MI, STI, O);
+      break;
+    case 0:
+      O << "\tssbb";
+      break;
+    case 4:
+      O << "\tpssbb";
+      break;
+    }
+    printAnnotation(O, Annot);
     return;
   }
 
@@ -834,7 +848,7 @@ void ARMInstPrinter::printMSRMaskOperand(const MCInst *MI, unsigned OpNum,
       return;
     }
 
-    O << SYSm; 
+    O << SYSm;
 
     return;
   }

@@ -1,9 +1,8 @@
 //===-- llvm/lib/CodeGen/AsmPrinter/DebugHandlerBase.cpp -------*- C++ -*--===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -12,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DebugHandlerBase.h"
+#include "llvm/CodeGen/DebugHandlerBase.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
@@ -125,6 +124,21 @@ MCSymbol *DebugHandlerBase::getLabelAfterInsn(const MachineInstr *MI) {
   return LabelsAfterInsn.lookup(MI);
 }
 
+// Return the function-local offset of an instruction.
+const MCExpr *
+DebugHandlerBase::getFunctionLocalOffsetAfterInsn(const MachineInstr *MI) {
+  MCContext &MC = Asm->OutContext;
+
+  MCSymbol *Start = Asm->getFunctionBegin();
+  const auto *StartRef = MCSymbolRefExpr::create(Start, MC);
+
+  MCSymbol *AfterInsn = getLabelAfterInsn(MI);
+  assert(AfterInsn && "Expected label after instruction");
+  const auto *AfterRef = MCSymbolRefExpr::create(AfterInsn, MC);
+
+  return MCBinaryExpr::createSub(AfterRef, StartRef, MC);
+}
+
 /// If this type is derived from a base type then return base type size.
 uint64_t DebugHandlerBase::getBaseTypeSize(const DITypeRef TyRef) {
   DIType *Ty = TyRef.resolve();
@@ -190,8 +204,9 @@ void DebugHandlerBase::beginFunction(const MachineFunction *MF) {
 
   // Calculate history for local variables.
   assert(DbgValues.empty() && "DbgValues map wasn't cleaned!");
-  calculateDbgValueHistory(MF, Asm->MF->getSubtarget().getRegisterInfo(),
-                           DbgValues);
+  assert(DbgLabels.empty() && "DbgLabels map wasn't cleaned!");
+  calculateDbgEntityHistory(MF, Asm->MF->getSubtarget().getRegisterInfo(),
+                            DbgValues, DbgLabels);
   LLVM_DEBUG(DbgValues.dump());
 
   // Request labels for the full history.
@@ -227,6 +242,12 @@ void DebugHandlerBase::beginFunction(const MachineFunction *MF) {
       if (Range.second)
         requestLabelAfterInsn(Range.second);
     }
+  }
+
+  // Ensure there is a symbol before DBG_LABEL.
+  for (const auto &I : DbgLabels) {
+    const MachineInstr *MI = I.second;
+    requestLabelBeforeInsn(MI);
   }
 
   PrevInstLoc = DebugLoc();
@@ -296,6 +317,7 @@ void DebugHandlerBase::endFunction(const MachineFunction *MF) {
   if (hasDebugInfo(MMI, MF))
     endFunctionImpl(MF);
   DbgValues.clear();
+  DbgLabels.clear();
   LabelsBeforeInsn.clear();
   LabelsAfterInsn.clear();
 }

@@ -1,9 +1,8 @@
 //===-- BPFSubtarget.h - Define Subtarget for the BPF -----------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -17,6 +16,7 @@
 #include "BPFFrameLowering.h"
 #include "BPFISelLowering.h"
 #include "BPFInstrInfo.h"
+#include "BPFSelectionDAGInfo.h"
 #include "llvm/CodeGen/SelectionDAGTargetInfo.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/DataLayout.h"
@@ -33,7 +33,7 @@ class BPFSubtarget : public BPFGenSubtargetInfo {
   BPFInstrInfo InstrInfo;
   BPFFrameLowering FrameLowering;
   BPFTargetLowering TLInfo;
-  SelectionDAGTargetInfo TSInfo;
+  BPFSelectionDAGInfo TSInfo;
 
 private:
   void initializeEnvironment();
@@ -75,7 +75,7 @@ public:
   const BPFTargetLowering *getTargetLowering() const override {
     return &TLInfo;
   }
-  const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
+  const BPFSelectionDAGInfo *getSelectionDAGInfo() const override {
     return &TSInfo;
   }
   const TargetRegisterInfo *getRegisterInfo() const override {

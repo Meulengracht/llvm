@@ -1,9 +1,8 @@
 //===-- llvm/MC/MCAsmInfo.h - Asm info --------------------------*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -88,6 +87,10 @@ protected:
   /// doesn't handle associative comdats in the way that we would like to use
   /// them.
   bool HasCOFFAssociativeComdats = false;
+
+  /// True if this is a non-GNU COFF target. For GNU targets, we don't generate
+  /// constants into comdat sections.
+  bool HasCOFFComdatConstants = false;
 
   /// This is the maximum possible length of an instruction, which is needed to
   /// compute the size of an inline asm.  Defaults to 4.
@@ -469,6 +472,7 @@ public:
   bool hasMachoZeroFillDirective() const { return HasMachoZeroFillDirective; }
   bool hasMachoTBSSDirective() const { return HasMachoTBSSDirective; }
   bool hasCOFFAssociativeComdats() const { return HasCOFFAssociativeComdats; }
+  bool hasCOFFComdatConstants() const { return HasCOFFComdatConstants; }
   unsigned getMaxInstLength() const { return MaxInstLength; }
   unsigned getMinInstAlignment() const { return MinInstAlignment; }
   bool getDollarIsPC() const { return DollarIsPC; }

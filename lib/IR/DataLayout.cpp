@@ -1,9 +1,8 @@
 //===- DataLayout.cpp - Data size & alignment routines ---------------------==//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -635,6 +634,14 @@ unsigned DataLayout::getPointerSize(unsigned AS) const {
   return I->TypeByteWidth;
 }
 
+unsigned DataLayout::getMaxPointerSize() const {
+  unsigned MaxPointerSize = 0;
+  for (auto &P : Pointers)
+    MaxPointerSize = std::max(MaxPointerSize, P.TypeByteWidth);
+
+  return MaxPointerSize;
+}
+
 unsigned DataLayout::getPointerTypeSizeInBits(Type *Ty) const {
   assert(Ty->isPtrOrPtrVectorTy() &&
          "This should only be called with a pointer or pointer vector type");
@@ -808,15 +815,29 @@ int64_t DataLayout::getIndexedOffsetInType(Type *ElemTy,
 /// global.  This includes an explicitly requested alignment (if the global
 /// has one).
 unsigned DataLayout::getPreferredAlignment(const GlobalVariable *GV) const {
+  unsigned GVAlignment = GV->getAlignment();
+  // If a section is specified, always precisely honor explicit alignment,
+  // so we don't insert padding into a section we don't control.
+  if (GVAlignment && GV->hasSection())
+    return GVAlignment;
+
+  // If no explicit alignment is specified, compute the alignment based on
+  // the IR type. If an alignment is specified, increase it to match the ABI
+  // alignment of the IR type.
+  //
+  // FIXME: Not sure it makes sense to use the alignment of the type if
+  // there's already an explicit alignment specification.
   Type *ElemType = GV->getValueType();
   unsigned Alignment = getPrefTypeAlignment(ElemType);
-  unsigned GVAlignment = GV->getAlignment();
   if (GVAlignment >= Alignment) {
     Alignment = GVAlignment;
   } else if (GVAlignment != 0) {
     Alignment = std::max(GVAlignment, getABITypeAlignment(ElemType));
   }
 
+  // If no explicit alignment is specified, and the global is large, increase
+  // the alignment to 16.
+  // FIXME: Why 16, specifically?
   if (GV->hasInitializer() && GVAlignment == 0) {
     if (Alignment < 16) {
       // If the global is not external, see if it is large.  If so, give it a

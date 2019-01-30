@@ -1,9 +1,8 @@
 //===- AsmMatcherEmitter.cpp - Generate an assembly matcher ---------------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -273,9 +272,17 @@ public:
       return true;
 
     // ... or if any of its super classes are a subset of RHS.
-    for (const ClassInfo *CI : SuperClasses)
-      if (CI->isSubsetOf(RHS))
+    SmallVector<const ClassInfo *, 16> Worklist(SuperClasses.begin(),
+                                                SuperClasses.end());
+    SmallPtrSet<const ClassInfo *, 16> Visited;
+    while (!Worklist.empty()) {
+      auto *CI = Worklist.pop_back_val();
+      if (CI == &RHS)
         return true;
+      for (auto *Super : CI->SuperClasses)
+        if (Visited.insert(Super).second)
+          Worklist.push_back(Super);
+    }
 
     return false;
   }
@@ -2407,10 +2414,9 @@ static void emitOperandMatchErrorDiagStrings(AsmMatcherInfo &Info, raw_ostream &
 static void emitRegisterMatchErrorFunc(AsmMatcherInfo &Info, raw_ostream &OS) {
   OS << "static unsigned getDiagKindFromRegisterClass(MatchClassKind "
         "RegisterClass) {\n";
-  if (std::none_of(Info.Classes.begin(), Info.Classes.end(),
-                   [](const ClassInfo &CI) {
-                     return CI.isRegisterClass() && !CI.DiagnosticType.empty();
-                   })) {
+  if (none_of(Info.Classes, [](const ClassInfo &CI) {
+        return CI.isRegisterClass() && !CI.DiagnosticType.empty();
+      })) {
     OS << "  return MCTargetAsmParser::Match_InvalidOperand;\n";
   } else {
     OS << "  switch (RegisterClass) {\n";

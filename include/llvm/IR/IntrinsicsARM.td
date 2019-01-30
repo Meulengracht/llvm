@@ -1,9 +1,8 @@
 //===- IntrinsicsARM.td - Defines ARM intrinsics -----------*- tablegen -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -275,7 +274,7 @@ def int_arm_stc : GCCBuiltin<"__builtin_arm_stc">,
    Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty], []>;
 def int_arm_stcl : GCCBuiltin<"__builtin_arm_stcl">,
    Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty], []>;
-def int_arm_stc2 : GCCBuiltin<"__builtin_arm_stc2">, 
+def int_arm_stc2 : GCCBuiltin<"__builtin_arm_stc2">,
    Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty], []>;
 def int_arm_stc2l : GCCBuiltin<"__builtin_arm_stc2l">,
    Intrinsic<[], [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty], []>;

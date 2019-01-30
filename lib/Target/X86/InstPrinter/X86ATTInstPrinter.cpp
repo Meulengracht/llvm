@@ -1,9 +1,8 @@
 //===-- X86ATTInstPrinter.cpp - AT&T assembly instruction printing --------===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -92,7 +91,7 @@ void X86ATTInstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     // the hex value of the immediate operand when it isn't in the range
     // [-256,255].
     if (CommentStream && !HasCustomInstComment && (Imm > 255 || Imm < -256)) {
-      // Don't print unnecessary hex sign bits. 
+      // Don't print unnecessary hex sign bits.
       if (Imm == (int16_t)(Imm))
         *CommentStream << format("imm = 0x%" PRIX16 "\n", (uint16_t)Imm);
       else if (Imm == (int32_t)(Imm))

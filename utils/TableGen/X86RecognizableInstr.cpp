@@ -1,9 +1,8 @@
 //===- X86RecognizableInstr.cpp - Disassembler instruction spec --*- C++ -*-===//
 //
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
 //
@@ -1132,8 +1131,8 @@ RecognizableInstr::relocationEncodingFromString(const std::string &s,
   ENCODING("i64i32imm_pcrel", ENCODING_ID)
   ENCODING("i16imm_pcrel",    ENCODING_IW)
   ENCODING("i32imm_pcrel",    ENCODING_ID)
-  ENCODING("brtarget32",      ENCODING_Iv)
-  ENCODING("brtarget16",      ENCODING_Iv)
+  ENCODING("brtarget32",      ENCODING_ID)
+  ENCODING("brtarget16",      ENCODING_IW)
   ENCODING("brtarget8",       ENCODING_IB)
   ENCODING("i64imm",          ENCODING_IO)
   ENCODING("offset16_8",      ENCODING_Ia)
