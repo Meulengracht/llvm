@@ -149,4 +149,51 @@ define i8 @PR24545(i32, i32, i32* nocapture readonly) {
   %12 = zext i1 %11 to i8
   ret i8 %12
 }
+
+define i32 @PR40483_sub1(i32*, i32) nounwind {
+; X86-LABEL: PR40483_sub1:
+; X86:       # %bb.0:
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %ecx
+; X86-NEXT:    subl %eax, (%ecx)
+; X86-NEXT:    xorl %eax, %eax
+; X86-NEXT:    retl
+;
+; X64-LABEL: PR40483_sub1:
+; X64:       # %bb.0:
+; X64-NEXT:    subl %esi, (%rdi)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    retq
+  %3 = load i32, i32* %0, align 4
+  %4 = tail call { i8, i32 } @llvm.x86.subborrow.32(i8 0, i32 %3, i32 %1)
+  %5 = extractvalue { i8, i32 } %4, 1
+  store i32 %5, i32* %0, align 4
+  %6 = sub i32 %1, %3
+  %7 = add i32 %6, %5
+  ret i32 %7
+}
+
+define i32 @PR40483_sub2(i32*, i32) nounwind {
+; X86-LABEL: PR40483_sub2:
+; X86:       # %bb.0:
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %eax
+; X86-NEXT:    movl {{[0-9]+}}(%esp), %ecx
+; X86-NEXT:    subl %eax, (%ecx)
+; X86-NEXT:    xorl %eax, %eax
+; X86-NEXT:    retl
+;
+; X64-LABEL: PR40483_sub2:
+; X64:       # %bb.0:
+; X64-NEXT:    subl %esi, (%rdi)
+; X64-NEXT:    xorl %eax, %eax
+; X64-NEXT:    retq
+  %3 = load i32, i32* %0, align 4
+  %4 = sub i32 %3, %1
+  %5 = tail call { i8, i32 } @llvm.x86.subborrow.32(i8 0, i32 %3, i32 %1)
+  %6 = extractvalue { i8, i32 } %5, 1
+  store i32 %6, i32* %0, align 4
+  %7 = sub i32 %4, %6
+  ret i32 %7
+}
+
 declare { i8, i32 } @llvm.x86.subborrow.32(i8, i32, i32)

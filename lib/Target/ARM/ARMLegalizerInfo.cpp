@@ -120,6 +120,10 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
       .legalFor({s32, p0})
       .clampScalar(0, s32, s32);
 
+  getActionDefinitionsBuilder(G_ICMP)
+      .legalForCartesianProduct({s1}, {s32, p0})
+      .minScalar(1, s32);
+
   // We're keeping these builders around because we'll want to add support for
   // floating point to them.
   auto &LoadStoreBuilder =
@@ -130,6 +134,8 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
               {s16, p0, 16},
               {s32, p0, 32},
               {p0, p0, 32}});
+
+  getActionDefinitionsBuilder(G_GEP).legalFor({{p0, s32}});
 
   if (ST.isThumb()) {
     // FIXME: merge with the code for non-Thumb.
@@ -143,30 +149,28 @@ ARMLegalizerInfo::ARMLegalizerInfo(const ARMSubtarget &ST) {
 
   if (ST.hasV5TOps()) {
     getActionDefinitionsBuilder(G_CTLZ)
-        .legalFor({s32})
+        .legalFor({s32, s32})
+        .clampScalar(1, s32, s32)
         .clampScalar(0, s32, s32);
     getActionDefinitionsBuilder(G_CTLZ_ZERO_UNDEF)
-        .lowerFor({s32})
+        .lowerFor({s32, s32})
+        .clampScalar(1, s32, s32)
         .clampScalar(0, s32, s32);
   } else {
     getActionDefinitionsBuilder(G_CTLZ_ZERO_UNDEF)
-        .libcallFor({s32})
+        .libcallFor({s32, s32})
+        .clampScalar(1, s32, s32)
         .clampScalar(0, s32, s32);
     getActionDefinitionsBuilder(G_CTLZ)
-        .lowerFor({s32})
+        .lowerFor({s32, s32})
+        .clampScalar(1, s32, s32)
         .clampScalar(0, s32, s32);
   }
-
-  getActionDefinitionsBuilder(G_GEP).legalFor({{p0, s32}});
 
   getActionDefinitionsBuilder(G_SELECT).legalForCartesianProduct({s32, p0},
                                                                  {s1});
 
   getActionDefinitionsBuilder(G_BRCOND).legalFor({s1});
-
-  getActionDefinitionsBuilder(G_ICMP)
-      .legalForCartesianProduct({s1}, {s32, p0})
-      .minScalar(1, s32);
 
   // We're keeping these builders around because we'll want to add support for
   // floating point to them.

@@ -177,6 +177,7 @@ FUNCTION_PASS("libcalls-shrinkwrap", LibCallsShrinkWrapPass())
 FUNCTION_PASS("loweratomic", LowerAtomicPass())
 FUNCTION_PASS("lower-expect", LowerExpectIntrinsicPass())
 FUNCTION_PASS("lower-guard-intrinsic", LowerGuardIntrinsicPass())
+FUNCTION_PASS("lower-widenable-condition", LowerWidenableConditionPass())
 FUNCTION_PASS("guard-widening", GuardWideningPass())
 FUNCTION_PASS("gvn", GVN())
 FUNCTION_PASS("load-store-vectorizer", LoadStoreVectorizerPass())
@@ -230,7 +231,7 @@ FUNCTION_PASS("verify<regions>", RegionInfoVerifierPass())
 FUNCTION_PASS("view-cfg", CFGViewerPass())
 FUNCTION_PASS("view-cfg-only", CFGOnlyViewerPass())
 FUNCTION_PASS("transform-warning", WarnMissedTransformationsPass())
-FUNCTION_PASS("msan", MemorySanitizerPass())
+FUNCTION_PASS("msan", MemorySanitizerPass({}))
 FUNCTION_PASS("tsan", ThreadSanitizerPass())
 #undef FUNCTION_PASS
 
@@ -238,8 +239,15 @@ FUNCTION_PASS("tsan", ThreadSanitizerPass())
 #define FUNCTION_PASS_WITH_PARAMS(NAME, CREATE_PASS, PARSER)
 #endif
 FUNCTION_PASS_WITH_PARAMS("unroll",
-			  [](LoopUnrollOptions Opts) { return LoopUnrollPass(Opts); },
-			  parseLoopUnrollOptions)
+                           [](LoopUnrollOptions Opts) {
+                             return LoopUnrollPass(Opts);
+                           },
+                           parseLoopUnrollOptions)
+FUNCTION_PASS_WITH_PARAMS("msan",
+                           [](MemorySanitizerOptions Opts) {
+                             return MemorySanitizerPass(Opts);
+                           },
+                           parseMSanPassOptions)
 #undef FUNCTION_PASS_WITH_PARAMS
 
 #ifndef LOOP_ANALYSIS

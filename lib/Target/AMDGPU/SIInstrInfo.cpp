@@ -140,7 +140,8 @@ bool SIInstrInfo::isReallyTriviallyReMaterializable(const MachineInstr &MI,
   case AMDGPU::V_MOV_B32_e32:
   case AMDGPU::V_MOV_B32_e64:
   case AMDGPU::V_MOV_B64_PSEUDO:
-    return true;
+    // No implicit operands.
+    return MI.getNumOperands() == MI.getDesc().getNumOperands();
   default:
     return false;
   }
@@ -3277,18 +3278,6 @@ const TargetRegisterClass *SIInstrInfo::getOpRegClass(const MachineInstr &MI,
   return RI.getRegClass(RCID);
 }
 
-bool SIInstrInfo::canReadVGPR(const MachineInstr &MI, unsigned OpNo) const {
-  switch (MI.getOpcode()) {
-  case AMDGPU::COPY:
-  case AMDGPU::REG_SEQUENCE:
-  case AMDGPU::PHI:
-  case AMDGPU::INSERT_SUBREG:
-    return RI.hasVGPRs(getOpRegClass(MI, 0));
-  default:
-    return RI.hasVGPRs(getOpRegClass(MI, OpNo));
-  }
-}
-
 void SIInstrInfo::legalizeOpWithMove(MachineInstr &MI, unsigned OpIdx) const {
   MachineBasicBlock::iterator I = MI;
   MachineBasicBlock *MBB = MI.getParent();
@@ -4957,7 +4946,23 @@ void SIInstrInfo::addUsersToMoveToVALUWorklist(
   for (MachineRegisterInfo::use_iterator I = MRI.use_begin(DstReg),
          E = MRI.use_end(); I != E;) {
     MachineInstr &UseMI = *I->getParent();
-    if (!canReadVGPR(UseMI, I.getOperandNo())) {
+
+    unsigned OpNo = 0;
+
+    switch (UseMI.getOpcode()) {
+    case AMDGPU::COPY:
+    case AMDGPU::WQM:
+    case AMDGPU::WWM:
+    case AMDGPU::REG_SEQUENCE:
+    case AMDGPU::PHI:
+    case AMDGPU::INSERT_SUBREG:
+      break;
+    default:
+      OpNo = I.getOperandNo();
+      break;
+    }
+
+    if (!RI.hasVGPRs(getOpRegClass(UseMI, OpNo))) {
       Worklist.insert(&UseMI);
 
       do {

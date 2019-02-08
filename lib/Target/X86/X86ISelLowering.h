@@ -831,6 +831,12 @@ namespace llvm {
       return VTIsOk(XVT) && VTIsOk(KeptBitsVT);
     }
 
+    bool shouldExpandShift(SelectionDAG &DAG, SDNode *N) const override {
+      if (DAG.getMachineFunction().getFunction().optForMinSize())
+        return false;
+      return true;
+    }
+
     bool shouldSplatInsEltVarIndex(EVT VT) const override;
 
     bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {
@@ -916,6 +922,11 @@ namespace llvm {
         return InlineAsm::Constraint_X;
       return TargetLowering::getInlineAsmMemConstraint(ConstraintCode);
     }
+
+    /// Handle Lowering flag assembly outputs.
+    SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue *Flag, SDLoc DL,
+                                        const AsmOperandInfo &Constraint,
+                                        SelectionDAG &DAG) const override;
 
     /// Given a physical register constraint
     /// (e.g. {edx}), return the register number and the register class for the
@@ -1104,7 +1115,7 @@ namespace llvm {
     bool useStackGuardXorFP() const override;
     void insertSSPDeclarations(Module &M) const override;
     Value *getSDagStackGuard(const Module &M) const override;
-    Value *getSSPStackGuardCheck(const Module &M) const override;
+    Function *getSSPStackGuardCheck(const Module &M) const override;
     SDValue emitStackGuardXorFP(SelectionDAG &DAG, SDValue Val,
                                 const SDLoc &DL) const override;
 

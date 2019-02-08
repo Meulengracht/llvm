@@ -54,9 +54,11 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/OperandTraits.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/Value.h"
@@ -86,6 +88,7 @@
 #include <vector>
 
 using namespace llvm;
+using namespace llvm::PatternMatch;
 
 #define DEBUG_TYPE "aarch64-lower"
 
@@ -2744,15 +2747,9 @@ SDValue AArch64TargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                        Op.getOperand(1), Op.getOperand(2));
 
   case Intrinsic::localaddress: {
-    // Returns one of the stack, base, or frame pointer registers, depending on
-    // which is used to reference local variables.
-    MachineFunction &MF = DAG.getMachineFunction();
-    const AArch64RegisterInfo *RegInfo = Subtarget->getRegisterInfo();
-    unsigned Reg;
-    if (RegInfo->hasBasePointer(MF))
-      Reg = RegInfo->getBaseRegister();
-    else // This function handles the SP or FP case.
-      Reg = RegInfo->getFrameRegister(MF);
+    const auto &MF = DAG.getMachineFunction();
+    const auto *RegInfo = Subtarget->getRegisterInfo();
+    unsigned Reg = RegInfo->getLocalAddressRegister(MF);
     return DAG.getCopyFromReg(DAG.getEntryNode(), dl, Reg,
                               Op.getSimpleValueType());
   }
@@ -5424,34 +5421,30 @@ bool AArch64TargetLowering::isOffsetFoldingLegal(
 }
 
 bool AArch64TargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT) const {
-  // We can materialize #0.0 as fmov $Rd, XZR for 64-bit and 32-bit cases.
-  // FIXME: We should be able to handle f128 as well with a clever lowering.
-  if (Imm.isPosZero() && (VT == MVT::f64 || VT == MVT::f32 ||
-                          (VT == MVT::f16 && Subtarget->hasFullFP16()))) {
-    LLVM_DEBUG(dbgs() << "Legal " << VT.getEVTString() << " imm value: 0\n");
-    return true;
-  }
-
   bool IsLegal = false;
-  SmallString<128> ImmStrVal;
-  Imm.toString(ImmStrVal);
-
+  // We can materialize #0.0 as fmov $Rd, XZR for 64-bit, 32-bit cases, and
+  // 16-bit case when target has full fp16 support.
+  // FIXME: We should be able to handle f128 as well with a clever lowering.
+  const APInt ImmInt = Imm.bitcastToAPInt();
   if (VT == MVT::f64)
-    IsLegal = AArch64_AM::getFP64Imm(Imm) != -1;
+    IsLegal = AArch64_AM::getFP64Imm(ImmInt) != -1 || Imm.isPosZero();
   else if (VT == MVT::f32)
-    IsLegal = AArch64_AM::getFP32Imm(Imm) != -1;
+    IsLegal = AArch64_AM::getFP32Imm(ImmInt) != -1 || Imm.isPosZero();
   else if (VT == MVT::f16 && Subtarget->hasFullFP16())
-    IsLegal = AArch64_AM::getFP16Imm(Imm) != -1;
+    IsLegal = AArch64_AM::getFP16Imm(ImmInt) != -1 || Imm.isPosZero();
+  // TODO: fmov h0, w0 is also legal, however on't have an isel pattern to
+  //       generate that fmov.
 
-  if (IsLegal) {
-    LLVM_DEBUG(dbgs() << "Legal " << VT.getEVTString()
-                      << " imm value: " << ImmStrVal << "\n");
-    return true;
-  }
+  // If we can not materialize in immediate field for fmov, check if the
+  // value can be encoded as the immediate operand of a logical instruction.
+  // The immediate value will be created with either MOVZ, MOVN, or ORR.
+  if (!IsLegal && (VT == MVT::f64 || VT == MVT::f32))
+    IsLegal = AArch64_AM::isAnyMOVWMovAlias(ImmInt.getZExtValue(),
+                                            VT.getSizeInBits());
 
-  LLVM_DEBUG(dbgs() << "Illegal " << VT.getEVTString()
-                    << " imm value: " << ImmStrVal << "\n");
-  return false;
+  LLVM_DEBUG(dbgs() << (IsLegal ? "Legal " : "Illegal ") << VT.getEVTString()
+                    << " imm value: "; Imm.dump(););
+  return IsLegal;
 }
 
 //===----------------------------------------------------------------------===//
@@ -8280,6 +8273,110 @@ bool AArch64TargetLowering::isExtFreeImpl(const Instruction *Ext) const {
   return true;
 }
 
+/// Check if both Op1 and Op2 are shufflevector extracts of either the lower
+/// or upper half of the vector elements.
+static bool areExtractShuffleVectors(Value *Op1, Value *Op2) {
+  auto areTypesHalfed = [](Value *FullV, Value *HalfV) {
+    auto *FullVT = cast<VectorType>(FullV->getType());
+    auto *HalfVT = cast<VectorType>(HalfV->getType());
+    return FullVT->getBitWidth() == 2 * HalfVT->getBitWidth();
+  };
+
+  auto extractHalf = [](Value *FullV, Value *HalfV) {
+    auto *FullVT = cast<VectorType>(FullV->getType());
+    auto *HalfVT = cast<VectorType>(HalfV->getType());
+    return FullVT->getNumElements() == 2 * HalfVT->getNumElements();
+  };
+
+  Constant *M1, *M2;
+  Value *S1Op1, *S2Op1;
+  if (!match(Op1, m_ShuffleVector(m_Value(S1Op1), m_Undef(), m_Constant(M1))) ||
+      !match(Op2, m_ShuffleVector(m_Value(S2Op1), m_Undef(), m_Constant(M2))))
+    return false;
+
+  // Check that the operands are half as wide as the result and we extract
+  // half of the elements of the input vectors.
+  if (!areTypesHalfed(S1Op1, Op1) || !areTypesHalfed(S2Op1, Op2) ||
+      !extractHalf(S1Op1, Op1) || !extractHalf(S2Op1, Op2))
+    return false;
+
+  // Check the mask extracts either the lower or upper half of vector
+  // elements.
+  int M1Start = -1;
+  int M2Start = -1;
+  int NumElements = cast<VectorType>(Op1->getType())->getNumElements() * 2;
+  if (!ShuffleVectorInst::isExtractSubvectorMask(M1, NumElements, M1Start) ||
+      !ShuffleVectorInst::isExtractSubvectorMask(M2, NumElements, M2Start) ||
+      M1Start != M2Start || (M1Start != 0 && M2Start != (NumElements / 2)))
+    return false;
+
+  return true;
+}
+
+/// Check if Ext1 and Ext2 are extends of the same type, doubling the bitwidth
+/// of the vector elements.
+static bool areExtractExts(Value *Ext1, Value *Ext2) {
+  auto areExtDoubled = [](Instruction *Ext) {
+    return Ext->getType()->getScalarSizeInBits() ==
+           2 * Ext->getOperand(0)->getType()->getScalarSizeInBits();
+  };
+
+  if (!match(Ext1, m_ZExtOrSExt(m_Value())) ||
+      !match(Ext2, m_ZExtOrSExt(m_Value())) ||
+      !areExtDoubled(cast<Instruction>(Ext1)) ||
+      !areExtDoubled(cast<Instruction>(Ext2)))
+    return false;
+
+  return true;
+}
+
+/// Check if sinking \p I's operands to I's basic block is profitable, because
+/// the operands can be folded into a target instruction, e.g.
+/// shufflevectors extracts and/or sext/zext can be folded into (u,s)subl(2).
+bool AArch64TargetLowering::shouldSinkOperands(
+    Instruction *I, SmallVectorImpl<Use *> &Ops) const {
+  if (!I->getType()->isVectorTy())
+    return false;
+
+  if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(I)) {
+    switch (II->getIntrinsicID()) {
+    case Intrinsic::aarch64_neon_umull:
+      if (!areExtractShuffleVectors(II->getOperand(0), II->getOperand(1)))
+        return false;
+      Ops.push_back(&II->getOperandUse(0));
+      Ops.push_back(&II->getOperandUse(1));
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  switch (I->getOpcode()) {
+  case Instruction::Sub:
+  case Instruction::Add: {
+    if (!areExtractExts(I->getOperand(0), I->getOperand(1)))
+      return false;
+
+    // If the exts' operands extract either the lower or upper elements, we
+    // can sink them too.
+    auto Ext1 = cast<Instruction>(I->getOperand(0));
+    auto Ext2 = cast<Instruction>(I->getOperand(1));
+    if (areExtractShuffleVectors(Ext1, Ext2)) {
+      Ops.push_back(&Ext1->getOperandUse(0));
+      Ops.push_back(&Ext2->getOperandUse(0));
+    }
+
+    Ops.push_back(&I->getOperandUse(0));
+    Ops.push_back(&I->getOperandUse(1));
+
+    return true;
+  }
+  default:
+    return false;
+  }
+  return false;
+}
+
 bool AArch64TargetLowering::hasPairedLoad(EVT LoadedType,
                                           unsigned &RequiredAligment) const {
   if (!LoadedType.isSimple() ||
@@ -8402,8 +8499,9 @@ bool AArch64TargetLowering::lowerInterleavedLoad(
     // If we're generating more than one load, compute the base address of
     // subsequent loads as an offset from the previous.
     if (LoadCount > 0)
-      BaseAddr = Builder.CreateConstGEP1_32(
-          BaseAddr, VecTy->getVectorNumElements() * Factor);
+      BaseAddr =
+          Builder.CreateConstGEP1_32(VecTy->getVectorElementType(), BaseAddr,
+                                     VecTy->getVectorNumElements() * Factor);
 
     CallInst *LdN = Builder.CreateCall(
         LdNFunc, Builder.CreateBitCast(BaseAddr, PtrTy), "ldN");
@@ -8565,7 +8663,8 @@ bool AArch64TargetLowering::lowerInterleavedStore(StoreInst *SI,
     // If we generating more than one store, we compute the base address of
     // subsequent stores as an offset from the previous.
     if (StoreCount > 0)
-      BaseAddr = Builder.CreateConstGEP1_32(BaseAddr, LaneLen * Factor);
+      BaseAddr = Builder.CreateConstGEP1_32(SubVecTy->getVectorElementType(),
+                                            BaseAddr, LaneLen * Factor);
 
     Ops.push_back(Builder.CreateBitCast(BaseAddr, PtrTy));
     Builder.CreateCall(StNFunc, Ops);
@@ -9623,12 +9722,13 @@ static SDValue tryExtendDUPToExtractHigh(SDValue N, SelectionDAG &DAG) {
                      DAG.getConstant(NumElems, dl, MVT::i64));
 }
 
-static bool isEssentiallyExtractSubvector(SDValue N) {
-  if (N.getOpcode() == ISD::EXTRACT_SUBVECTOR)
-    return true;
-
-  return N.getOpcode() == ISD::BITCAST &&
-         N.getOperand(0).getOpcode() == ISD::EXTRACT_SUBVECTOR;
+static bool isEssentiallyExtractHighSubvector(SDValue N) {
+  if (N.getOpcode() == ISD::BITCAST)
+    N = N.getOperand(0);
+  if (N.getOpcode() != ISD::EXTRACT_SUBVECTOR)
+    return false;
+  return cast<ConstantSDNode>(N.getOperand(1))->getAPIntValue() ==
+         N.getOperand(0).getValueType().getVectorNumElements() / 2;
 }
 
 /// Helper structure to keep track of ISD::SET_CC operands.
@@ -9795,13 +9895,13 @@ static SDValue performAddSubLongCombine(SDNode *N,
 
   // It's not worth doing if at least one of the inputs isn't already an
   // extract, but we don't know which it'll be so we have to try both.
-  if (isEssentiallyExtractSubvector(LHS.getOperand(0))) {
+  if (isEssentiallyExtractHighSubvector(LHS.getOperand(0))) {
     RHS = tryExtendDUPToExtractHigh(RHS.getOperand(0), DAG);
     if (!RHS.getNode())
       return SDValue();
 
     RHS = DAG.getNode(ExtType, SDLoc(N), VT, RHS);
-  } else if (isEssentiallyExtractSubvector(RHS.getOperand(0))) {
+  } else if (isEssentiallyExtractHighSubvector(RHS.getOperand(0))) {
     LHS = tryExtendDUPToExtractHigh(LHS.getOperand(0), DAG);
     if (!LHS.getNode())
       return SDValue();
@@ -9834,11 +9934,11 @@ static SDValue tryCombineLongOpWithDup(unsigned IID, SDNode *N,
   // Either node could be a DUP, but it's not worth doing both of them (you'd
   // just as well use the non-high version) so look for a corresponding extract
   // operation on the other "wing".
-  if (isEssentiallyExtractSubvector(LHS)) {
+  if (isEssentiallyExtractHighSubvector(LHS)) {
     RHS = tryExtendDUPToExtractHigh(RHS, DAG);
     if (!RHS.getNode())
       return SDValue();
-  } else if (isEssentiallyExtractSubvector(RHS)) {
+  } else if (isEssentiallyExtractHighSubvector(RHS)) {
     LHS = tryExtendDUPToExtractHigh(LHS, DAG);
     if (!LHS.getNode())
       return SDValue();
@@ -11721,8 +11821,9 @@ static Value *UseTlsOffset(IRBuilder<> &IRB, unsigned Offset) {
   Function *ThreadPointerFunc =
       Intrinsic::getDeclaration(M, Intrinsic::thread_pointer);
   return IRB.CreatePointerCast(
-      IRB.CreateConstGEP1_32(IRB.CreateCall(ThreadPointerFunc), Offset),
-      Type::getInt8PtrTy(IRB.getContext())->getPointerTo(0));
+      IRB.CreateConstGEP1_32(IRB.getInt8Ty(), IRB.CreateCall(ThreadPointerFunc),
+                             Offset),
+      IRB.getInt8PtrTy()->getPointerTo(0));
 }
 
 Value *AArch64TargetLowering::getIRStackGuard(IRBuilder<> &IRB) const {
@@ -11748,12 +11849,13 @@ void AArch64TargetLowering::insertSSPDeclarations(Module &M) const {
                         Type::getInt8PtrTy(M.getContext()));
 
     // MSVC CRT has a function to validate security cookie.
-    auto *SecurityCheckCookie = cast<Function>(
-        M.getOrInsertFunction("__security_check_cookie",
-                              Type::getVoidTy(M.getContext()),
-                              Type::getInt8PtrTy(M.getContext())));
-    SecurityCheckCookie->setCallingConv(CallingConv::Win64);
-    SecurityCheckCookie->addAttribute(1, Attribute::AttrKind::InReg);
+    FunctionCallee SecurityCheckCookie = M.getOrInsertFunction(
+        "__security_check_cookie", Type::getVoidTy(M.getContext()),
+        Type::getInt8PtrTy(M.getContext()));
+    if (Function *F = dyn_cast<Function>(SecurityCheckCookie.getCallee())) {
+      F->setCallingConv(CallingConv::Win64);
+      F->addAttribute(1, Attribute::AttrKind::InReg);
+    }
     return;
   }
   TargetLowering::insertSSPDeclarations(M);
@@ -11766,7 +11868,7 @@ Value *AArch64TargetLowering::getSDagStackGuard(const Module &M) const {
   return TargetLowering::getSDagStackGuard(M);
 }
 
-Value *AArch64TargetLowering::getSSPStackGuardCheck(const Module &M) const {
+Function *AArch64TargetLowering::getSSPStackGuardCheck(const Module &M) const {
   // MSVC CRT has a function to validate security cookie.
   if (Subtarget->getTargetTriple().isWindowsMSVCEnvironment())
     return M.getFunction("__security_check_cookie");

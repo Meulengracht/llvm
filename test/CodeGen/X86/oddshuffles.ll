@@ -1673,7 +1673,7 @@ define void @interleave_24i32_in(<24 x i32>* %p, <8 x i32>* %q1, <8 x i32>* %q2,
 ; XOP-LABEL: interleave_24i32_in:
 ; XOP:       # %bb.0:
 ; XOP-NEXT:    vmovupd (%rsi), %ymm0
-; XOP-NEXT:    vmovupd (%rcx), %ymm1
+; XOP-NEXT:    vmovups (%rcx), %ymm1
 ; XOP-NEXT:    vmovups 16(%rcx), %xmm2
 ; XOP-NEXT:    vmovups (%rdx), %xmm3
 ; XOP-NEXT:    vmovups 16(%rdx), %xmm4
@@ -1743,10 +1743,10 @@ define <2 x double> @wrongorder(<4 x double> %A, <8 x double>* %P) #0 {
 ;
 ; AVX2-LABEL: wrongorder:
 ; AVX2:       # %bb.0:
-; AVX2-NEXT:    vbroadcastsd %xmm0, %ymm1
-; AVX2-NEXT:    vmovapd %ymm1, 32(%rdi)
-; AVX2-NEXT:    vmovapd %ymm1, (%rdi)
-; AVX2-NEXT:    vmovddup {{.*#+}} xmm0 = xmm0[0,0]
+; AVX2-NEXT:    vbroadcastsd %xmm0, %ymm0
+; AVX2-NEXT:    vmovaps %ymm0, 32(%rdi)
+; AVX2-NEXT:    vmovaps %ymm0, (%rdi)
+; AVX2-NEXT:    # kill: def $xmm0 killed $xmm0 killed $ymm0
 ; AVX2-NEXT:    vzeroupper
 ; AVX2-NEXT:    retq
 ;

@@ -85,6 +85,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
   getActionDefinitionsBuilder(G_SHL)
     .legalFor({{s32, s32}, {s64, s64},
                {v2s32, v2s32}, {v4s32, v4s32}, {v2s64, v2s64}})
+    .clampScalar(1, s32, s64)
     .clampScalar(0, s32, s64)
     .widenScalarToNextPow2(0)
     .clampNumElements(0, v2s32, v4s32)
@@ -105,6 +106,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
 
   getActionDefinitionsBuilder({G_LSHR, G_ASHR})
     .legalFor({{s32, s32}, {s64, s64}})
+    .clampScalar(1, s32, s64)
     .clampScalar(0, s32, s64)
     .minScalarSameAs(1, 0);
 
@@ -124,7 +126,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
 
   getActionDefinitionsBuilder({G_FREM, G_FPOW}).libcallFor({s32, s64});
 
-  getActionDefinitionsBuilder(G_FCEIL)
+  getActionDefinitionsBuilder({G_FCEIL, G_FABS, G_FSQRT})
       // If we don't have full FP16 support, then scalarize the elements of
       // vectors containing fp16 types.
       .fewerElementsIf(
@@ -143,7 +145,8 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
           [=](const LegalityQuery &Query) { return std::make_pair(0, s32); })
       .legalFor({s16, s32, s64, v2s32, v4s32, v2s64, v2s16, v4s16, v8s16});
 
-  getActionDefinitionsBuilder({G_FCOS, G_FSIN, G_FLOG10, G_FLOG})
+  getActionDefinitionsBuilder(
+      {G_FCOS, G_FSIN, G_FLOG10, G_FLOG, G_FLOG2, G_FEXP})
       // We need a call for these, so we always need to scalarize.
       .scalarize(0)
       // Regardless of FP16 support, widen 16-bit elements to 32-bits.
@@ -222,7 +225,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
       .lowerIf([=](const LegalityQuery &Query) {
         return Query.Types[0].getSizeInBits() != Query.MMODescrs[0].SizeInBits;
       })
-      .clampNumElements(0, v2s32, v2s32)
+      .clampMaxNumElements(0, s32, 2)
       .clampMaxNumElements(0, s64, 1);
 
   getActionDefinitionsBuilder(G_STORE)
@@ -241,7 +244,7 @@ AArch64LegalizerInfo::AArch64LegalizerInfo(const AArch64Subtarget &ST) {
         return Query.Types[0].isScalar() &&
                Query.Types[0].getSizeInBits() != Query.MMODescrs[0].SizeInBits;
       })
-      .clampNumElements(0, v2s32, v2s32)
+      .clampMaxNumElements(0, s32, 2)
       .clampMaxNumElements(0, s64, 1);
 
   // Constants
@@ -498,7 +501,7 @@ bool AArch64LegalizerInfo::legalizeVaArg(MachineInstr &MI,
     auto AlignMinus1 = MIRBuilder.buildConstant(IntPtrTy, Align - 1);
 
     unsigned ListTmp = MRI.createGenericVirtualRegister(PtrTy);
-    MIRBuilder.buildGEP(ListTmp, List, AlignMinus1->getOperand(0).getReg());
+    MIRBuilder.buildGEP(ListTmp, List, AlignMinus1.getReg(0));
 
     DstPtr = MRI.createGenericVirtualRegister(PtrTy);
     MIRBuilder.buildPtrMask(DstPtr, ListTmp, Log2_64(Align));

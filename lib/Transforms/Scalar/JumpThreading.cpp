@@ -23,6 +23,7 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/ConstantFolding.h"
+#include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/GuardUtils.h"
 #include "llvm/Analysis/InstructionSimplify.h"
@@ -37,7 +38,6 @@
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/DomTreeUpdater.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
@@ -1445,11 +1445,11 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LoadI) {
   if (UnavailablePred) {
     assert(UnavailablePred->getTerminator()->getNumSuccessors() == 1 &&
            "Can't handle critical edge here!");
-    LoadInst *NewVal =
-        new LoadInst(LoadedPtr->DoPHITranslation(LoadBB, UnavailablePred),
-                     LoadI->getName() + ".pr", false, LoadI->getAlignment(),
-                     LoadI->getOrdering(), LoadI->getSyncScopeID(),
-                     UnavailablePred->getTerminator());
+    LoadInst *NewVal = new LoadInst(
+        LoadI->getType(), LoadedPtr->DoPHITranslation(LoadBB, UnavailablePred),
+        LoadI->getName() + ".pr", false, LoadI->getAlignment(),
+        LoadI->getOrdering(), LoadI->getSyncScopeID(),
+        UnavailablePred->getTerminator());
     NewVal->setDebugLoc(LoadI->getDebugLoc());
     if (AATags)
       NewVal->setAAMetadata(AATags);

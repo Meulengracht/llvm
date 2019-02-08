@@ -449,7 +449,7 @@ define i64 @fptoui_i64_fp80(x86_fp80 %a0) nounwind {
 ; X86-NEXT:    fldt 8(%ebp)
 ; X86-NEXT:    flds {{\.LCPI.*}}
 ; X86-NEXT:    fld %st(1)
-; X86-NEXT:    fsub %st(1)
+; X86-NEXT:    fsub %st(1), %st
 ; X86-NEXT:    fxch %st(1)
 ; X86-NEXT:    fucomp %st(2)
 ; X86-NEXT:    fnstsw %ax
@@ -482,11 +482,11 @@ define i64 @fptoui_i64_fp80(x86_fp80 %a0) nounwind {
 ; X64-X87-NEXT:    fldt {{[0-9]+}}(%rsp)
 ; X64-X87-NEXT:    flds {{.*}}(%rip)
 ; X64-X87-NEXT:    fld %st(1)
-; X64-X87-NEXT:    fsub %st(1)
+; X64-X87-NEXT:    fsub %st(1), %st
 ; X64-X87-NEXT:    xorl %eax, %eax
 ; X64-X87-NEXT:    fxch %st(1)
-; X64-X87-NEXT:    fucompi %st(2)
-; X64-X87-NEXT:    fcmovnbe %st(1), %st(0)
+; X64-X87-NEXT:    fucompi %st(2), %st
+; X64-X87-NEXT:    fcmovnbe %st(1), %st
 ; X64-X87-NEXT:    fstp %st(1)
 ; X64-X87-NEXT:    fnstcw -{{[0-9]+}}(%rsp)
 ; X64-X87-NEXT:    movzwl -{{[0-9]+}}(%rsp), %ecx
@@ -505,11 +505,11 @@ define i64 @fptoui_i64_fp80(x86_fp80 %a0) nounwind {
 ; X64-SSSE3-NEXT:    fldt {{[0-9]+}}(%rsp)
 ; X64-SSSE3-NEXT:    flds {{.*}}(%rip)
 ; X64-SSSE3-NEXT:    fld %st(1)
-; X64-SSSE3-NEXT:    fsub %st(1)
+; X64-SSSE3-NEXT:    fsub %st(1), %st
 ; X64-SSSE3-NEXT:    xorl %eax, %eax
 ; X64-SSSE3-NEXT:    fxch %st(1)
-; X64-SSSE3-NEXT:    fucompi %st(2)
-; X64-SSSE3-NEXT:    fcmovnbe %st(1), %st(0)
+; X64-SSSE3-NEXT:    fucompi %st(2), %st
+; X64-SSSE3-NEXT:    fcmovnbe %st(1), %st
 ; X64-SSSE3-NEXT:    fstp %st(1)
 ; X64-SSSE3-NEXT:    fisttpll -{{[0-9]+}}(%rsp)
 ; X64-SSSE3-NEXT:    setbe %al
@@ -531,7 +531,7 @@ define i64 @fptoui_i64_fp80_ld(x86_fp80 *%a0) nounwind {
 ; X86-NEXT:    fldt (%eax)
 ; X86-NEXT:    flds {{\.LCPI.*}}
 ; X86-NEXT:    fld %st(1)
-; X86-NEXT:    fsub %st(1)
+; X86-NEXT:    fsub %st(1), %st
 ; X86-NEXT:    fxch %st(1)
 ; X86-NEXT:    fucomp %st(2)
 ; X86-NEXT:    fnstsw %ax
@@ -564,11 +564,11 @@ define i64 @fptoui_i64_fp80_ld(x86_fp80 *%a0) nounwind {
 ; X64-X87-NEXT:    fldt (%rdi)
 ; X64-X87-NEXT:    flds {{.*}}(%rip)
 ; X64-X87-NEXT:    fld %st(1)
-; X64-X87-NEXT:    fsub %st(1)
+; X64-X87-NEXT:    fsub %st(1), %st
 ; X64-X87-NEXT:    xorl %eax, %eax
 ; X64-X87-NEXT:    fxch %st(1)
-; X64-X87-NEXT:    fucompi %st(2)
-; X64-X87-NEXT:    fcmovnbe %st(1), %st(0)
+; X64-X87-NEXT:    fucompi %st(2), %st
+; X64-X87-NEXT:    fcmovnbe %st(1), %st
 ; X64-X87-NEXT:    fstp %st(1)
 ; X64-X87-NEXT:    fnstcw -{{[0-9]+}}(%rsp)
 ; X64-X87-NEXT:    movzwl -{{[0-9]+}}(%rsp), %ecx
@@ -587,11 +587,11 @@ define i64 @fptoui_i64_fp80_ld(x86_fp80 *%a0) nounwind {
 ; X64-SSSE3-NEXT:    fldt (%rdi)
 ; X64-SSSE3-NEXT:    flds {{.*}}(%rip)
 ; X64-SSSE3-NEXT:    fld %st(1)
-; X64-SSSE3-NEXT:    fsub %st(1)
+; X64-SSSE3-NEXT:    fsub %st(1), %st
 ; X64-SSSE3-NEXT:    xorl %eax, %eax
 ; X64-SSSE3-NEXT:    fxch %st(1)
-; X64-SSSE3-NEXT:    fucompi %st(2)
-; X64-SSSE3-NEXT:    fcmovnbe %st(1), %st(0)
+; X64-SSSE3-NEXT:    fucompi %st(2), %st
+; X64-SSSE3-NEXT:    fcmovnbe %st(1), %st
 ; X64-SSSE3-NEXT:    fstp %st(1)
 ; X64-SSSE3-NEXT:    fisttpll -{{[0-9]+}}(%rsp)
 ; X64-SSSE3-NEXT:    setbe %al

@@ -186,7 +186,7 @@ public:
     SSA.AddAvailableValue(PH, Init);
   }
 
-  void doExtraRewritesBeforeFinalDeletion() const override {
+  void doExtraRewritesBeforeFinalDeletion() override {
     for (unsigned i = 0, e = ExitBlocks.size(); i != e; ++i) {
       BasicBlock *ExitBlock = ExitBlocks[i];
       Instruction *InsertPos = InsertPts[i];
@@ -195,6 +195,7 @@ public:
       // block.
       Value *LiveInValue = SSA.GetValueInMiddleOfBlock(ExitBlock);
       Value *Addr = cast<StoreInst>(Store)->getPointerOperand();
+      Type *Ty = LiveInValue->getType();
       IRBuilder<> Builder(InsertPos);
       if (AtomicCounterUpdatePromoted)
         // automic update currently can only be promoted across the current
@@ -202,7 +203,7 @@ public:
         Builder.CreateAtomicRMW(AtomicRMWInst::Add, Addr, LiveInValue,
                                 AtomicOrdering::SequentiallyConsistent);
       else {
-        LoadInst *OldVal = Builder.CreateLoad(Addr, "pgocount.promoted");
+        LoadInst *OldVal = Builder.CreateLoad(Ty, Addr, "pgocount.promoted");
         auto *NewVal = Builder.CreateAdd(OldVal, LiveInValue);
         auto *NewStore = Builder.CreateStore(NewVal, Addr);
 
@@ -508,13 +509,16 @@ bool InstrProfiling::run(Module &M, const TargetLibraryInfo &TLI) {
   return true;
 }
 
-static Constant *getOrInsertValueProfilingCall(Module &M,
-                                               const TargetLibraryInfo &TLI,
-                                               bool IsRange = false) {
+static FunctionCallee
+getOrInsertValueProfilingCall(Module &M, const TargetLibraryInfo &TLI,
+                              bool IsRange = false) {
   LLVMContext &Ctx = M.getContext();
   auto *ReturnTy = Type::getVoidTy(M.getContext());
 
-  Constant *Res;
+  AttributeList AL;
+  if (auto AK = TLI.getExtAttrForI32Param(false))
+    AL = AL.addParamAttribute(M.getContext(), 2, AK);
+
   if (!IsRange) {
     Type *ParamTypes[] = {
 #define VALUE_PROF_FUNC_PARAM(ParamType, ParamName, ParamLLVMType) ParamLLVMType
@@ -522,8 +526,8 @@ static Constant *getOrInsertValueProfilingCall(Module &M,
     };
     auto *ValueProfilingCallTy =
         FunctionType::get(ReturnTy, makeArrayRef(ParamTypes), false);
-    Res = M.getOrInsertFunction(getInstrProfValueProfFuncName(),
-                                ValueProfilingCallTy);
+    return M.getOrInsertFunction(getInstrProfValueProfFuncName(),
+                                 ValueProfilingCallTy, AL);
   } else {
     Type *RangeParamTypes[] = {
 #define VALUE_RANGE_PROF 1
@@ -533,15 +537,9 @@ static Constant *getOrInsertValueProfilingCall(Module &M,
     };
     auto *ValueRangeProfilingCallTy =
         FunctionType::get(ReturnTy, makeArrayRef(RangeParamTypes), false);
-    Res = M.getOrInsertFunction(getInstrProfValueRangeProfFuncName(),
-                                ValueRangeProfilingCallTy);
+    return M.getOrInsertFunction(getInstrProfValueRangeProfFuncName(),
+                                 ValueRangeProfilingCallTy, AL);
   }
-
-  if (Function *FunRes = dyn_cast<Function>(Res)) {
-    if (auto AK = TLI.getExtAttrForI32Param(false))
-      FunRes->addParamAttr(2, AK);
-  }
-  return Res;
 }
 
 void InstrProfiling::computeNumValueSiteCounts(InstrProfValueProfileInst *Ind) {
@@ -600,13 +598,15 @@ void InstrProfiling::lowerIncrement(InstrProfIncrementInst *Inc) {
 
   IRBuilder<> Builder(Inc);
   uint64_t Index = Inc->getIndex()->getZExtValue();
-  Value *Addr = Builder.CreateConstInBoundsGEP2_64(Counters, 0, Index);
+  Value *Addr = Builder.CreateConstInBoundsGEP2_64(Counters->getValueType(),
+                                                   Counters, 0, Index);
 
   if (Options.Atomic || AtomicCounterUpdateAll) {
     Builder.CreateAtomicRMW(AtomicRMWInst::Add, Addr, Inc->getStep(),
                             AtomicOrdering::Monotonic);
   } else {
-    Value *Load = Builder.CreateLoad(Addr, "pgocount");
+    Value *IncStep = Inc->getStep();
+    Value *Load = Builder.CreateLoad(IncStep->getType(), Addr, "pgocount");
     auto *Count = Builder.CreateAdd(Load, Inc->getStep());
     auto *Store = Builder.CreateStore(Count, Addr);
     if (isCounterPromotionEnabled())
@@ -678,7 +678,8 @@ static inline bool shouldRecordFunctionAddr(Function *F) {
 }
 
 static inline Comdat *getOrCreateProfileComdat(Module &M, Function &F,
-                                               InstrProfIncrementInst *Inc) {
+                                               InstrProfIncrementInst *Inc,
+                                               const Triple &TT) {
   if (!needsComdatForCounter(F, M))
     return nullptr;
 
@@ -686,23 +687,20 @@ static inline Comdat *getOrCreateProfileComdat(Module &M, Function &F,
   // name. The linker targeting COFF also requires that the COMDAT
   // a section is associated to must precede the associating section. For this
   // reason, we must choose the counter var's name as the name of the comdat.
-  StringRef ComdatPrefix = (Triple(M.getTargetTriple()).isOSBinFormatCOFF()
-                                ? getInstrProfCountersVarPrefix()
-                                : getInstrProfComdatPrefix());
+  StringRef ComdatPrefix =
+      (TT.isOSBinFormatCOFF() ? getInstrProfCountersVarPrefix()
+                              : getInstrProfComdatPrefix());
   return M.getOrInsertComdat(StringRef(getVarName(Inc, ComdatPrefix)));
 }
 
-static bool needsRuntimeRegistrationOfSectionRange(const Module &M) {
+static bool needsRuntimeRegistrationOfSectionRange(const Triple &TT) {
   // Don't do this for Darwin.  compiler-rt uses linker magic.
-  if (Triple(M.getTargetTriple()).isOSDarwin())
+  if (TT.isOSDarwin())
     return false;
 
   // Use linker script magic to get data/cnts/name start/end.
-  if (Triple(M.getTargetTriple()).isOSLinux() ||
-      Triple(M.getTargetTriple()).isOSFreeBSD() ||
-      Triple(M.getTargetTriple()).isOSNetBSD() ||
-      Triple(M.getTargetTriple()).isOSFuchsia() ||
-      Triple(M.getTargetTriple()).isPS4CPU())
+  if (TT.isOSLinux() || TT.isOSFreeBSD() || TT.isOSNetBSD() ||
+      TT.isOSFuchsia() || TT.isPS4CPU())
     return false;
 
   return true;
@@ -725,7 +723,7 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
   // linking.
   Function *Fn = Inc->getParent()->getParent();
   Comdat *ProfileVarsComdat = nullptr;
-  ProfileVarsComdat = getOrCreateProfileComdat(*M, *Fn, Inc);
+  ProfileVarsComdat = getOrCreateProfileComdat(*M, *Fn, Inc, TT);
 
   uint64_t NumCounters = Inc->getNumCounters()->getZExtValue();
   LLVMContext &Ctx = M->getContext();
@@ -746,7 +744,7 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
   // Allocate statically the array of pointers to value profile nodes for
   // the current function.
   Constant *ValuesPtrExpr = ConstantPointerNull::get(Int8PtrTy);
-  if (ValueProfileStaticAlloc && !needsRuntimeRegistrationOfSectionRange(*M)) {
+  if (ValueProfileStaticAlloc && !needsRuntimeRegistrationOfSectionRange(TT)) {
     uint64_t NS = 0;
     for (uint32_t Kind = IPVK_First; Kind <= IPVK_Last; ++Kind)
       NS += PD.NumValueSites[Kind];
@@ -819,7 +817,7 @@ void InstrProfiling::emitVNodes() {
   // For now only support this on platforms that do
   // not require runtime registration to discover
   // named section start/end.
-  if (needsRuntimeRegistrationOfSectionRange(*M))
+  if (needsRuntimeRegistrationOfSectionRange(TT))
     return;
 
   size_t TotalNS = 0;
@@ -887,7 +885,7 @@ void InstrProfiling::emitNameData() {
 }
 
 void InstrProfiling::emitRegistration() {
-  if (!needsRuntimeRegistrationOfSectionRange(*M))
+  if (!needsRuntimeRegistrationOfSectionRange(TT))
     return;
 
   // Construct the function.
@@ -928,7 +926,7 @@ void InstrProfiling::emitRegistration() {
 bool InstrProfiling::emitRuntimeHook() {
   // We expect the linker to be invoked with -u<hook_var> flag for linux,
   // for which case there is no need to emit the user function.
-  if (Triple(M->getTargetTriple()).isOSLinux())
+  if (TT.isOSLinux())
     return false;
 
   // If the module's provided its own runtime, we don't need to do anything.
@@ -949,11 +947,11 @@ bool InstrProfiling::emitRuntimeHook() {
   if (Options.NoRedZone)
     User->addFnAttr(Attribute::NoRedZone);
   User->setVisibility(GlobalValue::HiddenVisibility);
-  if (Triple(M->getTargetTriple()).supportsCOMDAT())
+  if (TT.supportsCOMDAT())
     User->setComdat(M->getOrInsertComdat(User->getName()));
 
   IRBuilder<> IRB(BasicBlock::Create(M->getContext(), "", User));
-  auto *Load = IRB.CreateLoad(Var);
+  auto *Load = IRB.CreateLoad(Int32Ty, Var);
   IRB.CreateRet(Load);
 
   // Mark the user variable as used so that it isn't stripped out.
@@ -967,23 +965,9 @@ void InstrProfiling::emitUses() {
 }
 
 void InstrProfiling::emitInitialization() {
-  StringRef InstrProfileOutput = Options.InstrProfileOutput;
-
-  if (!InstrProfileOutput.empty()) {
-    // Create variable for profile name.
-    Constant *ProfileNameConst =
-        ConstantDataArray::getString(M->getContext(), InstrProfileOutput, true);
-    GlobalVariable *ProfileNameVar = new GlobalVariable(
-        *M, ProfileNameConst->getType(), true, GlobalValue::WeakAnyLinkage,
-        ProfileNameConst, INSTR_PROF_QUOTE(INSTR_PROF_PROFILE_NAME_VAR));
-    if (TT.supportsCOMDAT()) {
-      ProfileNameVar->setLinkage(GlobalValue::ExternalLinkage);
-      ProfileNameVar->setComdat(M->getOrInsertComdat(
-          StringRef(INSTR_PROF_QUOTE(INSTR_PROF_PROFILE_NAME_VAR))));
-    }
-  }
-
-  Constant *RegisterF = M->getFunction(getInstrProfRegFuncsName());
+  // Create variable for profile name.
+  createProfileFileNameVar(*M, Options.InstrProfileOutput);
+  Function *RegisterF = M->getFunction(getInstrProfRegFuncsName());
   if (!RegisterF)
     return;
 
@@ -999,8 +983,7 @@ void InstrProfiling::emitInitialization() {
 
   // Add the basic block and the necessary calls.
   IRBuilder<> IRB(BasicBlock::Create(M->getContext(), "", F));
-  if (RegisterF)
-    IRB.CreateCall(RegisterF, {});
+  IRB.CreateCall(RegisterF, {});
   IRB.CreateRetVoid();
 
   appendToGlobalCtors(*M, F, 0);
