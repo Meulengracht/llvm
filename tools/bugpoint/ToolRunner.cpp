@@ -201,25 +201,7 @@ Expected<int> LLI::ExecuteProgram(const std::string &Bitcode,
 
 void AbstractInterpreter::anchor() {}
 
-<<<<<<< HEAD
-#if defined(LLVM_ON_UNIX)
-const char EXESuffix[] = "";
-#elif defined(_WIN32)
-const char EXESuffix[] = "exe";
-#elif defined(LLVM_ON_VALI)
-const char EXESuffix[] = "app";
-#endif
-
-/// Prepend the path to the program being executed
-/// to \p ExeName, given the value of argv[0] and the address of main()
-/// itself. This allows us to find another LLVM tool if it is built in the same
-/// directory. An empty string is returned on error; note that this function
-/// just mainpulates the path and doesn't check for executability.
-/// Find a named executable.
-static std::string PrependMainExecutablePath(const std::string &ExeName,
-=======
 ErrorOr<std::string> llvm::FindProgramByName(const std::string &ExeName,
->>>>>>> upstream/master
                                              const char *Argv0,
                                              void *MainAddr) {
   // Check the directory that the calling program is in.  We can do
