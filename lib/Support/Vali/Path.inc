@@ -286,16 +286,19 @@ std::error_code setPermissions(const Twine &Path, perms Permissions) {
 }
 
 // @todo
-std::error_code setLastModificationAndAccessTime(int FD, TimePoint<> Time) {
-  return std::error_code();
+std::error_code setLastAccessAndModificationTime(int FD, TimePoint<> AccessTime,
+                                                 TimePoint<> ModificationTime) {
+  //if (::futimens(FD, Times))
+    //return std::error_code(errno, std::generic_category());
+  //return std::error_code();
+  return make_error_code(errc::function_not_supported);
 }
-
 // Implemented
 std::error_code mapped_file_region::init(int FD, uint64_t Offset, mapmode Mode) {
   int Flags = (Mode == readonly) ? FILE_MAPPING_READ : (FILE_MAPPING_READ | FILE_MAPPING_WRITE);
   this->Mode = Mode;
   assert(Size != 0);
-  if (::CreateFileMapping(FD, Flags, Offset, Size, &Mapping) != OsSuccess)
+  if (::CreateFileMapping(FD, Flags, Offset, Size, &Mapping, &FileHandle) != OsSuccess)
     return std::error_code(errno, std::generic_category());
   return std::error_code();
 }
@@ -312,7 +315,7 @@ mapped_file_region::mapped_file_region(int fd, mapmode mode, size_t length,
 // Implemented
 mapped_file_region::~mapped_file_region() {
   if (Mapping)
-    ::DestroyFileMapping(Mapping);
+    ::DestroyFileMapping(FileHandle);
 }
 
 // Implemented
@@ -365,6 +368,16 @@ std::error_code detail::directory_iterator_destruct(detail::DirIterState &it) {
   return std::error_code();
 }
 
+static file_type direntType(struct DIRENT* Entry) {
+  if (Entry->d_options & FILE_FLAG_DIRECTORY) {
+      return file_type::directory_file;
+  }
+  else if (Entry->d_options & FILE_FLAG_LINK) {
+      return file_type::symlink_file;
+  }
+  return file_type::regular_file;
+}
+
 // Implemented
 std::error_code detail::directory_iterator_increment(detail::DirIterState &it) {
   struct DIRENT dentry;
@@ -377,7 +390,7 @@ std::error_code detail::directory_iterator_increment(detail::DirIterState &it) {
     if ((name.size() == 1 && name[0] == '.') ||
         (name.size() == 2 && name[0] == '.' && name[1] == '.'))
       return directory_iterator_increment(it);
-    it.CurrentEntry.replace_filename(name);
+    it.CurrentEntry.replace_filename(name, direntType(&dentry));
   } else
     return directory_iterator_destruct(it);
 

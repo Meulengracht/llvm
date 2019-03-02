@@ -67,6 +67,7 @@ set(LLVM_ENABLE_RTTI ON CACHE BOOL "")
 # Disable tests and examples to speedup build process
 set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
 set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
+set(LLVM_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
 
 # Setup shared compile flags to make compilation succeed
 if("$ENV{VALI_ARCH}" STREQUAL "i386")

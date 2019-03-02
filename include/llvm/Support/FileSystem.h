@@ -1121,6 +1121,8 @@ private:
   void *Mapping;
 #ifdef _WIN32
   void *FileHandle;
+#elif defined(MOLLENOS)
+  UUId_t FileHandle;
 #endif
   mapmode Mode;
 

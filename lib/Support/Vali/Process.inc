@@ -27,8 +27,8 @@ using namespace llvm;
 // present solely so it can be called once to initialize the self_process member
 // below.
 static unsigned computePageSize() {
-  MemoryDescriptor_t Descriptor;
-    if (MemoryQuery(&Descriptor) != OsSuccess) {
+  SystemDescriptor_t Descriptor;
+    if (SystemQuery(&Descriptor) != OsSuccess) {
         // Default to 0x1000
         return 0x1000;
     }

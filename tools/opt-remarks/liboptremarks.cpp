@@ -15,3 +15,7 @@
 extern uint32_t LLVMOptRemarkVersion(void) {
   return OPT_REMARKS_API_VERSION;
 }
+
+void dllmain(int action) {
+    (void)action;
+}

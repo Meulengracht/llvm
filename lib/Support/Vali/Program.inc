@@ -142,7 +142,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
   // process.  We have to concatenate them all, while quoting the args that
   // have embedded spaces (or are empty).
   std::string Command = flattenArgs(Args);
-  PI.Pid = ProcessSpawn(Program.begin(), Command.c_str(), 0);
+  PI.Pid = ProcessSpawn(Program.begin(), Command.c_str());
   if (PI.Pid == UUID_INVALID) {
       return false;
   }

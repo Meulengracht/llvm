@@ -34,8 +34,8 @@ Flags_t getValiProtectionFlags(unsigned Flags) {
 }
 
 size_t getPageSize() {
-    MemoryDescriptor_t Descriptor;
-    if (MemoryQuery(&Descriptor) != OsSuccess) {
+    SystemDescriptor_t Descriptor;
+    if (SystemQuery(&Descriptor) != OsSuccess) {
         // Default to 0x1000
         return 0x1000;
     }
