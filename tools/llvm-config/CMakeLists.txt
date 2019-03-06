@@ -12,7 +12,7 @@ add_llvm_tool(llvm-config
 get_property(SUPPORT_SYSTEM_LIBS TARGET LLVMSupport PROPERTY LLVM_SYSTEM_LIBS)
 get_property(WINDOWSMANIFEST_SYSTEM_LIBS TARGET LLVMWindowsManifest PROPERTY LLVM_SYSTEM_LIBS)
 foreach(l ${SUPPORT_SYSTEM_LIBS} ${WINDOWSMANIFEST_SYSTEM_LIBS})
-  if(MSVC)
+  if(MSVC OR MOLLENOS)
     set(SYSTEM_LIBS ${SYSTEM_LIBS} "${l}.lib")
   else()
     if (l MATCHES "^-")

@@ -32,6 +32,9 @@ endif()
 if(NOT DEFINED ENV{VALI_LIBRARIES})
     message(FATAL_ERROR "VALI_LIBRARIES environmental variable is not defined")
 endif()
+if(NOT DEFINED ENV{VALI_LFLAGS})
+    message(FATAL_ERROR "VALI_LFLAGS environmental variable is not defined")
+endif()
 
 # Setup environment stuff for cmake configuration
 set(CMAKE_SYSTEM_NAME Vali)
@@ -39,6 +42,8 @@ set(CMAKE_CROSSCOMPILING OFF CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
 set(CMAKE_LINKER "$ENV{CROSS}/bin/lld-link" CACHE FILEPATH "")
+set(CMAKE_AR "$ENV{CROSS}/bin/llvm-ar" CACHE FILEPATH "")
+set(CMAKE_RANLIB "$ENV{CROSS}/bin/llvm-ranlib" CACHE FILEPATH "")
 set(ENV{INCLUDES} "$ENV{VALI_INCLUDES}")
 set(ENV{LIBRARIES} "$ENV{VALI_LIBRARIES}")
 set(VERBOSE 1)
@@ -70,15 +75,13 @@ set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
 set(LLVM_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
 
 # Setup shared compile flags to make compilation succeed
+set(VALI_LLVM_COMPILE_FLAGS -U_WIN32 -fms-extensions -nostdlib -nostdinc -Xclang -flto-visibility-public-std -DMOLLENOS -DZLIB_DLL)
 if("$ENV{VALI_ARCH}" STREQUAL "i386")
-    set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Di386 -D__i386__ -m32 -fms-extensions
-        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -I$ENV{VALI_INCLUDES}/cxx -I$ENV{VALI_INCLUDES})
+    set(VALI_LLVM_COMPILE_FLAGS ${VALI_LLVM_COMPILE_FLAGS} -Di386 -D__i386__ -m32 --target=i386-pc-win32-itanium-coff)
 else()
-    set(COMPILE_FLAGS -U_WIN32 -DMOLLENOS -DZLIB_DLL -Damd64 -D__amd64__ -m64 -fms-extensions
-        -Wall -nostdlib -nostdinc -O3 -Xclang -flto-visibility-public-std -fdwarf-exceptions -I$ENV{VALI_INCLUDES}/cxx -I$ENV{VALI_INCLUDES})
+    set(VALI_LLVM_COMPILE_FLAGS ${VALI_LLVM_COMPILE_FLAGS} -Damd64 -D__amd64__ -D__x86_64__ -m64 -fdwarf-exceptions --target=amd64-pc-win32-itanium-coff)
 endif()
-
-string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
+string(REPLACE ";" " " VALI_LLVM_COMPILE_FLAGS "${VALI_LLVM_COMPILE_FLAGS}")
 
 # We need to preserve any flags that were passed in by the user. However, we
 # can't append to CMAKE_C_FLAGS and friends directly, because toolchain files
@@ -86,19 +89,10 @@ string(REPLACE ";" " " COMPILE_FLAGS "${COMPILE_FLAGS}")
 # The assignments to the _INITIAL cache variables don't use FORCE, so they'll
 # only be populated on the initial configure, and their values won't change
 # afterward.
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMPILE_FLAGS}" CACHE STRING "" FORCE)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${VALI_LLVM_COMPILE_FLAGS} $ENV{VALI_INCLUDES}" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${VALI_LLVM_COMPILE_FLAGS} $ENV{VALI_INCLUDES}" CACHE STRING "" FORCE)
 
-if("$ENV{VALI_ARCH}" STREQUAL "i386")
-    set(LINK_FLAGS /nodefaultlib /machine:X86 /subsystem:native /lldmap
-        $ENV{VALI_LIBRARIES}/libclang.lib $ENV{VALI_LIBRARIES}/libm.lib $ENV{VALI_LIBRARIES}/libc.lib
-        $ENV{VALI_LIBRARIES}/zlib.lib $ENV{VALI_LIBRARIES}/libunwind.lib)
-else()
-    set(LINK_FLAGS /nodefaultlib /machine:X64 /subsystem:native /lldmap
-        $ENV{VALI_LIBRARIES}/libclang.lib $ENV{VALI_LIBRARIES}/libm.lib $ENV{VALI_LIBRARIES}/libc.lib
-        $ENV{VALI_LIBRARIES}/zlib.lib $ENV{VALI_LIBRARIES}/libunwind.lib)
-endif()
-
+set(LINK_FLAGS $ENV{VALI_LFLAGS})
 string(REPLACE ";" " " LINK_FLAGS "${LINK_FLAGS}")
 
 # See explanation for compiler flags above for the _INITIAL variables.

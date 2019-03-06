@@ -116,10 +116,6 @@ if(NOT LLVM_USE_SANITIZER MATCHES "Memory.*")
         break()
       endif()
     endforeach()
-    if ( MOLLENOS )
-      set(HAVE_LIBZ 1)
-      set(ZLIB_LIBRARIES "${library}")
-    endif()
   endif()
 
   # Don't look for these libraries on Windows or Vali.

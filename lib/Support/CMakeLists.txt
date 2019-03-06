@@ -1,5 +1,5 @@
 set(system_libs)
-if ( LLVM_ENABLE_ZLIB AND HAVE_LIBZ AND NOT MOLLENOS)
+if ( LLVM_ENABLE_ZLIB AND HAVE_LIBZ)
   set(system_libs ${system_libs} ${ZLIB_LIBRARIES})
 endif()
 if( MSVC OR MINGW )
