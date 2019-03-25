@@ -49,13 +49,14 @@ uint32_t file_status::getLinkCount() const {
 
 // Implemented
 ErrorOr<space_info> disk_space(const Twine &Path) {
-  vStorageDescriptor_t Descriptor;
-  if (!::GetStorageInformationFromPath(Path.str().c_str(), &Descriptor))
+  OsFileSystemDescriptor_t Descriptor;
+  if (!::GetFileSystemInformationFromPath(Path.str().c_str(), &Descriptor))
     return make_error_code(errc::no_such_file_or_directory);
   space_info SpaceInfo;
-  SpaceInfo.capacity = (static_cast<uint64_t>(Descriptor.BytesTotal.u.HighPart) << 32) + Descriptor.BytesTotal.u.LowPart;
-  SpaceInfo.free = (static_cast<uint64_t>(Descriptor.BytesFree.u.HighPart) << 32) + Descriptor.BytesFree.u.LowPart;
-  SpaceInfo.available = (static_cast<uint64_t>(Descriptor.BytesAvailable.u.HighPart) << 32) + Descriptor.BytesAvailable.u.LowPart;
+  uint64_t SegmentSizeInBytes = Descriptor.BlockSize * Descriptor.BlocksPerSegment;
+  SpaceInfo.capacity          = Descriptor.SegmentsTotal.QuadPart * SegmentSizeInBytes;
+  SpaceInfo.free              = Descriptor.SegmentsFree.QuadPart * SegmentSizeInBytes;
+  SpaceInfo.available         = SpaceInfo.capacity - SpaceInfo.free;
   return SpaceInfo;
 }
 
@@ -144,7 +145,7 @@ std::error_code remove(const Twine &path, bool IgnoreNonExisting) {
 std::error_code is_local(const Twine &path, bool &result) {
   if (!llvm::sys::fs::exists(path) || !llvm::sys::path::has_root_path(path))
     return make_error_code(errc::no_such_file_or_directory);
-  vStorageDescriptor_t Descriptor;
+  OsStorageDescriptor_t Descriptor;
   SmallString<_MAXPATH> path_storage;
   StringRef f = path.toNullTerminatedStringRef(path_storage);
   if (GetStorageInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
@@ -160,7 +161,7 @@ std::error_code is_local(const Twine &path, bool &result) {
 
 // Implemented
 std::error_code is_local(int FD, bool &Result) {
-  vStorageDescriptor_t Descriptor;
+  OsStorageDescriptor_t Descriptor;
   if (GetStorageInformationFromFd(FD, &Descriptor) != OsSuccess) {
     return make_error_code(errc::no_such_file_or_directory);
   }
