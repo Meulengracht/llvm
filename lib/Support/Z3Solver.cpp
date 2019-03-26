@@ -98,7 +98,7 @@ public:
       Z3_dec_ref(Context.Context, reinterpret_cast<Z3_ast>(Sort));
   }
 
-  void Profile(llvm::FoldingSetNodeID &ID) const {
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
     ID.AddInteger(
         Z3_get_ast_id(Context.Context, reinterpret_cast<Z3_ast>(Sort)));
   }
@@ -818,15 +818,9 @@ llvm::SMTSolverRef llvm::CreateZ3Solver() {
 #if LLVM_WITH_Z3
   return llvm::make_unique<Z3Solver>();
 #else
-  llvm::report_fatal_error("Clang was not compiled with Z3 support, rebuild "
+  llvm::report_fatal_error("LLVM was not compiled with Z3 support, rebuild "
                            "with -DLLVM_ENABLE_Z3_SOLVER=ON",
                            false);
   return nullptr;
 #endif
 }
-
-LLVM_DUMP_METHOD void SMTSort::dump() const { print(llvm::errs()); }
-LLVM_DUMP_METHOD void SMTExpr::dump() const { print(llvm::errs()); }
-LLVM_DUMP_METHOD void SMTSolver::dump() const { print(llvm::errs()); }
-
-

@@ -128,7 +128,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       Builder.CreateBr(Destination);
       BI->eraseFromParent();
       if (DTU)
-        DTU->deleteEdgeRelaxed(BB, OldDest);
+        DTU->applyUpdatesPermissive({{DominatorTree::Delete, BB, OldDest}});
       return true;
     }
 
@@ -204,7 +204,8 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
         i = SI->removeCase(i);
         e = SI->case_end();
         if (DTU)
-          DTU->deleteEdgeRelaxed(ParentBB, DefaultDest);
+          DTU->applyUpdatesPermissive(
+              {{DominatorTree::Delete, ParentBB, DefaultDest}});
         continue;
       }
 
@@ -252,7 +253,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       if (DeleteDeadConditions)
         RecursivelyDeleteTriviallyDeadInstructions(Cond, TLI);
       if (DTU)
-        DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+        DTU->applyUpdatesPermissive(Updates);
       return true;
     }
 
@@ -330,7 +331,7 @@ bool llvm::ConstantFoldTerminator(BasicBlock *BB, bool DeleteDeadConditions,
       }
 
       if (DTU)
-        DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+        DTU->applyUpdatesPermissive(Updates);
       return true;
     }
   }
@@ -415,8 +416,8 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
     if (Constant *C = dyn_cast<Constant>(CI->getArgOperand(0)))
       return C->isNullValue() || isa<UndefValue>(C);
 
-  if (CallSite CS = CallSite(I))
-    if (isMathLibCallNoop(CS, TLI))
+  if (auto *Call = dyn_cast<CallBase>(I))
+    if (isMathLibCallNoop(Call, TLI))
       return true;
 
   return false;
@@ -429,7 +430,7 @@ bool llvm::wouldInstructionBeTriviallyDead(Instruction *I,
 bool llvm::RecursivelyDeleteTriviallyDeadInstructions(
     Value *V, const TargetLibraryInfo *TLI, MemorySSAUpdater *MSSAU) {
   Instruction *I = dyn_cast<Instruction>(V);
-  if (!I || !I->use_empty() || !isInstructionTriviallyDead(I, TLI))
+  if (!I || !isInstructionTriviallyDead(I, TLI))
     return false;
 
   SmallVector<Instruction*, 16> DeadInsts;
@@ -664,7 +665,7 @@ void llvm::RemovePredecessorAndSimplify(BasicBlock *BB, BasicBlock *Pred,
     if (PhiIt != OldPhiIt) PhiIt = &BB->front();
   }
   if (DTU)
-    DTU->deleteEdgeRelaxed(Pred, BB);
+    DTU->applyUpdatesPermissive({{DominatorTree::Delete, Pred, BB}});
 }
 
 /// MergeBasicBlockIntoOnlyPred - DestBB is a block with one predecessor and its
@@ -733,7 +734,7 @@ void llvm::MergeBasicBlockIntoOnlyPred(BasicBlock *DestBB,
            isa<UnreachableInst>(PredBB->getTerminator()) &&
            "The successor list of PredBB isn't empty before "
            "applying corresponding DTU updates.");
-    DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+    DTU->applyUpdatesPermissive(Updates);
     DTU->deleteBB(PredBB);
     // Recalculation of DomTree is needed when updating a forward DomTree and
     // the Entry BB is replaced.
@@ -996,6 +997,18 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
     }
   }
 
+  // We cannot fold the block if it's a branch to an already present callbr
+  // successor because that creates duplicate successors.
+  for (auto I = pred_begin(BB), E = pred_end(BB); I != E; ++I) {
+    if (auto *CBI = dyn_cast<CallBrInst>((*I)->getTerminator())) {
+      if (Succ == CBI->getDefaultDest())
+        return false;
+      for (unsigned i = 0, e = CBI->getNumIndirectDests(); i != e; ++i)
+        if (Succ == CBI->getIndirectDest(i))
+          return false;
+    }
+  }
+
   LLVM_DEBUG(dbgs() << "Killing Trivial BB: \n" << *BB);
 
   SmallVector<DominatorTree::UpdateType, 32> Updates;
@@ -1063,7 +1076,7 @@ bool llvm::TryToSimplifyUncondBranchFromEmptyBlock(BasicBlock *BB,
                            "applying corresponding DTU updates.");
 
   if (DTU) {
-    DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+    DTU->applyUpdatesPermissive(Updates);
     DTU->deleteBB(BB);
   } else {
     BB->eraseFromParent(); // Delete the old basic block.
@@ -1702,9 +1715,9 @@ DIExpression *llvm::salvageDebugInfoImpl(Instruction &I,
       // TODO: Salvage constants from each kind of binop we know about.
       return nullptr;
     }
-  } else if (isa<LoadInst>(&I)) {
-    // Rewrite the load into DW_OP_deref.
-    return DIExpression::prepend(SrcDIExpr, DIExpression::WithDeref);
+    // *Not* to do: we should not attempt to salvage load instructions,
+    // because the validity and lifetime of a dbg.value containing
+    // DW_OP_deref becomes difficult to analyze. See PR40628 for examples.
   }
   return nullptr;
 }
@@ -1848,21 +1861,10 @@ bool llvm::replaceAllDbgUsesWith(Instruction &From, Value &To,
         return None;
 
       bool Signed = *Signedness == DIBasicType::Signedness::Signed;
-
-      if (!Signed) {
-        // In the unsigned case, assume that a debugger will initialize the
-        // high bits to 0 and do a no-op conversion.
-        return Identity(DII);
-      } else {
-        // In the signed case, the high bits are given by sign extension, i.e:
-        //   (To >> (ToBits - 1)) * ((2 ^ FromBits) - 1)
-        // Calculate the high bits and OR them together with the low bits.
-        SmallVector<uint64_t, 8> Ops({dwarf::DW_OP_dup, dwarf::DW_OP_constu,
-                                      (ToBits - 1), dwarf::DW_OP_shr,
-                                      dwarf::DW_OP_lit0, dwarf::DW_OP_not,
-                                      dwarf::DW_OP_mul, dwarf::DW_OP_or});
-        return DIExpression::appendToStack(DII.getExpression(), Ops);
-      }
+      dwarf::TypeKind TK = Signed ? dwarf::DW_ATE_signed : dwarf::DW_ATE_unsigned;
+      SmallVector<uint64_t, 8> Ops({dwarf::DW_OP_LLVM_convert, ToBits, TK,
+                                   dwarf::DW_OP_LLVM_convert, FromBits, TK});
+      return DIExpression::appendToStack(DII.getExpression(), Ops);
     };
     return rewriteDebugUsers(From, To, DomPoint, DT, SignOrZeroExt);
   }
@@ -1927,7 +1929,7 @@ unsigned llvm::changeToUnreachable(Instruction *I, bool UseLLVMTrap,
     ++NumInstrsRemoved;
   }
   if (DTU)
-    DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+    DTU->applyUpdatesPermissive(Updates);
   return NumInstrsRemoved;
 }
 
@@ -1955,7 +1957,7 @@ static void changeToCall(InvokeInst *II, DomTreeUpdater *DTU = nullptr) {
   UnwindDestBB->removePredecessor(BB);
   II->eraseFromParent();
   if (DTU)
-    DTU->deleteEdgeRelaxed(BB, UnwindDestBB);
+    DTU->applyUpdatesPermissive({{DominatorTree::Delete, BB, UnwindDestBB}});
 }
 
 BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
@@ -2102,7 +2104,8 @@ static bool markAliveBlocks(Function &F,
           UnwindDestBB->removePredecessor(II->getParent());
           II->eraseFromParent();
           if (DTU)
-            DTU->deleteEdgeRelaxed(BB, UnwindDestBB);
+            DTU->applyUpdatesPermissive(
+                {{DominatorTree::Delete, BB, UnwindDestBB}});
         } else
           changeToCall(II, DTU);
         Changed = true;
@@ -2191,7 +2194,7 @@ void llvm::removeUnwindEdge(BasicBlock *BB, DomTreeUpdater *DTU) {
   TI->replaceAllUsesWith(NewTI);
   TI->eraseFromParent();
   if (DTU)
-    DTU->deleteEdgeRelaxed(BB, UnwindDest);
+    DTU->applyUpdatesPermissive({{DominatorTree::Delete, BB, UnwindDest}});
 }
 
 /// removeUnreachableBlocks - Remove blocks that are not reachable, even
@@ -2256,7 +2259,7 @@ bool llvm::removeUnreachableBlocks(Function &F, LazyValueInfo *LVI,
   }
 
   if (DTU) {
-    DTU->applyUpdates(Updates, /*ForceRemoveDuplicates*/ true);
+    DTU->applyUpdatesPermissive(Updates);
     bool Deleted = false;
     for (auto *BB : DeadBlockSet) {
       if (DTU->isBBPendingDeletion(BB))
@@ -2450,12 +2453,12 @@ unsigned llvm::replaceDominatedUsesWith(Value *From, Value *To,
   return ::replaceDominatedUsesWith(From, To, BB, ProperlyDominates);
 }
 
-bool llvm::callsGCLeafFunction(ImmutableCallSite CS,
+bool llvm::callsGCLeafFunction(const CallBase *Call,
                                const TargetLibraryInfo &TLI) {
   // Check if the function is specifically marked as a gc leaf function.
-  if (CS.hasFnAttr("gc-leaf-function"))
+  if (Call->hasFnAttr("gc-leaf-function"))
     return true;
-  if (const Function *F = CS.getCalledFunction()) {
+  if (const Function *F = Call->getCalledFunction()) {
     if (F->hasFnAttribute("gc-leaf-function"))
       return true;
 
@@ -2469,7 +2472,7 @@ bool llvm::callsGCLeafFunction(ImmutableCallSite CS,
   // marked as 'gc-leaf-function.' All available Libcalls are
   // GC-leaf.
   LibFunc LF;
-  if (TLI.getLibFunc(CS, LF)) {
+  if (TLI.getLibFunc(ImmutableCallSite(Call), LF)) {
     return TLI.has(LF);
   }
 
@@ -2530,13 +2533,13 @@ void llvm::hoistAllInstructionsInto(BasicBlock *DomBlock, Instruction *InsertPt,
                                     BasicBlock *BB) {
   // Since we are moving the instructions out of its basic block, we do not
   // retain their original debug locations (DILocations) and debug intrinsic
-  // instructions (dbg.values).
+  // instructions.
   //
   // Doing so would degrade the debugging experience and adversely affect the
   // accuracy of profiling information.
   //
   // Currently, when hoisting the instructions, we take the following actions:
-  // - Remove their dbg.values.
+  // - Remove their debug intrinsic instructions.
   // - Set their debug locations to the values from the insertion point.
   //
   // As per PR39141 (comment #8), the more fundamental reason why the dbg.values
@@ -2554,7 +2557,7 @@ void llvm::hoistAllInstructionsInto(BasicBlock *DomBlock, Instruction *InsertPt,
     I->dropUnknownNonDebugMetadata();
     if (I->isUsedByMetadata())
       dropDebugUsers(*I);
-    if (isa<DbgVariableIntrinsic>(I)) {
+    if (isa<DbgInfoIntrinsic>(I)) {
       // Remove DbgInfo Intrinsics.
       II = I->eraseFromParent();
       continue;

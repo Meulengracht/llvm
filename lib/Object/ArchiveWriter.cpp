@@ -493,11 +493,36 @@ computeMemberData(raw_ostream &StringTable, raw_ostream &SymNames,
   return Ret;
 }
 
-Error llvm::writeArchive(StringRef ArcName,
-                         ArrayRef<NewArchiveMember> NewMembers,
-                         bool WriteSymtab, object::Archive::Kind Kind,
-                         bool Deterministic, bool Thin,
-                         std::unique_ptr<MemoryBuffer> OldArchiveBuf) {
+namespace llvm {
+// Compute the relative path from From to To.
+std::string computeArchiveRelativePath(StringRef From, StringRef To) {
+  if (sys::path::is_absolute(From) || sys::path::is_absolute(To))
+    return To;
+
+  StringRef DirFrom = sys::path::parent_path(From);
+  auto FromI = sys::path::begin(DirFrom);
+  auto ToI = sys::path::begin(To);
+  while (*FromI == *ToI) {
+    ++FromI;
+    ++ToI;
+  }
+
+  SmallString<128> Relative;
+  for (auto FromE = sys::path::end(DirFrom); FromI != FromE; ++FromI)
+    sys::path::append(Relative, "..");
+
+  for (auto ToE = sys::path::end(To); ToI != ToE; ++ToI)
+    sys::path::append(Relative, *ToI);
+
+  // Replace backslashes with slashes so that the path is portable between *nix
+  // and Windows.
+  return sys::path::convert_to_slash(Relative);
+}
+
+Error writeArchive(StringRef ArcName, ArrayRef<NewArchiveMember> NewMembers,
+                   bool WriteSymtab, object::Archive::Kind Kind,
+                   bool Deterministic, bool Thin,
+                   std::unique_ptr<MemoryBuffer> OldArchiveBuf) {
   assert((!Thin || !isBSDLike(Kind)) && "Only the gnu format has a thin mode");
 
   SmallString<0> SymNamesBuf;
@@ -583,3 +608,5 @@ Error llvm::writeArchive(StringRef ArcName,
 
   return Temp->keep(ArcName);
 }
+
+} // namespace llvm

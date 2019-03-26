@@ -203,9 +203,9 @@ define <32 x i16> @shuffle_v32i16_0zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz(<32 x i16> %a
 ;
 ; SKX-LABEL: shuffle_v32i16_0zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz:
 ; SKX:       ## %bb.0:
-; SKX-NEXT:    movl $1, %eax
-; SKX-NEXT:    kmovd %eax, %k1
-; SKX-NEXT:    vmovdqu16 %zmm0, %zmm0 {%k1} {z}
+; SKX-NEXT:    movl $65535, %eax ## imm = 0xFFFF
+; SKX-NEXT:    vmovd %eax, %xmm1
+; SKX-NEXT:    vpandq %zmm1, %zmm0, %zmm0
 ; SKX-NEXT:    retq
   %shuffle = shufflevector <32 x i16> %a, <32 x i16> zeroinitializer, <32 x i32> <i32 0, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32, i32 32>
   ret <32 x i16> %shuffle
@@ -233,7 +233,7 @@ define <32 x i16> @insert_dup_mem_v32i16_i32(i32* %ptr) {
 define <32 x i16> @insert_dup_mem_v32i16_sext_i16(i16* %ptr) {
 ; KNL-LABEL: insert_dup_mem_v32i16_sext_i16:
 ; KNL:       ## %bb.0:
-; KNL-NEXT:    movswl (%rdi), %eax
+; KNL-NEXT:    movzwl (%rdi), %eax
 ; KNL-NEXT:    vmovd %eax, %xmm0
 ; KNL-NEXT:    vpbroadcastw %xmm0, %ymm0
 ; KNL-NEXT:    vmovdqa %ymm0, %ymm1
@@ -241,7 +241,7 @@ define <32 x i16> @insert_dup_mem_v32i16_sext_i16(i16* %ptr) {
 ;
 ; SKX-LABEL: insert_dup_mem_v32i16_sext_i16:
 ; SKX:       ## %bb.0:
-; SKX-NEXT:    movswl (%rdi), %eax
+; SKX-NEXT:    movzwl (%rdi), %eax
 ; SKX-NEXT:    vpbroadcastw %eax, %zmm0
 ; SKX-NEXT:    retq
   %tmp = load i16, i16* %ptr, align 2

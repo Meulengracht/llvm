@@ -789,11 +789,12 @@ bool IRTranslator::translateOverflowIntrinsic(const CallInst &CI, unsigned Op,
   return true;
 }
 
-unsigned
-IRTranslator::getSimpleUnaryIntrinsicOpcode(Intrinsic::ID ID) {
+unsigned IRTranslator::getSimpleIntrinsicOpcode(Intrinsic::ID ID) {
   switch (ID) {
     default:
       break;
+    case Intrinsic::bswap:
+      return TargetOpcode::G_BSWAP;
     case Intrinsic::ceil:
       return TargetOpcode::G_FCEIL;
     case Intrinsic::cos:
@@ -806,12 +807,20 @@ IRTranslator::getSimpleUnaryIntrinsicOpcode(Intrinsic::ID ID) {
       return TargetOpcode::G_FEXP2;
     case Intrinsic::fabs:
       return TargetOpcode::G_FABS;
+    case Intrinsic::canonicalize:
+      return TargetOpcode::G_FCANONICALIZE;
+    case Intrinsic::floor:
+      return TargetOpcode::G_FFLOOR;
+    case Intrinsic::fma:
+      return TargetOpcode::G_FMA;
     case Intrinsic::log:
       return TargetOpcode::G_FLOG;
     case Intrinsic::log2:
       return TargetOpcode::G_FLOG2;
     case Intrinsic::log10:
       return TargetOpcode::G_FLOG10;
+    case Intrinsic::pow:
+      return TargetOpcode::G_FPOW;
     case Intrinsic::round:
       return TargetOpcode::G_INTRINSIC_ROUND;
     case Intrinsic::sin:
@@ -824,18 +833,22 @@ IRTranslator::getSimpleUnaryIntrinsicOpcode(Intrinsic::ID ID) {
   return Intrinsic::not_intrinsic;
 }
 
-bool IRTranslator::translateSimpleUnaryIntrinsic(
-    const CallInst &CI, Intrinsic::ID ID, MachineIRBuilder &MIRBuilder) {
+bool IRTranslator::translateSimpleIntrinsic(const CallInst &CI,
+                                            Intrinsic::ID ID,
+                                            MachineIRBuilder &MIRBuilder) {
 
-  unsigned Op = getSimpleUnaryIntrinsicOpcode(ID);
+  unsigned Op = getSimpleIntrinsicOpcode(ID);
 
-  // Is this a simple unary intrinsic?
+  // Is this a simple intrinsic?
   if (Op == Intrinsic::not_intrinsic)
     return false;
 
   // Yes. Let's translate it.
-  MIRBuilder.buildInstr(Op, {getOrCreateVReg(CI)},
-                        {getOrCreateVReg(*CI.getArgOperand(0))},
+  SmallVector<llvm::SrcOp, 4> VRegs;
+  for (auto &Arg : CI.arg_operands())
+    VRegs.push_back(getOrCreateVReg(*Arg));
+
+  MIRBuilder.buildInstr(Op, {getOrCreateVReg(CI)}, VRegs,
                         MachineInstr::copyFlagsFromInstruction(CI));
   return true;
 }
@@ -843,9 +856,9 @@ bool IRTranslator::translateSimpleUnaryIntrinsic(
 bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
                                            MachineIRBuilder &MIRBuilder) {
 
-  // If this is a simple unary intrinsic (that is, we just need to add a def of
-  // a vreg, and a use of a vreg, then translate it.
-  if (translateSimpleUnaryIntrinsic(CI, ID, MIRBuilder))
+  // If this is a simple intrinsic (that is, we just need to add a def of
+  // a vreg, and uses for each arg operand, then translate it.
+  if (translateSimpleIntrinsic(CI, ID, MIRBuilder))
     return true;
 
   switch (ID) {
@@ -968,21 +981,6 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
     return translateOverflowIntrinsic(CI, TargetOpcode::G_UMULO, MIRBuilder);
   case Intrinsic::smul_with_overflow:
     return translateOverflowIntrinsic(CI, TargetOpcode::G_SMULO, MIRBuilder);
-  case Intrinsic::pow: {
-    MIRBuilder.buildInstr(TargetOpcode::G_FPOW, {getOrCreateVReg(CI)},
-                          {getOrCreateVReg(*CI.getArgOperand(0)),
-                           getOrCreateVReg(*CI.getArgOperand(1))},
-                          MachineInstr::copyFlagsFromInstruction(CI));
-    return true;
-  }
-  case Intrinsic::fma: {
-    MIRBuilder.buildInstr(TargetOpcode::G_FMA, {getOrCreateVReg(CI)},
-                          {getOrCreateVReg(*CI.getArgOperand(0)),
-                           getOrCreateVReg(*CI.getArgOperand(1)),
-                           getOrCreateVReg(*CI.getArgOperand(2))},
-                          MachineInstr::copyFlagsFromInstruction(CI));
-    return true;
-  }
   case Intrinsic::fmuladd: {
     const TargetMachine &TM = MF->getTarget();
     const TargetLowering &TLI = *MF->getSubtarget().getTargetLowering();
@@ -1140,8 +1138,8 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
       ID = static_cast<Intrinsic::ID>(TII->getIntrinsicID(F));
   }
 
-  bool IsSplitType = valueIsSplit(CI);
   if (!F || !F->isIntrinsic() || ID == Intrinsic::not_intrinsic) {
+    bool IsSplitType = valueIsSplit(CI);
     unsigned Res = IsSplitType ? MRI->createGenericVirtualRegister(
                                      getLLTForType(*CI.getType(), *DL))
                                : getOrCreateVReg(CI);
@@ -1165,16 +1163,12 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
   if (translateKnownIntrinsic(CI, ID, MIRBuilder))
     return true;
 
-  unsigned Res = 0;
-  if (!CI.getType()->isVoidTy()) {
-    if (IsSplitType)
-      Res =
-          MRI->createGenericVirtualRegister(getLLTForType(*CI.getType(), *DL));
-    else
-      Res = getOrCreateVReg(CI);
-  }
+  ArrayRef<unsigned> ResultRegs;
+  if (!CI.getType()->isVoidTy())
+    ResultRegs = getOrCreateVRegs(CI);
+
   MachineInstrBuilder MIB =
-      MIRBuilder.buildIntrinsic(ID, Res, !CI.doesNotAccessMemory());
+      MIRBuilder.buildIntrinsic(ID, ResultRegs, !CI.doesNotAccessMemory());
 
   for (auto &Arg : CI.arg_operands()) {
     // Some intrinsics take metadata parameters. Reject them.
@@ -1182,9 +1176,6 @@ bool IRTranslator::translateCall(const User &U, MachineIRBuilder &MIRBuilder) {
       return false;
     MIB.addUse(packRegs(*Arg, MIRBuilder));
   }
-
-  if (IsSplitType)
-    unpackRegs(CI, Res, MIRBuilder);
 
   // Add a MachineMemOperand if it is a target mem intrinsic.
   const TargetLowering &TLI = *MF->getSubtarget().getTargetLowering();
@@ -1257,6 +1248,12 @@ bool IRTranslator::translateInvoke(const User &U,
   MIRBuilder.buildBr(ReturnMBB);
 
   return true;
+}
+
+bool IRTranslator::translateCallBr(const User &U,
+                                   MachineIRBuilder &MIRBuilder) {
+  // FIXME: Implement this.
+  return false;
 }
 
 bool IRTranslator::translateLandingPad(const User &U,

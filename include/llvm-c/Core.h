@@ -65,6 +65,7 @@ typedef enum {
   LLVMInvoke         = 5,
   /* removed 6 due to API changes */
   LLVMUnreachable    = 7,
+  LLVMCallBr         = 67,
 
   /* Standard Unary Operators */
   LLVMFNeg           = 66,
@@ -2400,6 +2401,13 @@ LLVMValueRef LLVMGetPersonalityFn(LLVMValueRef Fn);
  * @see llvm::Function::setPersonalityFn()
  */
 void LLVMSetPersonalityFn(LLVMValueRef Fn, LLVMValueRef PersonalityFn);
+
+/**
+ * Obtain the intrinsic ID number which matches the given function name.
+ *
+ * @see llvm::Function::lookupIntrinsicID()
+ */
+unsigned LLVMLookupIntrinsicID(const char *Name, size_t NameLen);
 
 /**
  * Obtain the ID number from a function instance.

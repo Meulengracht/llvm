@@ -14,8 +14,6 @@
 
 using namespace llvm;
 
-MCSectionWasm::~MCSectionWasm() = default; // anchor.
-
 // Decides whether a '.section' directive
 // should be printed before the section name.
 bool MCSectionWasm::shouldOmitSectionDirective(StringRef Name,
@@ -64,7 +62,8 @@ void MCSectionWasm::PrintSwitchToSection(const MCAsmInfo &MAI, const Triple &T,
   printName(OS, getSectionName());
   OS << ",\"";
 
-  // TODO: Print section flags.
+  if (IsPassive)
+    OS << "passive";
 
   OS << '"';
 

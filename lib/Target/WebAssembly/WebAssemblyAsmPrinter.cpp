@@ -21,8 +21,10 @@
 #include "WebAssemblyMCInstLower.h"
 #include "WebAssemblyMachineFunctionInfo.h"
 #include "WebAssemblyRegisterInfo.h"
+#include "WebAssemblyTargetMachine.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/BinaryFormat/Wasm.h"
 #include "llvm/CodeGen/Analysis.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineConstantPool.h"
@@ -39,6 +41,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
+
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
@@ -158,6 +161,7 @@ void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
   EmitProducerInfo(M);
+  EmitTargetFeatures();
 }
 
 void WebAssemblyAsmPrinter::EmitProducerInfo(Module &M) {
@@ -209,6 +213,62 @@ void WebAssemblyAsmPrinter::EmitProducerInfo(Module &M) {
     }
     OutStreamer->PopSection();
   }
+}
+
+void WebAssemblyAsmPrinter::EmitTargetFeatures() {
+  static const std::pair<unsigned, const char *> FeaturePairs[] = {
+      {WebAssembly::FeatureAtomics, "atomics"},
+      {WebAssembly::FeatureBulkMemory, "bulk-memory"},
+      {WebAssembly::FeatureExceptionHandling, "exception-handling"},
+      {WebAssembly::FeatureNontrappingFPToInt, "nontrapping-fptoint"},
+      {WebAssembly::FeatureSignExt, "sign-ext"},
+      {WebAssembly::FeatureSIMD128, "simd128"},
+  };
+
+  struct FeatureEntry {
+    uint8_t Prefix;
+    StringRef Name;
+  };
+
+  FeatureBitset UsedFeatures =
+      static_cast<WebAssemblyTargetMachine &>(TM).getUsedFeatures();
+
+  // Calculate the features and linkage policies to emit
+  SmallVector<FeatureEntry, 4> EmittedFeatures;
+  for (auto &F : FeaturePairs) {
+    FeatureEntry Entry;
+    Entry.Name = F.second;
+    if (F.first == WebAssembly::FeatureAtomics) {
+      // "atomics" is special: code compiled without atomics may have had its
+      // atomics lowered to nonatomic operations. Such code would be dangerous
+      // to mix with proper atomics, so it is always Required or Disallowed.
+      Entry.Prefix = UsedFeatures[F.first]
+                         ? wasm::WASM_FEATURE_PREFIX_REQUIRED
+                         : wasm::WASM_FEATURE_PREFIX_DISALLOWED;
+      EmittedFeatures.push_back(Entry);
+    } else {
+      // Other features are marked Used or not mentioned
+      if (UsedFeatures[F.first]) {
+        Entry.Prefix = wasm::WASM_FEATURE_PREFIX_USED;
+        EmittedFeatures.push_back(Entry);
+      }
+    }
+  }
+
+  // Emit features and linkage policies into the "target_features" section
+  MCSectionWasm *FeaturesSection = OutContext.getWasmSection(
+      ".custom_section.target_features", SectionKind::getMetadata());
+  OutStreamer->PushSection();
+  OutStreamer->SwitchSection(FeaturesSection);
+
+  OutStreamer->EmitULEB128IntValue(EmittedFeatures.size());
+  for (auto &F : EmittedFeatures) {
+    OutStreamer->EmitIntValue(F.Prefix, 1);
+    OutStreamer->EmitULEB128IntValue(F.Name.size());
+    OutStreamer->EmitBytes(F.Name);
+  }
+
+  OutStreamer->PopSection();
 }
 
 void WebAssemblyAsmPrinter::EmitConstantPool() {
@@ -329,15 +389,6 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     break;
   }
   }
-}
-
-const MCExpr *WebAssemblyAsmPrinter::lowerConstant(const Constant *CV) {
-  if (const auto *GV = dyn_cast<GlobalValue>(CV))
-    if (GV->getValueType()->isFunctionTy()) {
-      return MCSymbolRefExpr::create(
-          getSymbol(GV), MCSymbolRefExpr::VK_WebAssembly_FUNCTION, OutContext);
-    }
-  return AsmPrinter::lowerConstant(CV);
 }
 
 bool WebAssemblyAsmPrinter::PrintAsmOperand(const MachineInstr *MI,

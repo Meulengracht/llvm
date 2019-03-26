@@ -262,6 +262,8 @@ struct NMSymbol {
   uint64_t Size;
   char TypeChar;
   StringRef Name;
+  StringRef SectionName;
+  StringRef TypeName;
   BasicSymbolRef Sym;
   // The Sym field above points to the native symbol in the object file,
   // for Mach-O when we are creating symbols from the dyld info the above
@@ -882,8 +884,12 @@ static void sortAndPrintSymbolList(SymbolicFile &Obj, bool printName,
       std::string PaddedName(Name);
       while (PaddedName.length() < 20)
         PaddedName += " ";
+      std::string TypeName = I->TypeName;
+      if (TypeName.size() < 18)
+        TypeName = std::string(18-TypeName.size(), ' ') + TypeName;
       outs() << PaddedName << "|" << SymbolAddrStr << "|   " << I->TypeChar
-             << "  |                  |" << SymbolSizeStr << "|     |\n";
+             << "  |" << TypeName << "|" << SymbolSizeStr << "|     |"
+             << I->SectionName << "\n";
     }
   }
 
@@ -1078,8 +1084,40 @@ static bool isObject(SymbolicFile &Obj, basic_symbol_iterator I) {
              : elf_symbol_iterator(I)->getELFType() == ELF::STT_OBJECT;
 }
 
-static char getNMTypeChar(SymbolicFile &Obj, basic_symbol_iterator I) {
+// For ELF object files, Set TypeName to the symbol typename, to be printed
+// in the 'Type' column of the SYSV format output.
+static StringRef getNMTypeName(SymbolicFile &Obj, basic_symbol_iterator I) {
+  if (isa<ELFObjectFileBase>(&Obj)) {
+    elf_symbol_iterator SymI(I);
+    return SymI->getELFTypeName();
+  }
+  return "";
+}
+
+// Return Posix nm class type tag (single letter), but also set SecName and
+// section and name, to be used in format=sysv output.
+static char getNMSectionTagAndName(SymbolicFile &Obj, basic_symbol_iterator I,
+                                   StringRef &SecName) {
   uint32_t Symflags = I->getFlags();
+  if (isa<ELFObjectFileBase>(&Obj)) {
+    if (Symflags & object::SymbolRef::SF_Absolute)
+      SecName = "*ABS*";
+    else if (Symflags & object::SymbolRef::SF_Common)
+      SecName = "*COM*";
+    else if (Symflags & object::SymbolRef::SF_Undefined)
+      SecName = "*UND*";
+    else {
+      elf_symbol_iterator SymI(I);
+      Expected<elf_section_iterator> SecIOrErr = SymI->getSection();
+      if (!SecIOrErr) {
+        consumeError(SecIOrErr.takeError());
+        return '?';
+      }
+      elf_section_iterator secT = *SecIOrErr;
+      secT->getName(SecName);
+    }
+  }
+
   if ((Symflags & object::SymbolRef::SF_Weak) && !isa<MachOObjectFile>(Obj)) {
     char Ret = isObject(Obj, I) ? 'v' : 'w';
     return (!(Symflags & object::SymbolRef::SF_Undefined)) ? toupper(Ret) : Ret;
@@ -1201,7 +1239,8 @@ dumpSymbolNamesFromObject(SymbolicFile &Obj, bool printName,
         }
         S.Address = *AddressOrErr;
       }
-      S.TypeChar = getNMTypeChar(Obj, Sym);
+      S.TypeName = getNMTypeName(Obj, Sym);
+      S.TypeChar = getNMSectionTagAndName(Obj, Sym, S.SectionName);
       std::error_code EC = Sym.printName(OS);
       if (EC && MachO)
         OS << "bad string index";
@@ -1737,8 +1776,9 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
     return;
 
   LLVMContext Context;
-  Expected<std::unique_ptr<Binary>> BinaryOrErr = createBinary(
-      BufferOrErr.get()->getMemBufferRef(), NoLLVMBitcode ? nullptr : &Context);
+  LLVMContext *ContextPtr = NoLLVMBitcode ? nullptr : &Context;
+  Expected<std::unique_ptr<Binary>> BinaryOrErr =
+      createBinary(BufferOrErr.get()->getMemBufferRef(), ContextPtr);
   if (!BinaryOrErr) {
     error(BinaryOrErr.takeError(), Filename);
     return;
@@ -1772,7 +1812,8 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
     {
       Error Err = Error::success();
       for (auto &C : A->children(Err)) {
-        Expected<std::unique_ptr<Binary>> ChildOrErr = C.getAsBinary(&Context);
+        Expected<std::unique_ptr<Binary>> ChildOrErr =
+            C.getAsBinary(ContextPtr);
         if (!ChildOrErr) {
           if (auto E = isNotObjectErrorInvalidFileType(ChildOrErr.takeError()))
             error(std::move(E), Filename, C);
@@ -1843,7 +1884,7 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
               Error Err = Error::success();
               for (auto &C : A->children(Err)) {
                 Expected<std::unique_ptr<Binary>> ChildOrErr =
-                    C.getAsBinary(&Context);
+                    C.getAsBinary(ContextPtr);
                 if (!ChildOrErr) {
                   if (auto E = isNotObjectErrorInvalidFileType(
                                        ChildOrErr.takeError())) {
@@ -1914,7 +1955,7 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
             Error Err = Error::success();
             for (auto &C : A->children(Err)) {
               Expected<std::unique_ptr<Binary>> ChildOrErr =
-                  C.getAsBinary(&Context);
+                  C.getAsBinary(ContextPtr);
               if (!ChildOrErr) {
                 if (auto E = isNotObjectErrorInvalidFileType(
                                      ChildOrErr.takeError()))
@@ -1981,7 +2022,7 @@ static void dumpSymbolNamesFromFile(std::string &Filename) {
         Error Err = Error::success();
         for (auto &C : A->children(Err)) {
           Expected<std::unique_ptr<Binary>> ChildOrErr =
-            C.getAsBinary(&Context);
+            C.getAsBinary(ContextPtr);
           if (!ChildOrErr) {
             if (auto E = isNotObjectErrorInvalidFileType(
                                  ChildOrErr.takeError()))

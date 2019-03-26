@@ -216,16 +216,16 @@ private:
   bool translateOverflowIntrinsic(const CallInst &CI, unsigned Op,
                                   MachineIRBuilder &MIRBuilder);
 
-  /// Helper function for translateSimpleUnaryIntrinsic.
+  /// Helper function for translateSimpleIntrinsic.
   /// \return The generic opcode for \p IntrinsicID if \p IntrinsicID is a
-  /// simple unary intrinsic (ceil, fabs, etc.). Otherwise, returns
+  /// simple intrinsic (ceil, fabs, etc.). Otherwise, returns
   /// Intrinsic::not_intrinsic.
-  unsigned getSimpleUnaryIntrinsicOpcode(Intrinsic::ID ID);
+  unsigned getSimpleIntrinsicOpcode(Intrinsic::ID ID);
 
-  /// Translates the intrinsics defined in getSimpleUnaryIntrinsicOpcode.
+  /// Translates the intrinsics defined in getSimpleIntrinsicOpcode.
   /// \return true if the translation succeeded.
-  bool translateSimpleUnaryIntrinsic(const CallInst &CI, Intrinsic::ID ID,
-                                     MachineIRBuilder &MIRBuilder);
+  bool translateSimpleIntrinsic(const CallInst &CI, Intrinsic::ID ID,
+                                MachineIRBuilder &MIRBuilder);
 
   bool translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
                                MachineIRBuilder &MIRBuilder);
@@ -251,6 +251,8 @@ private:
   bool translateCall(const User &U, MachineIRBuilder &MIRBuilder);
 
   bool translateInvoke(const User &U, MachineIRBuilder &MIRBuilder);
+
+  bool translateCallBr(const User &U, MachineIRBuilder &MIRBuilder);
 
   bool translateLandingPad(const User &U, MachineIRBuilder &MIRBuilder);
 

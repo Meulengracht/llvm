@@ -41,14 +41,25 @@ namespace llvm {
 
 class MDNode;
 class raw_ostream;
+struct KnownBits;
 
 /// This class represents a range of values.
 class LLVM_NODISCARD ConstantRange {
   APInt Lower, Upper;
 
+  /// Create empty constant range with same bitwidth.
+  ConstantRange getEmpty() const {
+    return ConstantRange(getBitWidth(), false);
+  }
+
+  /// Create full constant range with same bitwidth.
+  ConstantRange getFull() const {
+    return ConstantRange(getBitWidth(), true);
+  }
+
 public:
   /// Initialize a full (the default) or empty set for the specified bit width.
-  explicit ConstantRange(uint32_t BitWidth, bool isFullSet = true);
+  explicit ConstantRange(uint32_t BitWidth, bool isFullSet);
 
   /// Initialize a range to hold the single specified value.
   ConstantRange(APInt Value);
@@ -57,6 +68,21 @@ public:
   /// Lower==Upper and Lower != Min or Max value for its type. It will also
   /// assert out if the two APInt's are not the same bit width.
   ConstantRange(APInt Lower, APInt Upper);
+
+  /// Create empty constant range with the given bit width.
+  static ConstantRange getEmpty(uint32_t BitWidth) {
+    return ConstantRange(BitWidth, false);
+  }
+
+  /// Create full constant range with the given bit width.
+  static ConstantRange getFull(uint32_t BitWidth) {
+    return ConstantRange(BitWidth, true);
+  }
+
+  /// Initialize a range based on a known bits constraint. The IsSigned flag
+  /// indicates whether the constant range should not wrap in the signed or
+  /// unsigned domain.
+  static ConstantRange fromKnownBits(const KnownBits &Known, bool IsSigned);
 
   /// Produce the smallest range such that all values that may satisfy the given
   /// predicate with any value contained within Other is contained in the
@@ -322,6 +348,22 @@ public:
 
   /// Return a new range that is the logical not of the current set.
   ConstantRange inverse() const;
+
+  /// Represents whether an operation on the given constant range is known to
+  /// always or never overflow.
+  enum class OverflowResult { AlwaysOverflows, MayOverflow, NeverOverflows };
+
+  /// Return whether unsigned add of the two ranges always/never overflows.
+  OverflowResult unsignedAddMayOverflow(const ConstantRange &Other) const;
+
+  /// Return whether signed add of the two ranges always/never overflows.
+  OverflowResult signedAddMayOverflow(const ConstantRange &Other) const;
+
+  /// Return whether unsigned sub of the two ranges always/never overflows.
+  OverflowResult unsignedSubMayOverflow(const ConstantRange &Other) const;
+
+  /// Return whether signed sub of the two ranges always/never overflows.
+  OverflowResult signedSubMayOverflow(const ConstantRange &Other) const;
 
   /// Print out the bounds to a stream.
   void print(raw_ostream &OS) const;

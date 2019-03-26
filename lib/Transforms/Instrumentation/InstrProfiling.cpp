@@ -18,6 +18,8 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/BlockFrequencyInfo.h"
+#include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/Attributes.h"
@@ -147,8 +149,8 @@ public:
   static char ID;
 
   InstrProfilingLegacyPass() : ModulePass(ID) {}
-  InstrProfilingLegacyPass(const InstrProfOptions &Options)
-      : ModulePass(ID), InstrProf(Options) {}
+  InstrProfilingLegacyPass(const InstrProfOptions &Options, bool IsCS = false)
+      : ModulePass(ID), InstrProf(Options, IsCS) {}
 
   StringRef getPassName() const override {
     return "Frontend instrumentation-based coverage lowering";
@@ -232,9 +234,9 @@ class PGOCounterPromoter {
 public:
   PGOCounterPromoter(
       DenseMap<Loop *, SmallVector<LoadStorePair, 8>> &LoopToCands,
-      Loop &CurLoop, LoopInfo &LI)
+      Loop &CurLoop, LoopInfo &LI, BlockFrequencyInfo *BFI)
       : LoopToCandidates(LoopToCands), ExitBlocks(), InsertPts(), L(CurLoop),
-        LI(LI) {
+        LI(LI), BFI(BFI) {
 
     SmallVector<BasicBlock *, 8> LoopExitBlocks;
     SmallPtrSet<BasicBlock *, 8> BlockSet;
@@ -262,6 +264,20 @@ public:
       SmallVector<PHINode *, 4> NewPHIs;
       SSAUpdater SSA(&NewPHIs);
       Value *InitVal = ConstantInt::get(Cand.first->getType(), 0);
+
+      // If BFI is set, we will use it to guide the promotions.
+      if (BFI) {
+        auto *BB = Cand.first->getParent();
+        auto InstrCount = BFI->getBlockProfileCount(BB);
+        if (!InstrCount)
+          continue;
+        auto PreheaderCount = BFI->getBlockProfileCount(L.getLoopPreheader());
+        // If the average loop trip count is not greater than 1.5, we skip
+        // promotion.
+        if (PreheaderCount &&
+            (PreheaderCount.getValue() * 3) >= (InstrCount.getValue() * 2))
+          continue;
+      }
 
       PGOCounterPromoterHelper Promoter(Cand.first, Cand.second, SSA, InitVal,
                                         L.getLoopPreheader(), ExitBlocks,
@@ -312,6 +328,11 @@ private:
 
     SmallVector<BasicBlock *, 8> ExitingBlocks;
     LP->getExitingBlocks(ExitingBlocks);
+
+    // If BFI is set, we do more aggressive promotions based on BFI.
+    if (BFI)
+      return (unsigned)-1;
+
     // Not considierered speculative.
     if (ExitingBlocks.size() == 1)
       return MaxNumOfPromotionsPerLoop;
@@ -343,6 +364,7 @@ private:
   SmallVector<Instruction *, 8> InsertPts;
   Loop &L;
   LoopInfo &LI;
+  BlockFrequencyInfo *BFI;
 };
 
 } // end anonymous namespace
@@ -365,8 +387,9 @@ INITIALIZE_PASS_END(
     "Frontend instrumentation-based coverage lowering.", false, false)
 
 ModulePass *
-llvm::createInstrProfilingLegacyPass(const InstrProfOptions &Options) {
-  return new InstrProfilingLegacyPass(Options);
+llvm::createInstrProfilingLegacyPass(const InstrProfOptions &Options,
+                                     bool IsCS) {
+  return new InstrProfilingLegacyPass(Options, IsCS);
 }
 
 static InstrProfIncrementInst *castToIncrementInst(Instruction *Instr) {
@@ -415,6 +438,13 @@ void InstrProfiling::promoteCounterLoadStores(Function *F) {
   LoopInfo LI(DT);
   DenseMap<Loop *, SmallVector<LoadStorePair, 8>> LoopPromotionCandidates;
 
+  std::unique_ptr<BlockFrequencyInfo> BFI;
+  if (Options.UseBFIInPromotion) {
+    std::unique_ptr<BranchProbabilityInfo> BPI;
+    BPI.reset(new BranchProbabilityInfo(*F, LI, TLI));
+    BFI.reset(new BlockFrequencyInfo(*F, *BPI, LI));
+  }
+
   for (const auto &LoadStore : PromotionCandidates) {
     auto *CounterLoad = LoadStore.first;
     auto *CounterStore = LoadStore.second;
@@ -430,7 +460,7 @@ void InstrProfiling::promoteCounterLoadStores(Function *F) {
   // Do a post-order traversal of the loops so that counter updates can be
   // iteratively hoisted outside the loop nest.
   for (auto *Loop : llvm::reverse(Loops)) {
-    PGOCounterPromoter Promoter(LoopPromotionCandidates, *Loop, LI);
+    PGOCounterPromoter Promoter(LoopPromotionCandidates, *Loop, LI, BFI.get());
     Promoter.run(&TotalCountersPromoted);
   }
 }
@@ -677,30 +707,13 @@ static inline bool shouldRecordFunctionAddr(Function *F) {
   return F->hasAddressTaken() || F->hasLinkOnceLinkage();
 }
 
-static inline Comdat *getOrCreateProfileComdat(Module &M, Function &F,
-                                               InstrProfIncrementInst *Inc,
-                                               const Triple &TT) {
-  if (!needsComdatForCounter(F, M))
-    return nullptr;
-
-  // COFF format requires a COMDAT section to have a key symbol with the same
-  // name. The linker targeting COFF also requires that the COMDAT
-  // a section is associated to must precede the associating section. For this
-  // reason, we must choose the counter var's name as the name of the comdat.
-  StringRef ComdatPrefix =
-      (TT.isOSBinFormatCOFF() ? getInstrProfCountersVarPrefix()
-                              : getInstrProfComdatPrefix());
-  return M.getOrInsertComdat(StringRef(getVarName(Inc, ComdatPrefix)));
-}
-
 static bool needsRuntimeRegistrationOfSectionRange(const Triple &TT) {
   // Don't do this for Darwin.  compiler-rt uses linker magic.
   if (TT.isOSDarwin())
     return false;
-
   // Use linker script magic to get data/cnts/name start/end.
   if (TT.isOSLinux() || TT.isOSFreeBSD() || TT.isOSNetBSD() ||
-      TT.isOSFuchsia() || TT.isPS4CPU())
+      TT.isOSFuchsia() || TT.isPS4CPU() || TT.isOSWindows())
     return false;
 
   return true;
@@ -717,13 +730,37 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
     PD = It->second;
   }
 
-  // Move the name variable to the right section. Place them in a COMDAT group
-  // if the associated function is a COMDAT. This will make sure that
-  // only one copy of counters of the COMDAT function will be emitted after
-  // linking.
+  // Match the linkage and visibility of the name global, except on COFF, where
+  // the linkage must be local and consequentially the visibility must be
+  // default.
   Function *Fn = Inc->getParent()->getParent();
-  Comdat *ProfileVarsComdat = nullptr;
-  ProfileVarsComdat = getOrCreateProfileComdat(*M, *Fn, Inc, TT);
+  GlobalValue::LinkageTypes Linkage = NamePtr->getLinkage();
+  GlobalValue::VisibilityTypes Visibility = NamePtr->getVisibility();
+  if (TT.isOSBinFormatCOFF()) {
+    Linkage = GlobalValue::InternalLinkage;
+    Visibility = GlobalValue::DefaultVisibility;
+  }
+
+  // Move the name variable to the right section. Place them in a COMDAT group
+  // if the associated function is a COMDAT. This will make sure that only one
+  // copy of counters of the COMDAT function will be emitted after linking. Keep
+  // in mind that this pass may run before the inliner, so we need to create a
+  // new comdat group for the counters and profiling data. If we use the comdat
+  // of the parent function, that will result in relocations against discarded
+  // sections.
+  Comdat *Cmdt = nullptr;
+  GlobalValue::LinkageTypes CounterLinkage = Linkage;
+  if (needsComdatForCounter(*Fn, *M)) {
+    StringRef CmdtPrefix = getInstrProfComdatPrefix();
+    if (TT.isOSBinFormatCOFF()) {
+      // For COFF, the comdat group name must be the name of a symbol in the
+      // group. Use the counter variable name, and upgrade its linkage to
+      // something externally visible, like linkonce_odr.
+      CmdtPrefix = getInstrProfCountersVarPrefix();
+      CounterLinkage = GlobalValue::LinkOnceODRLinkage;
+    }
+    Cmdt = M->getOrInsertComdat(getVarName(Inc, CmdtPrefix));
+  }
 
   uint64_t NumCounters = Inc->getNumCounters()->getZExtValue();
   LLVMContext &Ctx = M->getContext();
@@ -731,14 +768,15 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
 
   // Create the counters variable.
   auto *CounterPtr =
-      new GlobalVariable(*M, CounterTy, false, NamePtr->getLinkage(),
+      new GlobalVariable(*M, CounterTy, false, Linkage,
                          Constant::getNullValue(CounterTy),
                          getVarName(Inc, getInstrProfCountersVarPrefix()));
-  CounterPtr->setVisibility(NamePtr->getVisibility());
+  CounterPtr->setVisibility(Visibility);
   CounterPtr->setSection(
       getInstrProfSectionName(IPSK_cnts, TT.getObjectFormat()));
   CounterPtr->setAlignment(8);
-  CounterPtr->setComdat(ProfileVarsComdat);
+  CounterPtr->setComdat(Cmdt);
+  CounterPtr->setLinkage(CounterLinkage);
 
   auto *Int8PtrTy = Type::getInt8PtrTy(Ctx);
   // Allocate statically the array of pointers to value profile nodes for
@@ -752,14 +790,14 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
       ArrayType *ValuesTy = ArrayType::get(Type::getInt64Ty(Ctx), NS);
 
       auto *ValuesVar =
-          new GlobalVariable(*M, ValuesTy, false, NamePtr->getLinkage(),
+          new GlobalVariable(*M, ValuesTy, false, Linkage,
                              Constant::getNullValue(ValuesTy),
                              getVarName(Inc, getInstrProfValuesVarPrefix()));
-      ValuesVar->setVisibility(NamePtr->getVisibility());
+      ValuesVar->setVisibility(Visibility);
       ValuesVar->setSection(
           getInstrProfSectionName(IPSK_vals, TT.getObjectFormat()));
       ValuesVar->setAlignment(8);
-      ValuesVar->setComdat(ProfileVarsComdat);
+      ValuesVar->setComdat(Cmdt);
       ValuesPtrExpr =
           ConstantExpr::getBitCast(ValuesVar, Type::getInt8PtrTy(Ctx));
     }
@@ -786,13 +824,13 @@ InstrProfiling::getOrCreateRegionCounters(InstrProfIncrementInst *Inc) {
 #define INSTR_PROF_DATA(Type, LLVMType, Name, Init) Init,
 #include "llvm/ProfileData/InstrProfData.inc"
   };
-  auto *Data = new GlobalVariable(*M, DataTy, false, NamePtr->getLinkage(),
+  auto *Data = new GlobalVariable(*M, DataTy, false, Linkage,
                                   ConstantStruct::get(DataTy, DataVals),
                                   getVarName(Inc, getInstrProfDataVarPrefix()));
-  Data->setVisibility(NamePtr->getVisibility());
+  Data->setVisibility(Visibility);
   Data->setSection(getInstrProfSectionName(IPSK_data, TT.getObjectFormat()));
   Data->setAlignment(INSTR_PROF_DATA_ALIGNMENT);
-  Data->setComdat(ProfileVarsComdat);
+  Data->setComdat(Cmdt);
 
   PD.RegionCounters = CounterPtr;
   PD.DataVar = Data;
@@ -878,6 +916,10 @@ void InstrProfiling::emitNameData() {
   NamesSize = CompressedNameStr.size();
   NamesVar->setSection(
       getInstrProfSectionName(IPSK_name, TT.getObjectFormat()));
+  // On COFF, it's important to reduce the alignment down to 1 to prevent the
+  // linker from inserting padding before the start of the names section or
+  // between names entries.
+  NamesVar->setAlignment(1);
   UsedVars.push_back(NamesVar);
 
   for (auto *NamePtr : ReferencedNames)
@@ -965,8 +1007,12 @@ void InstrProfiling::emitUses() {
 }
 
 void InstrProfiling::emitInitialization() {
-  // Create variable for profile name.
-  createProfileFileNameVar(*M, Options.InstrProfileOutput);
+  // Create ProfileFileName variable. Don't don't this for the
+  // context-sensitive instrumentation lowering: This lowering is after
+  // LTO/ThinLTO linking. Pass PGOInstrumentationGenCreateVar should
+  // have already create the variable before LTO/ThinLTO linking.
+  if (!IsCS)
+    createProfileFileNameVar(*M, Options.InstrProfileOutput);
   Function *RegisterF = M->getFunction(getInstrProfRegFuncsName());
   if (!RegisterF)
     return;

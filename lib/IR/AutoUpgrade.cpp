@@ -493,6 +493,12 @@ static bool UpgradeX86IntrinsicFunction(Function *F, StringRef Name,
 static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
   assert(F && "Illegal to upgrade a non-existent Function.");
 
+  // Upgrade intrinsics "clang.arc.use" which doesn't start with "llvm.".
+  if (F->getName() == "clang.arc.use") {
+    NewFn = nullptr;
+    return true;
+  }
+
   // Quickly eliminate it, if it's not a candidate.
   StringRef Name = F->getName();
   if (Name.size() <= 8 || !Name.startswith("llvm."))
@@ -561,6 +567,17 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
     if (Name == "aarch64.thread.pointer" || Name == "arm.thread.pointer") {
       NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::thread_pointer);
       return true;
+    }
+    if (Name.startswith("aarch64.neon.addp")) {
+      if (F->arg_size() != 2)
+        break; // Invalid IR.
+      auto fArgs = F->getFunctionType()->params();
+      VectorType *ArgTy = dyn_cast<VectorType>(fArgs[0]);
+      if (ArgTy && ArgTy->getElementType()->isFloatingPointTy()) {
+        NewFn = Intrinsic::getDeclaration(F->getParent(),
+                                          Intrinsic::aarch64_neon_faddp, fArgs);
+        return true;
+      }
     }
     break;
   }
@@ -743,7 +760,7 @@ static bool UpgradeIntrinsicFunction1(Function *F, Function *&NewFn) {
     // address space.
     if (Name.startswith("objectsize.")) {
       Type *Tys[2] = { F->getReturnType(), F->arg_begin()->getType() };
-      if (F->arg_size() == 2 ||
+      if (F->arg_size() == 2 || F->arg_size() == 3 ||
           F->getName() != Intrinsic::getName(Intrinsic::objectsize, Tys)) {
         rename(F);
         NewFn = Intrinsic::getDeclaration(F->getParent(), Intrinsic::objectsize,
@@ -1570,6 +1587,14 @@ void llvm::UpgradeIntrinsicCall(CallInst *CI, Function *NewFn) {
   if (!NewFn) {
     // Get the Function's name.
     StringRef Name = F->getName();
+
+    // clang.arc.use is an old name for llvm.arc.clang.arc.use. It is dropped
+    // from upgrader because the optimizer now only recognizes intrinsics for
+    // ARC runtime calls.
+    if (Name == "clang.arc.use") {
+      CI->eraseFromParent();
+      return;
+    }
 
     assert(Name.startswith("llvm.") && "Intrinsic doesn't start with 'llvm.'");
     Name = Name.substr(5);
@@ -3461,7 +3486,7 @@ void llvm::UpgradeIntrinsicCall(CallInst *CI, Function *NewFn) {
                                    ? Builder.getFalse()
                                    : CI->getArgOperand(2);
     Value *Dynamic =
-        CI->getNumArgOperands() < 3 ? Builder.getFalse() : CI->getArgOperand(3);
+        CI->getNumArgOperands() < 4 ? Builder.getFalse() : CI->getArgOperand(3);
     NewCall = Builder.CreateCall(
         NewFn, {CI->getArgOperand(0), CI->getArgOperand(1), NullIsUnknownSize, Dynamic});
     break;
