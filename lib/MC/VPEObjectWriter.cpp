@@ -7,7 +7,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains an implementation of a Win32 COFF object file writer.
+// This file contains an implementation of a VPE COFF object file writer.
 //
 //===----------------------------------------------------------------------===//
 
@@ -26,9 +26,9 @@
 #include "llvm/MC/MCFragment.h"
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
-#include "llvm/MC/MCSectionCOFF.h"
+#include "llvm/MC/MCSectionVPE.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/MCSymbolCOFF.h"
+#include "llvm/MC/MCSymbolVPE.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/MCVPEObjectWriter.h"
 #include "llvm/MC/StringTableBuilder.h"
@@ -70,9 +70,9 @@ struct AuxSymbol {
   COFF::Auxiliary Aux;
 };
 
-class COFFSection;
+class VPESection;
 
-class COFFSymbol {
+class VPESymbol {
 public:
   COFF::symbol Data = {};
 
@@ -81,12 +81,12 @@ public:
   name Name;
   int Index;
   AuxiliarySymbols Aux;
-  COFFSymbol *Other = nullptr;
-  COFFSection *Section = nullptr;
+  VPESymbol *Other = nullptr;
+  VPESection *Section = nullptr;
   int Relocations = 0;
   const MCSymbol *MC = nullptr;
 
-  COFFSymbol(StringRef Name) : Name(Name) {}
+  VPESymbol(StringRef Name) : Name(Name) {}
 
   void set_name_offset(uint32_t Offset);
 
@@ -99,39 +99,39 @@ public:
 };
 
 // This class contains staging data for a COFF relocation entry.
-struct COFFRelocation {
+struct VPERelocation {
   COFF::relocation Data;
-  COFFSymbol *Symb = nullptr;
+  VPESymbol *Symb = nullptr;
 
-  COFFRelocation() = default;
+  VPERelocation() = default;
 
   static size_t size() { return COFF::RelocationSize; }
 };
 
-using relocations = std::vector<COFFRelocation>;
+using relocations = std::vector<VPERelocation>;
 
-class COFFSection {
+class VPESection {
 public:
   COFF::section Header = {};
 
   std::string Name;
   int Number;
-  MCSectionCOFF const *MCSection = nullptr;
-  COFFSymbol *Symbol = nullptr;
+  MCSectionVPE const *MCSection = nullptr;
+  VPESymbol *Symbol = nullptr;
   relocations Relocations;
 
-  COFFSection(StringRef Name) : Name(Name) {}
+  VPESection(StringRef Name) : Name(Name) {}
 };
 
 class VPEObjectWriter : public MCObjectWriter {
 public:
   support::endian::Writer W;
 
-  using symbols = std::vector<std::unique_ptr<COFFSymbol>>;
-  using sections = std::vector<std::unique_ptr<COFFSection>>;
+  using symbols = std::vector<std::unique_ptr<VPESymbol>>;
+  using sections = std::vector<std::unique_ptr<VPESection>>;
 
-  using symbol_map = DenseMap<MCSymbol const *, COFFSymbol *>;
-  using section_map = DenseMap<MCSection const *, COFFSection *>;
+  using symbol_map = DenseMap<MCSymbol const *, VPESymbol *>;
+  using section_map = DenseMap<MCSection const *, VPESection *>;
 
   std::unique_ptr<MCVPEObjectTargetWriter> TargetObjectWriter;
 
@@ -161,32 +161,32 @@ public:
     MCObjectWriter::reset();
   }
 
-  COFFSymbol *createSymbol(StringRef Name);
-  COFFSymbol *GetOrCreateCOFFSymbol(const MCSymbol *Symbol);
-  COFFSection *createSection(StringRef Name);
+  VPESymbol *createSymbol(StringRef Name);
+  VPESymbol *GetOrCreateVPESymbol(const MCSymbol *Symbol);
+  VPESection *createSection(StringRef Name);
 
-  void defineSection(MCSectionCOFF const &Sec);
+  void defineSection(MCSectionVPE const &Sec);
 
-  COFFSymbol *getLinkedSymbol(const MCSymbol &Symbol);
+  VPESymbol *getLinkedSymbol(const MCSymbol &Symbol);
   void DefineSymbol(const MCSymbol &Symbol, MCAssembler &Assembler,
                     const MCAsmLayout &Layout);
 
-  void SetSymbolName(COFFSymbol &S);
-  void SetSectionName(COFFSection &S);
+  void SetSymbolName(VPESymbol &S);
+  void SetSectionName(VPESection &S);
 
-  bool IsPhysicalSection(COFFSection *S);
+  bool IsPhysicalSection(VPESection *S);
 
   // Entity writing methods.
 
   void WriteFileHeader(const COFF::header &Header);
-  void WriteSymbol(const COFFSymbol &S);
-  void WriteAuxiliarySymbols(const COFFSymbol::AuxiliarySymbols &S);
+  void WriteSymbol(const VPESymbol &S);
+  void WriteAuxiliarySymbols(const VPESymbol::AuxiliarySymbols &S);
   void writeSectionHeaders();
   void WriteRelocation(const COFF::relocation &R);
   uint32_t writeSectionContents(MCAssembler &Asm, const MCAsmLayout &Layout,
                                 const MCSection &MCSec);
   void writeSection(MCAssembler &Asm, const MCAsmLayout &Layout,
-                    const COFFSection &Sec, const MCSection &MCSec);
+                    const VPESection &Sec, const MCSection &MCSec);
 
   // MCObjectWriter interface implementation.
 
@@ -217,7 +217,7 @@ public:
 // In the case that the name does not fit within 8 bytes, the offset
 // into the string table is stored in the last 4 bytes instead, leaving
 // the first 4 bytes as 0.
-void COFFSymbol::set_name_offset(uint32_t Offset) {
+void VPESymbol::set_name_offset(uint32_t Offset) {
   write32le(Data.Name + 0, 0);
   write32le(Data.Name + 4, Offset);
 }
@@ -231,24 +231,24 @@ VPEObjectWriter::VPEObjectWriter(
   Header.Machine = TargetObjectWriter->getMachine();
 }
 
-COFFSymbol *VPEObjectWriter::createSymbol(StringRef Name) {
-  Symbols.push_back(make_unique<COFFSymbol>(Name));
+VPESymbol *VPEObjectWriter::createSymbol(StringRef Name) {
+  Symbols.push_back(make_unique<VPESymbol>(Name));
   return Symbols.back().get();
 }
 
-COFFSymbol *VPEObjectWriter::GetOrCreateCOFFSymbol(const MCSymbol *Symbol) {
-  COFFSymbol *&Ret = SymbolMap[Symbol];
+VPESymbol *VPEObjectWriter::GetOrCreateVPESymbol(const MCSymbol *Symbol) {
+  VPESymbol *&Ret = SymbolMap[Symbol];
   if (!Ret)
     Ret = createSymbol(Symbol->getName());
   return Ret;
 }
 
-COFFSection *VPEObjectWriter::createSection(StringRef Name) {
-  Sections.emplace_back(make_unique<COFFSection>(Name));
+VPESection *VPEObjectWriter::createSection(StringRef Name) {
+  Sections.emplace_back(make_unique<VPESection>(Name));
   return Sections.back().get();
 }
 
-static uint32_t getAlignment(const MCSectionCOFF &Sec) {
+static uint32_t getAlignment(const MCSectionVPE &Sec) {
   switch (Sec.getAlignment()) {
   case 1:
     return COFF::IMAGE_SCN_ALIGN_1BYTES;
@@ -284,9 +284,9 @@ static uint32_t getAlignment(const MCSectionCOFF &Sec) {
 
 /// This function takes a section data object from the assembler
 /// and creates the associated COFF section staging object.
-void VPEObjectWriter::defineSection(const MCSectionCOFF &MCSec) {
-  COFFSection *Section = createSection(MCSec.getSectionName());
-  COFFSymbol *Symbol = createSymbol(MCSec.getSectionName());
+void VPEObjectWriter::defineSection(const MCSectionVPE &MCSec) {
+  VPESection *Section = createSection(MCSec.getSectionName());
+  VPESymbol *Symbol = createSymbol(MCSec.getSectionName());
   Section->Symbol = Symbol;
   Symbol->Section = Section;
   Symbol->Data.StorageClass = COFF::IMAGE_SYM_CLASS_STATIC;
@@ -294,7 +294,7 @@ void VPEObjectWriter::defineSection(const MCSectionCOFF &MCSec) {
   // Create a COMDAT symbol if needed.
   if (MCSec.getSelection() != COFF::IMAGE_COMDAT_SELECT_ASSOCIATIVE) {
     if (const MCSymbol *S = MCSec.getCOMDATSymbol()) {
-      COFFSymbol *COMDATSymbol = GetOrCreateCOFFSymbol(S);
+      VPESymbol *COMDATSymbol = GetOrCreateVPESymbol(S);
       if (COMDATSymbol->Section)
         report_fatal_error("two sections have the same comdat");
       COMDATSymbol->Section = Section;
@@ -328,7 +328,7 @@ static uint64_t getSymbolValue(const MCSymbol &Symbol,
   return Res;
 }
 
-COFFSymbol *VPEObjectWriter::getLinkedSymbol(const MCSymbol &Symbol) {
+VPESymbol *VPEObjectWriter::getLinkedSymbol(const MCSymbol &Symbol) {
   if (!Symbol.isVariable())
     return nullptr;
 
@@ -340,28 +340,28 @@ COFFSymbol *VPEObjectWriter::getLinkedSymbol(const MCSymbol &Symbol) {
   const MCSymbol &Aliasee = SymRef->getSymbol();
   if (!Aliasee.isUndefined())
     return nullptr;
-  return GetOrCreateCOFFSymbol(&Aliasee);
+  return GetOrCreateVPESymbol(&Aliasee);
 }
 
 /// This function takes a symbol data object from the assembler
 /// and creates the associated COFF symbol staging object.
 void VPEObjectWriter::DefineSymbol(const MCSymbol &MCSym,
-                                       MCAssembler &Assembler,
-                                       const MCAsmLayout &Layout) {
-  COFFSymbol *Sym = GetOrCreateCOFFSymbol(&MCSym);
+                                   MCAssembler &Assembler,
+                                   const MCAsmLayout &Layout) {
+  VPESymbol *Sym = GetOrCreateVPESymbol(&MCSym);
   const MCSymbol *Base = Layout.getBaseSymbol(MCSym);
-  COFFSection *Sec = nullptr;
+  VPESection *Sec = nullptr;
   if (Base && Base->getFragment()) {
     Sec = SectionMap[Base->getFragment()->getParent()];
     if (Sym->Section && Sym->Section != Sec)
       report_fatal_error("conflicting sections for symbol");
   }
 
-  COFFSymbol *Local = nullptr;
-  if (cast<MCSymbolCOFF>(MCSym).isWeakExternal()) {
+  VPESymbol *Local = nullptr;
+  if (cast<MCSymbolVPE>(MCSym).isWeakExternal()) {
     Sym->Data.StorageClass = COFF::IMAGE_SYM_CLASS_WEAK_EXTERNAL;
 
-    COFFSymbol *WeakDefault = getLinkedSymbol(MCSym);
+    VPESymbol *WeakDefault = getLinkedSymbol(MCSym);
     if (!WeakDefault) {
       std::string WeakName = (".weak." + MCSym.getName() + ".default").str();
       WeakDefault = createSymbol(WeakName);
@@ -392,7 +392,7 @@ void VPEObjectWriter::DefineSymbol(const MCSymbol &MCSym,
   if (Local) {
     Local->Data.Value = getSymbolValue(MCSym, Layout);
 
-    const MCSymbolCOFF &SymbolCOFF = cast<MCSymbolCOFF>(MCSym);
+    const MCSymbolVPE &SymbolCOFF = cast<MCSymbolVPE>(MCSym);
     Local->Data.Type = SymbolCOFF.getType();
     Local->Data.StorageClass = SymbolCOFF.getClass();
 
@@ -435,7 +435,7 @@ static void encodeBase64StringEntry(char *Buffer, uint64_t Value) {
   }
 }
 
-void VPEObjectWriter::SetSectionName(COFFSection &S) {
+void VPEObjectWriter::SetSectionName(VPESection &S) {
   if (S.Name.size() <= COFF::NameSize) {
     std::memcpy(S.Header.Name, S.Name.c_str(), S.Name.size());
     return;
@@ -457,14 +457,14 @@ void VPEObjectWriter::SetSectionName(COFFSection &S) {
   report_fatal_error("COFF string table is greater than 64 GB.");
 }
 
-void VPEObjectWriter::SetSymbolName(COFFSymbol &S) {
+void VPEObjectWriter::SetSymbolName(VPESymbol &S) {
   if (S.Name.size() > COFF::NameSize)
     S.set_name_offset(Strings.getOffset(S.Name));
   else
     std::memcpy(S.Data.Name, S.Name.c_str(), S.Name.size());
 }
 
-bool VPEObjectWriter::IsPhysicalSection(COFFSection *S) {
+bool VPEObjectWriter::IsPhysicalSection(VPESection *S) {
   return (S->Header.Characteristics & COFF::IMAGE_SCN_CNT_UNINITIALIZED_DATA) ==
          0;
 }
@@ -498,7 +498,7 @@ void VPEObjectWriter::WriteFileHeader(const COFF::header &Header) {
   }
 }
 
-void VPEObjectWriter::WriteSymbol(const COFFSymbol &S) {
+void VPEObjectWriter::WriteSymbol(const VPESymbol &S) {
   W.OS.write(S.Data.Name, COFF::NameSize);
   W.write<uint32_t>(S.Data.Value);
   if (UseBigObj)
@@ -512,7 +512,7 @@ void VPEObjectWriter::WriteSymbol(const COFFSymbol &S) {
 }
 
 void VPEObjectWriter::WriteAuxiliarySymbols(
-    const COFFSymbol::AuxiliarySymbols &S) {
+    const VPESymbol::AuxiliarySymbols &S) {
   for (const AuxSymbol &i : S) {
     switch (i.AuxType) {
     case ATFunctionDefinition:
@@ -565,11 +565,11 @@ void VPEObjectWriter::writeSectionHeaders() {
   // Section numbers must be monotonically increasing in the section
   // header, but our Sections array is not sorted by section number,
   // so make a copy of Sections and sort it.
-  std::vector<COFFSection *> Arr;
+  std::vector<VPESection *> Arr;
   for (auto &Section : Sections)
     Arr.push_back(Section.get());
   llvm::sort(Arr.begin(), Arr.end(),
-             [](const COFFSection *A, const COFFSection *B) {
+             [](const VPESection *A, const VPESection *B) {
                return A->Number < B->Number;
              });
 
@@ -603,8 +603,8 @@ void VPEObjectWriter::WriteRelocation(const COFF::relocation &R) {
 // "Asm.writeSectionData(&MCSec, Layout)", but it's a bit complicated
 // because it needs to compute a CRC.
 uint32_t VPEObjectWriter::writeSectionContents(MCAssembler &Asm,
-                                                   const MCAsmLayout &Layout,
-                                                   const MCSection &MCSec) {
+                                               const MCAsmLayout &Layout,
+                                               const MCSection &MCSec) {
   // Save the contents of the section to a temporary buffer, we need this
   // to CRC the data before we dump it into the object file.
   SmallVector<char, 128> Buf;
@@ -622,9 +622,9 @@ uint32_t VPEObjectWriter::writeSectionContents(MCAssembler &Asm,
 }
 
 void VPEObjectWriter::writeSection(MCAssembler &Asm,
-                                       const MCAsmLayout &Layout,
-                                       const COFFSection &Sec,
-                                       const MCSection &MCSec) {
+                                   const MCAsmLayout &Layout,
+                                   const VPESection &Sec,
+                                   const MCSection &MCSec) {
   if (Sec.Number == -1)
     return;
 
@@ -641,8 +641,8 @@ void VPEObjectWriter::writeSection(MCAssembler &Asm,
     uint32_t CRC = writeSectionContents(Asm, Layout, MCSec);
 
     // Update the section definition auxiliary symbol to record the CRC.
-    COFFSection *Sec = SectionMap[&MCSec];
-    COFFSymbol::AuxiliarySymbols &AuxSyms = Sec->Symbol->Aux;
+    VPESection *Sec = SectionMap[&MCSec];
+    VPESymbol::AuxiliarySymbols &AuxSyms = Sec->Symbol->Aux;
     assert(AuxSyms.size() == 1 && AuxSyms[0].AuxType == ATSectionDefinition);
     AuxSymbol &SecDef = AuxSyms[0];
     SecDef.Aux.SectionDefinition.CheckSum = CRC;
@@ -680,7 +680,7 @@ void VPEObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
   // "Define" each section & symbol. This creates section & symbol
   // entries in the staging area.
   for (const auto &Section : Asm)
-    defineSection(static_cast<const MCSectionCOFF &>(Section));
+    defineSection(static_cast<const MCSectionVPE &>(Section));
 
   for (const MCSymbol &Symbol : Asm.symbols())
     if (!Symbol.isTemporary())
@@ -696,7 +696,7 @@ bool VPEObjectWriter::isSymbolRefDifferenceFullyResolvedImpl(
   // point to thunks, and the /GUARD:CF flag assumes that it can use relocations
   // to approximate the set of all address taken functions. LLD's implementation
   // of /GUARD:CF also relies on the existance of these relocations.
-  uint16_t Type = cast<MCSymbolCOFF>(SymA).getType();
+  uint16_t Type = cast<MCSymbolVPE>(SymA).getType();
   if ((Type >> COFF::SCT_COMPLEX_TYPE_SHIFT) == COFF::IMAGE_SYM_DTYPE_FUNCTION)
     return false;
   return MCObjectWriter::isSymbolRefDifferenceFullyResolvedImpl(Asm, SymA, FB,
@@ -730,7 +730,7 @@ void VPEObjectWriter::recordRelocation(MCAssembler &Asm,
   assert(SectionMap.find(MCSec) != SectionMap.end() &&
          "Section must already have been defined in executePostLayoutBinding!");
 
-  COFFSection *Sec = SectionMap[MCSec];
+  VPESection *Sec = SectionMap[MCSec];
   const MCSymbolRefExpr *SymB = Target.getSymB();
 
   if (SymB) {
@@ -755,7 +755,7 @@ void VPEObjectWriter::recordRelocation(MCAssembler &Asm,
     FixedValue = Target.getConstant();
   }
 
-  COFFRelocation Reloc;
+  VPERelocation Reloc;
 
   Reloc.Data.SymbolTableIndex = 0;
   Reloc.Data.VirtualAddress = Layout.getFragmentOffset(Fragment);
@@ -849,7 +849,7 @@ void VPEObjectWriter::createFileSymbols(MCAssembler &Asm) {
     unsigned SymbolSize = UseBigObj ? COFF::Symbol32Size : COFF::Symbol16Size;
     unsigned Count = (Name.size() + SymbolSize - 1) / SymbolSize;
 
-    COFFSymbol *File = createSymbol(".file");
+    VPESymbol *File = createSymbol(".file");
     File->Data.SectionNumber = COFF::IMAGE_SYM_DEBUG;
     File->Data.StorageClass = COFF::IMAGE_SYM_CLASS_FILE;
     File->Aux.resize(Count);
@@ -873,14 +873,14 @@ void VPEObjectWriter::createFileSymbols(MCAssembler &Asm) {
   }
 }
 
-static bool isAssociative(const COFFSection &Section) {
+static bool isAssociative(const VPESection &Section) {
   return Section.Symbol->Aux[0].Aux.SectionDefinition.Selection ==
          COFF::IMAGE_COMDAT_SELECT_ASSOCIATIVE;
 }
 
 void VPEObjectWriter::assignSectionNumbers() {
   size_t I = 1;
-  auto Assign = [&](COFFSection &Section) {
+  auto Assign = [&](VPESection &Section) {
     Section.Number = I;
     Section.Symbol->Data.SectionNumber = I;
     Section.Symbol->Aux[0].Aux.SectionDefinition.Number = I;
@@ -890,10 +890,10 @@ void VPEObjectWriter::assignSectionNumbers() {
   // Although it is not explicitly requested by the Microsoft COFF spec,
   // we should avoid emitting forward associative section references,
   // because MSVC link.exe as of 2017 cannot handle that.
-  for (const std::unique_ptr<COFFSection> &Section : Sections)
+  for (const std::unique_ptr<VPESection> &Section : Sections)
     if (!isAssociative(*Section))
       Assign(*Section);
-  for (const std::unique_ptr<COFFSection> &Section : Sections)
+  for (const std::unique_ptr<VPESection> &Section : Sections)
     if (isAssociative(*Section))
       Assign(*Section);
 }
@@ -907,7 +907,7 @@ void VPEObjectWriter::assignFileOffsets(MCAssembler &Asm,
   Offset += COFF::SectionSize * Header.NumberOfSections;
 
   for (const auto &Section : Asm) {
-    COFFSection *Sec = SectionMap[&Section];
+    VPESection *Sec = SectionMap[&Section];
 
     if (Sec->Number == -1)
       continue;
@@ -1019,13 +1019,13 @@ uint64_t VPEObjectWriter::writeObject(MCAssembler &Asm,
         COFF::IMAGE_COMDAT_SELECT_ASSOCIATIVE)
       continue;
 
-    const MCSectionCOFF &MCSec = *Section->MCSection;
+    const MCSectionVPE &MCSec = *Section->MCSection;
 
     const MCSymbol *COMDAT = MCSec.getCOMDATSymbol();
     assert(COMDAT);
-    COFFSymbol *COMDATSymbol = GetOrCreateCOFFSymbol(COMDAT);
+    VPESymbol *COMDATSymbol = GetOrCreateVPESymbol(COMDAT);
     assert(COMDATSymbol);
-    COFFSection *Assoc = COMDATSymbol->Section;
+    VPESection *Assoc = COMDATSymbol->Section;
     if (!Assoc)
       report_fatal_error(
           Twine("Missing associated COMDAT section for section ") +

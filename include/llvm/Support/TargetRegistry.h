@@ -172,6 +172,10 @@ public:
                       std::unique_ptr<MCObjectWriter> &&OW,
                       std::unique_ptr<MCCodeEmitter> &&Emitter, bool RelaxAll,
                       bool IncrementalLinkerCompatible);
+  using VPEStreamerCtorTy =
+      MCStreamer *(*)(MCContext &Ctx, std::unique_ptr<MCAsmBackend> &&TAB,
+                      std::unique_ptr<MCObjectWriter> &&OW,
+                      std::unique_ptr<MCCodeEmitter> &&Emitter, bool RelaxAll);
   using WasmStreamerCtorTy =
       MCStreamer *(*)(const Triple &T, MCContext &Ctx,
                       std::unique_ptr<MCAsmBackend> &&TAB,
@@ -260,6 +264,7 @@ private:
   MCCodeEmitterCtorTy MCCodeEmitterCtorFn;
 
   // Construction functions for the various object formats, if registered.
+  VPEStreamerCtorTy VPEStreamerCtorFn = nullptr;
   COFFStreamerCtorTy COFFStreamerCtorFn = nullptr;
   MachOStreamerCtorTy MachOStreamerCtorFn = nullptr;
   ELFStreamerCtorTy ELFStreamerCtorFn = nullptr;
@@ -477,6 +482,10 @@ public:
       S = COFFStreamerCtorFn(Ctx, std::move(TAB), std::move(OW),
                              std::move(Emitter), RelaxAll,
                              IncrementalLinkerCompatible);
+      break;
+    case Triple::VPE:
+      S = VPEStreamerCtorFn(Ctx, std::move(TAB), std::move(OW),
+                             std::move(Emitter), RelaxAll);
       break;
     case Triple::MachO:
       if (MachOStreamerCtorFn)
@@ -837,6 +846,10 @@ struct TargetRegistry {
 
   static void RegisterCOFFStreamer(Target &T, Target::COFFStreamerCtorTy Fn) {
     T.COFFStreamerCtorFn = Fn;
+  }
+  
+  static void RegisterVPEStreamer(Target &T, Target::VPEStreamerCtorTy Fn) {
+    T.VPEStreamerCtorFn = Fn;
   }
 
   static void RegisterMachOStreamer(Target &T, Target::MachOStreamerCtorTy Fn) {
