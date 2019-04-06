@@ -504,9 +504,9 @@ std::error_code VPEObjectFile::getHintName(uint32_t Rva, uint16_t &Hint,
 }
 
 std::error_code
-VPEObjectFile::getDebugPDBInfo(const debug_directory *DebugDir,
-                                const codeview::DebugInfo *&PDBInfo,
-                                StringRef &PDBFileName) const {
+VPEObjectFile::getDebugPDBInfo(const vpe_debug_directory *DebugDir,
+                               const codeview::DebugInfo *&PDBInfo,
+                               StringRef &PDBFileName) const {
   ArrayRef<uint8_t> InfoBytes;
   if (std::error_code EC = getRvaAndSizeAsBytes(
           DebugDir->AddressOfRawData, DebugDir->SizeOfData, InfoBytes))
@@ -525,7 +525,7 @@ VPEObjectFile::getDebugPDBInfo(const debug_directory *DebugDir,
 std::error_code
 VPEObjectFile::getDebugPDBInfo(const codeview::DebugInfo *&PDBInfo,
                                 StringRef &PDBFileName) const {
-  for (const debug_directory &D : debug_directories())
+  for (const vpe_debug_directory &D : debug_directories())
     if (D.Type == COFF::IMAGE_DEBUG_TYPE_CODEVIEW)
       return getDebugPDBInfo(&D, PDBInfo, PDBFileName);
   // If we get here, there is no PDB info to return.
@@ -538,7 +538,7 @@ VPEObjectFile::getDebugPDBInfo(const codeview::DebugInfo *&PDBInfo,
 std::error_code VPEObjectFile::initImportTablePtr() {
   // First, we get the RVA of the import table. If the file lacks a pointer to
   // the import table, do nothing.
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::IMPORT_TABLE, DataEntry))
     return std::error_code();
 
@@ -562,7 +562,7 @@ std::error_code VPEObjectFile::initImportTablePtr() {
 
 // Initializes DelayImportDirectory and NumberOfDelayImportDirectory.
 std::error_code VPEObjectFile::initDelayImportTablePtr() {
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::DELAY_IMPORT_DESCRIPTOR, DataEntry))
     return std::error_code();
   if (DataEntry->RelativeVirtualAddress == 0)
@@ -570,13 +570,13 @@ std::error_code VPEObjectFile::initDelayImportTablePtr() {
 
   uint32_t RVA = DataEntry->RelativeVirtualAddress;
   NumberOfDelayImportDirectory = DataEntry->Size /
-      sizeof(delay_import_directory_table_entry) - 1;
+      sizeof(vpe_delay_import_directory_table_entry) - 1;
 
   uintptr_t IntPtr = 0;
   if (std::error_code EC = getRvaPtr(RVA, IntPtr))
     return EC;
   DelayImportDirectory = reinterpret_cast<
-      const delay_import_directory_table_entry *>(IntPtr);
+      const vpe_delay_import_directory_table_entry *>(IntPtr);
   return std::error_code();
 }
 
@@ -584,7 +584,7 @@ std::error_code VPEObjectFile::initDelayImportTablePtr() {
 std::error_code VPEObjectFile::initExportTablePtr() {
   // First, we get the RVA of the export table. If the file lacks a pointer to
   // the export table, do nothing.
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::EXPORT_TABLE, DataEntry))
     return std::error_code();
 
@@ -597,12 +597,12 @@ std::error_code VPEObjectFile::initExportTablePtr() {
   if (std::error_code EC = getRvaPtr(ExportTableRva, IntPtr))
     return EC;
   ExportDirectory =
-      reinterpret_cast<const export_directory_table_entry *>(IntPtr);
+      reinterpret_cast<const vpe_export_directory_table_entry *>(IntPtr);
   return std::error_code();
 }
 
 std::error_code VPEObjectFile::initBaseRelocPtr() {
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::BASE_RELOCATION_TABLE, DataEntry))
     return std::error_code();
   if (DataEntry->RelativeVirtualAddress == 0)
@@ -622,7 +622,7 @@ std::error_code VPEObjectFile::initBaseRelocPtr() {
 
 std::error_code VPEObjectFile::initDebugDirectoryPtr() {
   // Get the RVA of the debug directory. Do nothing if it does not exist.
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::DEBUG_DIRECTORY, DataEntry))
     return std::error_code();
 
@@ -631,14 +631,14 @@ std::error_code VPEObjectFile::initDebugDirectoryPtr() {
     return std::error_code();
 
   // Check that the size is a multiple of the entry size.
-  if (DataEntry->Size % sizeof(debug_directory) != 0)
+  if (DataEntry->Size % sizeof(vpe_debug_directory) != 0)
     return object_error::parse_failed;
 
   uintptr_t IntPtr = 0;
   if (std::error_code EC = getRvaPtr(DataEntry->RelativeVirtualAddress, IntPtr))
     return EC;
-  DebugDirectoryBegin = reinterpret_cast<const debug_directory *>(IntPtr);
-  DebugDirectoryEnd = reinterpret_cast<const debug_directory *>(
+  DebugDirectoryBegin = reinterpret_cast<const vpe_debug_directory *>(IntPtr);
+  DebugDirectoryEnd = reinterpret_cast<const vpe_debug_directory *>(
       IntPtr + DataEntry->Size);
   // FIXME: Verify the section containing DebugDirectoryBegin has at least
   // DataEntry->Size bytes after DataEntry->RelativeVirtualAddress.
@@ -647,7 +647,7 @@ std::error_code VPEObjectFile::initDebugDirectoryPtr() {
 
 std::error_code VPEObjectFile::initLoadConfigPtr() {
   // Get the RVA of the debug directory. Do nothing if it does not exist.
-  const data_directory *DataEntry;
+  const vpe_data_directory *DataEntry;
   if (getDataDirectory(COFF::LOAD_CONFIG_TABLE, DataEntry))
     return std::error_code();
 
@@ -683,10 +683,10 @@ VPEObjectFile::VPEObjectFile(MemoryBufferRef Object, std::error_code &EC)
   bool HasPEHeader = false;
 
   // Check if this is a PE/COFF file.
-  if (checkSize(Data, EC, sizeof(dos_header) + sizeof(COFF::PEMagic))) {
+  if (checkSize(Data, EC, sizeof(vpe_dos_header) + sizeof(COFF::PEMagic))) {
     // PE/COFF, seek through MS-DOS compatibility stub and 4-byte
     // PE signature to find 'normal' COFF header.
-    const auto *DH = reinterpret_cast<const dos_header *>(base());
+    const auto *DH = reinterpret_cast<const vpe_dos_header *>(base());
     if (DH->Magic[0] == 'M' && DH->Magic[1] == 'Z') {
       CurPtr = DH->AddressOfNewExeHeader;
       // Check the PE magic bytes. ("PE\0\0")
@@ -732,7 +732,7 @@ VPEObjectFile::VPEObjectFile(MemoryBufferRef Object, std::error_code &EC)
   }
 
   if (HasPEHeader) {
-    const pe32_header *Header;
+    const vpe_pe32_header *Header;
     if ((EC = getObject(Header, Data, base() + CurPtr)))
       return;
 
@@ -740,12 +740,12 @@ VPEObjectFile::VPEObjectFile(MemoryBufferRef Object, std::error_code &EC)
     uint64_t DataDirSize;
     if (Header->Magic == COFF::PE32Header::PE32) {
       PE32Header = Header;
-      DataDirAddr = base() + CurPtr + sizeof(pe32_header);
-      DataDirSize = sizeof(data_directory) * PE32Header->NumberOfRvaAndSize;
+      DataDirAddr = base() + CurPtr + sizeof(vpe_pe32_header);
+      DataDirSize = sizeof(vpe_data_directory) * PE32Header->NumberOfRvaAndSize;
     } else if (Header->Magic == COFF::PE32Header::PE32_PLUS) {
-      PE32PlusHeader = reinterpret_cast<const pe32plus_header *>(Header);
-      DataDirAddr = base() + CurPtr + sizeof(pe32plus_header);
-      DataDirSize = sizeof(data_directory) * PE32PlusHeader->NumberOfRvaAndSize;
+      PE32PlusHeader = reinterpret_cast<const vpe_pe32plus_header *>(Header);
+      DataDirAddr = base() + CurPtr + sizeof(vpe_pe32plus_header);
+      DataDirSize = sizeof(vpe_data_directory) * PE32PlusHeader->NumberOfRvaAndSize;
     } else {
       // It's neither PE32 nor PE32+.
       EC = object_error::parse_failed;
@@ -815,44 +815,45 @@ basic_symbol_iterator VPEObjectFile::symbol_end() const {
   return basic_symbol_iterator(SymbolRef(Ret, this));
 }
 
-import_directory_iterator VPEObjectFile::import_directory_begin() const {
+vpe_import_directory_iterator VPEObjectFile::import_directory_begin() const {
   if (!ImportDirectory)
     return import_directory_end();
   if (ImportDirectory->isNull())
     return import_directory_end();
-  return import_directory_iterator(
-      ImportDirectoryEntryRef(ImportDirectory, 0, this));
+  return vpe_import_directory_iterator(
+      VPEImportDirectoryEntryRef(ImportDirectory, 0, this));
 }
 
-import_directory_iterator VPEObjectFile::import_directory_end() const {
-  return import_directory_iterator(
-      ImportDirectoryEntryRef(nullptr, -1, this));
+vpe_import_directory_iterator VPEObjectFile::import_directory_end() const {
+  return vpe_import_directory_iterator(
+      VPEImportDirectoryEntryRef(nullptr, -1, this));
 }
 
-delay_import_directory_iterator
+vpe_delay_import_directory_iterator
 VPEObjectFile::delay_import_directory_begin() const {
-  return delay_import_directory_iterator(
-      DelayImportDirectoryEntryRef(DelayImportDirectory, 0, this));
+  return vpe_delay_import_directory_iterator(
+      VPEDelayImportDirectoryEntryRef(DelayImportDirectory, 0, this));
 }
 
-delay_import_directory_iterator
+vpe_delay_import_directory_iterator
 VPEObjectFile::delay_import_directory_end() const {
-  return delay_import_directory_iterator(
-      DelayImportDirectoryEntryRef(
+  return vpe_delay_import_directory_iterator(
+      VPEDelayImportDirectoryEntryRef(
           DelayImportDirectory, NumberOfDelayImportDirectory, this));
 }
 
-export_directory_iterator VPEObjectFile::export_directory_begin() const {
-  return export_directory_iterator(
-      ExportDirectoryEntryRef(ExportDirectory, 0, this));
+vpe_export_directory_iterator VPEObjectFile::export_directory_begin() const {
+  return vpe_export_directory_iterator(
+      VPEExportDirectoryEntryRef(ExportDirectory, 0, this));
 }
 
-export_directory_iterator VPEObjectFile::export_directory_end() const {
+vpe_export_directory_iterator VPEObjectFile::export_directory_end() const {
   if (!ExportDirectory)
-    return export_directory_iterator(ExportDirectoryEntryRef(nullptr, 0, this));
-  ExportDirectoryEntryRef Ref(ExportDirectory,
+    return vpe_export_directory_iterator(
+        VPEExportDirectoryEntryRef(nullptr, 0, this));
+  VPEExportDirectoryEntryRef Ref(ExportDirectory,
                               ExportDirectory->AddressTableEntries, this);
-  return export_directory_iterator(Ref);
+  return vpe_export_directory_iterator(Ref);
 }
 
 section_iterator VPEObjectFile::section_begin() const {
@@ -869,12 +870,12 @@ section_iterator VPEObjectFile::section_end() const {
   return section_iterator(SectionRef(Ret, this));
 }
 
-base_reloc_iterator VPEObjectFile::base_reloc_begin() const {
-  return base_reloc_iterator(BaseRelocRef(BaseRelocHeader, this));
+vpe_base_reloc_iterator VPEObjectFile::base_reloc_begin() const {
+  return vpe_base_reloc_iterator(VPEBaseRelocRef(BaseRelocHeader, this));
 }
 
-base_reloc_iterator VPEObjectFile::base_reloc_end() const {
-  return base_reloc_iterator(BaseRelocRef(BaseRelocEnd, this));
+vpe_base_reloc_iterator VPEObjectFile::base_reloc_end() const {
+  return vpe_base_reloc_iterator(VPEBaseRelocRef(BaseRelocEnd, this));
 }
 
 uint8_t VPEObjectFile::getBytesInAddress() const {
@@ -884,15 +885,15 @@ uint8_t VPEObjectFile::getBytesInAddress() const {
 StringRef VPEObjectFile::getFileFormatName() const {
   switch(getMachine()) {
   case COFF::IMAGE_FILE_MACHINE_I386:
-    return "COFF-i386";
+    return "VPE-i386";
   case COFF::IMAGE_FILE_MACHINE_AMD64:
-    return "COFF-x86-64";
+    return "VPE-x86-64";
   case COFF::IMAGE_FILE_MACHINE_ARMNT:
-    return "COFF-ARM";
+    return "VPE-ARM";
   case COFF::IMAGE_FILE_MACHINE_ARM64:
-    return "COFF-ARM64";
+    return "VPE-ARM64";
   default:
-    return "COFF-<unknown arch>";
+    return "VPE-<unknown arch>";
   }
 }
 
@@ -917,23 +918,23 @@ Expected<uint64_t> VPEObjectFile::getStartAddress() const {
   return 0;
 }
 
-iterator_range<import_directory_iterator>
+iterator_range<vpe_import_directory_iterator>
 VPEObjectFile::import_directories() const {
   return make_range(import_directory_begin(), import_directory_end());
 }
 
-iterator_range<delay_import_directory_iterator>
+iterator_range<vpe_delay_import_directory_iterator>
 VPEObjectFile::delay_import_directories() const {
   return make_range(delay_import_directory_begin(),
                     delay_import_directory_end());
 }
 
-iterator_range<export_directory_iterator>
+iterator_range<vpe_export_directory_iterator>
 VPEObjectFile::export_directories() const {
   return make_range(export_directory_begin(), export_directory_end());
 }
 
-iterator_range<base_reloc_iterator> VPEObjectFile::base_relocs() const {
+iterator_range<vpe_base_reloc_iterator> VPEObjectFile::base_relocs() const {
   return make_range(base_reloc_begin(), base_reloc_end());
 }
 
@@ -949,20 +950,21 @@ VPEObjectFile::getVPEBigObjHeader(const vpe_bigobj_file_header *&Res) const {
   return std::error_code();
 }
 
-std::error_code VPEObjectFile::getPE32Header(const pe32_header *&Res) const {
+std::error_code
+VPEObjectFile::getPE32Header(const vpe_pe32_header *&Res) const {
   Res = PE32Header;
   return std::error_code();
 }
 
 std::error_code
-VPEObjectFile::getPE32PlusHeader(const pe32plus_header *&Res) const {
+VPEObjectFile::getPE32PlusHeader(const vpe_pe32plus_header *&Res) const {
   Res = PE32PlusHeader;
   return std::error_code();
 }
 
 std::error_code
 VPEObjectFile::getDataDirectory(uint32_t Index,
-                                 const data_directory *&Res) const {
+                                const vpe_data_directory *&Res) const {
   // Error if there's no data directory or the index is out of range.
   if (!DataDirectory) {
     Res = nullptr;
@@ -980,7 +982,7 @@ VPEObjectFile::getDataDirectory(uint32_t Index,
 }
 
 std::error_code VPEObjectFile::getSection(int32_t Index,
-                                           const vpe_section *&Result) const {
+                                          const vpe_section *&Result) const {
   Result = nullptr;
   if (COFF::isReservedSectionNumber(Index))
     return std::error_code();
@@ -993,7 +995,7 @@ std::error_code VPEObjectFile::getSection(int32_t Index,
 }
 
 std::error_code VPEObjectFile::getSection(StringRef SectionName,
-                                           const vpe_section *&Result) const {
+                                          const vpe_section *&Result) const {
   Result = nullptr;
   StringRef SecName;
   for (const SectionRef &Section : sections()) {
@@ -1075,7 +1077,7 @@ uint32_t VPEObjectFile::getSymbolIndex(VPESymbolRef Symbol) const {
 }
 
 std::error_code VPEObjectFile::getSectionName(const vpe_section *Sec,
-                                               StringRef &Res) const {
+                                              StringRef &Res) const {
   StringRef Name;
   if (Sec->Name[COFF::NameSize - 1] == 0)
     // Null terminated, let ::strlen figure out the length.
@@ -1120,7 +1122,7 @@ uint64_t VPEObjectFile::getSectionSize(const vpe_section *Sec) const {
 
 std::error_code
 VPEObjectFile::getSectionContents(const vpe_section *Sec,
-                                   ArrayRef<uint8_t> &Res) const {
+                                  ArrayRef<uint8_t> &Res) const {
   // In COFF, a virtual section won't have any in-file
   // content, so the file pointer to the content will be zero.
   if (Sec->PointerToRawData == 0)
@@ -1187,7 +1189,7 @@ VPESymbolRef VPEObjectFile::getVPESymbol(const SymbolRef &Symbol) const {
 }
 
 const vpe_relocation *
-VPEObjectFile::getCOFFRelocation(const RelocationRef &Reloc) const {
+VPEObjectFile::getVPERelocation(const RelocationRef &Reloc) const {
   return toRel(Reloc.getRawDataRefImpl());
 }
 
@@ -1314,12 +1316,12 @@ StringRef VPEObjectFile::mapDebugSectionName(StringRef Name) const {
       .Default(Name);
 }
 
-bool ImportDirectoryEntryRef::
-operator==(const ImportDirectoryEntryRef &Other) const {
+bool VPEImportDirectoryEntryRef::
+operator==(const VPEImportDirectoryEntryRef &Other) const {
   return ImportTable == Other.ImportTable && Index == Other.Index;
 }
 
-void ImportDirectoryEntryRef::moveNext() {
+void VPEImportDirectoryEntryRef::moveNext() {
   ++Index;
   if (ImportTable[Index].isNull()) {
     Index = -1;
@@ -1327,30 +1329,30 @@ void ImportDirectoryEntryRef::moveNext() {
   }
 }
 
-std::error_code ImportDirectoryEntryRef::getImportTableEntry(
+std::error_code VPEImportDirectoryEntryRef::getImportTableEntry(
     const vpe_import_directory_table_entry *&Result) const {
   return getObject(Result, OwningObject->Data, ImportTable + Index);
 }
 
-static imported_symbol_iterator
+static vpe_imported_symbol_iterator
 makeImportedSymbolIterator(const VPEObjectFile *Object,
                            uintptr_t Ptr, int Index) {
   if (Object->getBytesInAddress() == 4) {
-    auto *P = reinterpret_cast<const import_lookup_table_entry32 *>(Ptr);
-    return imported_symbol_iterator(ImportedSymbolRef(P, Index, Object));
+    auto *P = reinterpret_cast<const vpe_import_lookup_table_entry32 *>(Ptr);
+    return vpe_imported_symbol_iterator(VPEImportedSymbolRef(P, Index, Object));
   }
-  auto *P = reinterpret_cast<const import_lookup_table_entry64 *>(Ptr);
-  return imported_symbol_iterator(ImportedSymbolRef(P, Index, Object));
+  auto *P = reinterpret_cast<const vpe_import_lookup_table_entry64 *>(Ptr);
+  return vpe_imported_symbol_iterator(VPEImportedSymbolRef(P, Index, Object));
 }
 
-static imported_symbol_iterator
+static vpe_imported_symbol_iterator
 importedSymbolBegin(uint32_t RVA, const VPEObjectFile *Object) {
   uintptr_t IntPtr = 0;
   Object->getRvaPtr(RVA, IntPtr);
   return makeImportedSymbolIterator(Object, IntPtr, 0);
 }
 
-static imported_symbol_iterator
+static vpe_imported_symbol_iterator
 importedSymbolEnd(uint32_t RVA, const VPEObjectFile *Object) {
   uintptr_t IntPtr = 0;
   Object->getRvaPtr(RVA, IntPtr);
@@ -1368,39 +1370,41 @@ importedSymbolEnd(uint32_t RVA, const VPEObjectFile *Object) {
   return makeImportedSymbolIterator(Object, IntPtr, Index);
 }
 
-imported_symbol_iterator
-ImportDirectoryEntryRef::imported_symbol_begin() const {
+vpe_imported_symbol_iterator
+VPEImportDirectoryEntryRef::imported_symbol_begin() const {
   return importedSymbolBegin(ImportTable[Index].ImportAddressTableRVA,
                              OwningObject);
 }
 
-imported_symbol_iterator
-ImportDirectoryEntryRef::imported_symbol_end() const {
+vpe_imported_symbol_iterator
+VPEImportDirectoryEntryRef::imported_symbol_end() const {
   return importedSymbolEnd(ImportTable[Index].ImportAddressTableRVA,
                            OwningObject);
 }
 
-iterator_range<imported_symbol_iterator>
-ImportDirectoryEntryRef::imported_symbols() const {
+iterator_range<vpe_imported_symbol_iterator>
+VPEImportDirectoryEntryRef::imported_symbols() const {
   return make_range(imported_symbol_begin(), imported_symbol_end());
 }
 
-imported_symbol_iterator ImportDirectoryEntryRef::lookup_table_begin() const {
+vpe_imported_symbol_iterator
+VPEImportDirectoryEntryRef::lookup_table_begin() const {
   return importedSymbolBegin(ImportTable[Index].ImportLookupTableRVA,
                              OwningObject);
 }
 
-imported_symbol_iterator ImportDirectoryEntryRef::lookup_table_end() const {
+vpe_imported_symbol_iterator
+VPEImportDirectoryEntryRef::lookup_table_end() const {
   return importedSymbolEnd(ImportTable[Index].ImportLookupTableRVA,
                            OwningObject);
 }
 
-iterator_range<imported_symbol_iterator>
-ImportDirectoryEntryRef::lookup_table_symbols() const {
+iterator_range<vpe_imported_symbol_iterator>
+VPEImportDirectoryEntryRef::lookup_table_symbols() const {
   return make_range(lookup_table_begin(), lookup_table_end());
 }
 
-std::error_code ImportDirectoryEntryRef::getName(StringRef &Result) const {
+std::error_code VPEImportDirectoryEntryRef::getName(StringRef &Result) const {
   uintptr_t IntPtr = 0;
   if (std::error_code EC =
           OwningObject->getRvaPtr(ImportTable[Index].NameRVA, IntPtr))
@@ -1410,44 +1414,45 @@ std::error_code ImportDirectoryEntryRef::getName(StringRef &Result) const {
 }
 
 std::error_code
-ImportDirectoryEntryRef::getImportLookupTableRVA(uint32_t  &Result) const {
+VPEImportDirectoryEntryRef::getImportLookupTableRVA(uint32_t &Result) const {
   Result = ImportTable[Index].ImportLookupTableRVA;
   return std::error_code();
 }
 
 std::error_code
-ImportDirectoryEntryRef::getImportAddressTableRVA(uint32_t &Result) const {
+VPEImportDirectoryEntryRef::getImportAddressTableRVA(uint32_t &Result) const {
   Result = ImportTable[Index].ImportAddressTableRVA;
   return std::error_code();
 }
 
-bool DelayImportDirectoryEntryRef::
-operator==(const DelayImportDirectoryEntryRef &Other) const {
+bool VPEDelayImportDirectoryEntryRef::
+operator==(const VPEDelayImportDirectoryEntryRef &Other) const {
   return Table == Other.Table && Index == Other.Index;
 }
 
-void DelayImportDirectoryEntryRef::moveNext() {
+void VPEDelayImportDirectoryEntryRef::moveNext() {
   ++Index;
 }
 
-imported_symbol_iterator
-DelayImportDirectoryEntryRef::imported_symbol_begin() const {
+vpe_imported_symbol_iterator
+VPEDelayImportDirectoryEntryRef::imported_symbol_begin() const {
   return importedSymbolBegin(Table[Index].DelayImportNameTable,
                              OwningObject);
 }
 
-imported_symbol_iterator
-DelayImportDirectoryEntryRef::imported_symbol_end() const {
+vpe_imported_symbol_iterator
+VPEDelayImportDirectoryEntryRef::imported_symbol_end() const {
   return importedSymbolEnd(Table[Index].DelayImportNameTable,
                            OwningObject);
 }
 
-iterator_range<imported_symbol_iterator>
-DelayImportDirectoryEntryRef::imported_symbols() const {
+iterator_range<vpe_imported_symbol_iterator>
+VPEDelayImportDirectoryEntryRef::imported_symbols() const {
   return make_range(imported_symbol_begin(), imported_symbol_end());
 }
 
-std::error_code DelayImportDirectoryEntryRef::getName(StringRef &Result) const {
+std::error_code
+VPEDelayImportDirectoryEntryRef::getName(StringRef &Result) const {
   uintptr_t IntPtr = 0;
   if (std::error_code EC = OwningObject->getRvaPtr(Table[Index].Name, IntPtr))
     return EC;
@@ -1455,14 +1460,13 @@ std::error_code DelayImportDirectoryEntryRef::getName(StringRef &Result) const {
   return std::error_code();
 }
 
-std::error_code DelayImportDirectoryEntryRef::
-getDelayImportTable(const delay_import_directory_table_entry *&Result) const {
+std::error_code VPEDelayImportDirectoryEntryRef::getDelayImportTable(const vpe_delay_import_directory_table_entry *&Result) const {
   Result = Table;
   return std::error_code();
 }
 
-std::error_code DelayImportDirectoryEntryRef::
-getImportAddress(int AddrIndex, uint64_t &Result) const {
+std::error_code
+VPEDelayImportDirectoryEntryRef::getImportAddress(int AddrIndex, uint64_t &Result) const {
   uint32_t RVA = Table[Index].DelayImportAddressTable +
       AddrIndex * (OwningObject->is64() ? 8 : 4);
   uintptr_t IntPtr = 0;
@@ -1475,18 +1479,19 @@ getImportAddress(int AddrIndex, uint64_t &Result) const {
   return std::error_code();
 }
 
-bool ExportDirectoryEntryRef::
-operator==(const ExportDirectoryEntryRef &Other) const {
+bool VPEExportDirectoryEntryRef::
+operator==(const VPEExportDirectoryEntryRef &Other) const {
   return ExportTable == Other.ExportTable && Index == Other.Index;
 }
 
-void ExportDirectoryEntryRef::moveNext() {
+void VPEExportDirectoryEntryRef::moveNext() {
   ++Index;
 }
 
 // Returns the name of the current export symbol. If the symbol is exported only
 // by ordinal, the empty string is set as a result.
-std::error_code ExportDirectoryEntryRef::getDllName(StringRef &Result) const {
+std::error_code
+VPEExportDirectoryEntryRef::getDllName(StringRef &Result) const {
   uintptr_t IntPtr = 0;
   if (std::error_code EC =
           OwningObject->getRvaPtr(ExportTable->NameRVA, IntPtr))
@@ -1497,25 +1502,26 @@ std::error_code ExportDirectoryEntryRef::getDllName(StringRef &Result) const {
 
 // Returns the starting ordinal number.
 std::error_code
-ExportDirectoryEntryRef::getOrdinalBase(uint32_t &Result) const {
+VPEExportDirectoryEntryRef::getOrdinalBase(uint32_t &Result) const {
   Result = ExportTable->OrdinalBase;
   return std::error_code();
 }
 
 // Returns the export ordinal of the current export symbol.
-std::error_code ExportDirectoryEntryRef::getOrdinal(uint32_t &Result) const {
+std::error_code VPEExportDirectoryEntryRef::getOrdinal(uint32_t &Result) const {
   Result = ExportTable->OrdinalBase + Index;
   return std::error_code();
 }
 
 // Returns the address of the current export symbol.
-std::error_code ExportDirectoryEntryRef::getExportRVA(uint32_t &Result) const {
+std::error_code
+VPEExportDirectoryEntryRef::getExportRVA(uint32_t &Result) const {
   uintptr_t IntPtr = 0;
   if (std::error_code EC =
           OwningObject->getRvaPtr(ExportTable->ExportAddressTableRVA, IntPtr))
     return EC;
-  const export_address_table_entry *entry =
-      reinterpret_cast<const export_address_table_entry *>(IntPtr);
+  const vpe_export_address_table_entry *entry =
+      reinterpret_cast<const vpe_export_address_table_entry *>(IntPtr);
   Result = entry[Index].ExportRVA;
   return std::error_code();
 }
@@ -1523,7 +1529,7 @@ std::error_code ExportDirectoryEntryRef::getExportRVA(uint32_t &Result) const {
 // Returns the name of the current export symbol. If the symbol is exported only
 // by ordinal, the empty string is set as a result.
 std::error_code
-ExportDirectoryEntryRef::getSymbolName(StringRef &Result) const {
+VPEExportDirectoryEntryRef::getSymbolName(StringRef &Result) const {
   uintptr_t IntPtr = 0;
   if (std::error_code EC =
           OwningObject->getRvaPtr(ExportTable->OrdinalTableRVA, IntPtr))
@@ -1549,8 +1555,8 @@ ExportDirectoryEntryRef::getSymbolName(StringRef &Result) const {
   return std::error_code();
 }
 
-std::error_code ExportDirectoryEntryRef::isForwarder(bool &Result) const {
-  const data_directory *DataEntry;
+std::error_code VPEExportDirectoryEntryRef::isForwarder(bool &Result) const {
+  const vpe_data_directory *DataEntry;
   if (auto EC = OwningObject->getDataDirectory(COFF::EXPORT_TABLE, DataEntry))
     return EC;
   uint32_t RVA;
@@ -1562,7 +1568,8 @@ std::error_code ExportDirectoryEntryRef::isForwarder(bool &Result) const {
   return std::error_code();
 }
 
-std::error_code ExportDirectoryEntryRef::getForwardTo(StringRef &Result) const {
+std::error_code
+VPEExportDirectoryEntryRef::getForwardTo(StringRef &Result) const {
   uint32_t RVA;
   if (auto EC = getExportRVA(RVA))
     return EC;
@@ -1573,18 +1580,16 @@ std::error_code ExportDirectoryEntryRef::getForwardTo(StringRef &Result) const {
   return std::error_code();
 }
 
-bool ImportedSymbolRef::
-operator==(const ImportedSymbolRef &Other) const {
+bool VPEImportedSymbolRef::operator==(const VPEImportedSymbolRef &Other) const {
   return Entry32 == Other.Entry32 && Entry64 == Other.Entry64
       && Index == Other.Index;
 }
 
-void ImportedSymbolRef::moveNext() {
+void VPEImportedSymbolRef::moveNext() {
   ++Index;
 }
 
-std::error_code
-ImportedSymbolRef::getSymbolName(StringRef &Result) const {
+std::error_code VPEImportedSymbolRef::getSymbolName(StringRef &Result) const {
   uint32_t RVA;
   if (Entry32) {
     // If a symbol is imported only by ordinal, it has no name.
@@ -1604,7 +1609,7 @@ ImportedSymbolRef::getSymbolName(StringRef &Result) const {
   return std::error_code();
 }
 
-std::error_code ImportedSymbolRef::isOrdinal(bool &Result) const {
+std::error_code VPEImportedSymbolRef::isOrdinal(bool &Result) const {
   if (Entry32)
     Result = Entry32[Index].isOrdinal();
   else
@@ -1612,7 +1617,7 @@ std::error_code ImportedSymbolRef::isOrdinal(bool &Result) const {
   return std::error_code();
 }
 
-std::error_code ImportedSymbolRef::getHintNameRVA(uint32_t &Result) const {
+std::error_code VPEImportedSymbolRef::getHintNameRVA(uint32_t &Result) const {
   if (Entry32)
     Result = Entry32[Index].getHintNameRVA();
   else
@@ -1620,7 +1625,7 @@ std::error_code ImportedSymbolRef::getHintNameRVA(uint32_t &Result) const {
   return std::error_code();
 }
 
-std::error_code ImportedSymbolRef::getOrdinal(uint16_t &Result) const {
+std::error_code VPEImportedSymbolRef::getOrdinal(uint16_t &Result) const {
   uint32_t RVA;
   if (Entry32) {
     if (Entry32[Index].isOrdinal()) {
@@ -1651,11 +1656,11 @@ ObjectFile::createVPEObjectFile(MemoryBufferRef Object) {
   return std::move(Ret);
 }
 
-bool BaseRelocRef::operator==(const BaseRelocRef &Other) const {
+bool VPEBaseRelocRef::operator==(const VPEBaseRelocRef &Other) const {
   return Header == Other.Header && Index == Other.Index;
 }
 
-void BaseRelocRef::moveNext() {
+void VPEBaseRelocRef::moveNext() {
   // Header->BlockSize is the size of the current block, including the
   // size of the header itself.
   uint32_t Size = sizeof(*Header) +
@@ -1673,13 +1678,13 @@ void BaseRelocRef::moveNext() {
   }
 }
 
-std::error_code BaseRelocRef::getType(uint8_t &Type) const {
+std::error_code VPEBaseRelocRef::getType(uint8_t &Type) const {
   auto *Entry = reinterpret_cast<const vpe_base_reloc_block_entry *>(Header + 1);
   Type = Entry[Index].getType();
   return std::error_code();
 }
 
-std::error_code BaseRelocRef::getRVA(uint32_t &Result) const {
+std::error_code VPEBaseRelocRef::getRVA(uint32_t &Result) const {
   auto *Entry = reinterpret_cast<const vpe_base_reloc_block_entry *>(Header + 1);
   Result = Header->PageRVA + Entry[Index].getOffset();
   return std::error_code();
@@ -1690,7 +1695,7 @@ std::error_code BaseRelocRef::getRVA(uint32_t &Result) const {
     return E;
 
 Expected<ArrayRef<UTF16>>
-ResourceSectionRef::getDirStringAtOffset(uint32_t Offset) {
+VPEResourceSectionRef::getDirStringAtOffset(uint32_t Offset) {
   BinaryStreamReader Reader = BinaryStreamReader(BBS);
   Reader.setOffset(Offset);
   uint16_t Length;
@@ -1701,12 +1706,12 @@ ResourceSectionRef::getDirStringAtOffset(uint32_t Offset) {
 }
 
 Expected<ArrayRef<UTF16>>
-ResourceSectionRef::getEntryNameString(const vpe_resource_dir_entry &Entry) {
+VPEResourceSectionRef::getEntryNameString(const vpe_resource_dir_entry &Entry) {
   return getDirStringAtOffset(Entry.Identifier.getNameOffset());
 }
 
 Expected<const vpe_resource_dir_table &>
-ResourceSectionRef::getTableAtOffset(uint32_t Offset) {
+VPEResourceSectionRef::getTableAtOffset(uint32_t Offset) {
   const vpe_resource_dir_table *Table = nullptr;
 
   BinaryStreamReader Reader(BBS);
@@ -1717,10 +1722,10 @@ ResourceSectionRef::getTableAtOffset(uint32_t Offset) {
 }
 
 Expected<const vpe_resource_dir_table &>
-ResourceSectionRef::getEntrySubDir(const vpe_resource_dir_entry &Entry) {
+VPEResourceSectionRef::getEntrySubDir(const vpe_resource_dir_entry &Entry) {
   return getTableAtOffset(Entry.Offset.value());
 }
 
-Expected<const vpe_resource_dir_table &> ResourceSectionRef::getBaseTable() {
+Expected<const vpe_resource_dir_table &> VPEResourceSectionRef::getBaseTable() {
   return getTableAtOffset(0);
 }

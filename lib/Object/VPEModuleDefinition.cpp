@@ -55,7 +55,7 @@ struct Token {
   StringRef Value;
 };
 
-static bool isDecorated(StringRef Sym, bool MingwDef) {
+static bool isDecorated(StringRef Sym) {
   // In def files, the symbols can either be listed decorated or undecorated.
   //
   // - For cdecl symbols, only the undecorated form is allowed.
@@ -75,8 +75,7 @@ static bool isDecorated(StringRef Sym, bool MingwDef) {
   // We can't check for a leading underscore here, since function names
   // themselves can start with an underscore, while a second one still needs
   // to be added.
-  return Sym.startswith("@") || Sym.contains("@@") || Sym.startswith("?") ||
-         (!MingwDef && Sym.contains('@'));
+  return Sym.startswith("@") || Sym.contains("@@") || Sym.startswith("?");
 }
 
 static Error createError(const Twine &Err) {
@@ -144,10 +143,10 @@ private:
 
 class Parser {
 public:
-  explicit Parser(StringRef S, MachineTypes M, bool B)
-      : Lex(S), Machine(M), MingwDef(B) {}
+  explicit Parser(StringRef S, MachineTypes M)
+      : Lex(S), Machine(M) {}
 
-  Expected<COFFModuleDefinition> parse() {
+  Expected<VPEModuleDefinition> parse() {
     do {
       if (Error Err = parseOne())
         return std::move(Err);
@@ -227,7 +226,7 @@ private:
   }
 
   Error parseExport() {
-    COFFShortExport E;
+    VPEShortExport E;
     E.Name = Tok.Value;
     read();
     if (Tok.K == Equal) {
@@ -241,9 +240,9 @@ private:
     }
 
     if (Machine == IMAGE_FILE_MACHINE_I386) {
-      if (!isDecorated(E.Name, MingwDef))
+      if (!isDecorated(E.Name))
         E.Name = (std::string("_").append(E.Name));
-      if (!E.ExtName.empty() && !isDecorated(E.ExtName, MingwDef))
+      if (!E.ExtName.empty() && !isDecorated(E.ExtName))
         E.ExtName = (std::string("_").append(E.ExtName));
     }
 
@@ -285,7 +284,7 @@ private:
       if (Tok.K == EqualEqual) {
         read();
         E.AliasTarget = Tok.Value;
-        if (Machine == IMAGE_FILE_MACHINE_I386 && !isDecorated(E.AliasTarget, MingwDef))
+        if (Machine == IMAGE_FILE_MACHINE_I386 && !isDecorated(E.AliasTarget))
           E.AliasTarget = std::string("_").append(E.AliasTarget);
         continue;
       }
@@ -353,14 +352,12 @@ private:
   Token Tok;
   std::vector<Token> Stack;
   MachineTypes Machine;
-  COFFModuleDefinition Info;
-  bool MingwDef;
+  VPEModuleDefinition Info;
 };
 
-Expected<COFFModuleDefinition> parseCOFFModuleDefinition(MemoryBufferRef MB,
-                                                         MachineTypes Machine,
-                                                         bool MingwDef) {
-  return Parser(MB.getBuffer(), Machine, MingwDef).parse();
+Expected<VPEModuleDefinition> parseCOFFModuleDefinition(MemoryBufferRef MB,
+                                                         MachineTypes Machine) {
+  return Parser(MB.getBuffer(), Machine).parse();
 }
 
 } // namespace object

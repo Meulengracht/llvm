@@ -97,7 +97,7 @@ static ImportNameType getNameType(StringRef Sym, StringRef ExtName,
   // stdcall function still omits the underscore (IMPORT_NAME_NOPREFIX).
   // See the comment in isDecorated in COFFModuleDefinition.cpp for more
   // details.
-  if (ExtName.startswith("_") && ExtName.contains('@') && !MinGW)
+  if (ExtName.startswith("_") && ExtName.contains('@'))
     return IMPORT_NAME;
   if (Sym != ExtName)
     return IMPORT_NAME_UNDECORATE;
@@ -595,7 +595,7 @@ Error writeImportLibrary(StringRef ImportName, StringRef Path,
       ImportType = IMPORT_CONST;
 
     StringRef SymbolName = E.SymbolName.empty() ? E.Name : E.SymbolName;
-    ImportNameType NameType = getNameType(SymbolName, E.Name, Machine, MinGW);
+    ImportNameType NameType = getNameType(SymbolName, E.Name, Machine);
     Expected<std::string> Name = E.ExtName.empty()
                                      ? SymbolName
                                      : replace(SymbolName, E.Name, E.ExtName);

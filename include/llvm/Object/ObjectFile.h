@@ -36,6 +36,7 @@ class ARMAttributeParser;
 
 namespace object {
 
+class VPEObjectFile;
 class COFFObjectFile;
 class MachOObjectFile;
 class ObjectFile;
@@ -359,6 +360,9 @@ public:
   static bool classof(const Binary *v) {
     return v->isObject();
   }
+
+  static Expected<std::unique_ptr<VPEObjectFile>>
+  createVPEObjectFile(MemoryBufferRef Object);
 
   static Expected<std::unique_ptr<COFFObjectFile>>
   createCOFFObjectFile(MemoryBufferRef Object);

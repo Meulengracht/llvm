@@ -25,7 +25,7 @@ namespace llvm {
 namespace object {
 
 struct VPEModuleDefinition {
-  std::vector<COFFShortExport> Exports;
+  std::vector<VPEShortExport> Exports;
   std::string OutputFile;
   std::string ImportName;
   uint64_t ImageBase = 0;

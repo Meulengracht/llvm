@@ -35,22 +35,22 @@ template <typename T> class ArrayRef;
 
 namespace object {
 
-class BaseRelocRef;
-class DelayImportDirectoryEntryRef;
-class ExportDirectoryEntryRef;
-class ImportDirectoryEntryRef;
-class ImportedSymbolRef;
-class ResourceSectionRef;
+class VPEBaseRelocRef;
+class VPEDelayImportDirectoryEntryRef;
+class VPEExportDirectoryEntryRef;
+class VPEImportDirectoryEntryRef;
+class VPEImportedSymbolRef;
+class VPEResourceSectionRef;
 
-using import_directory_iterator = content_iterator<ImportDirectoryEntryRef>;
-using delay_import_directory_iterator =
-    content_iterator<DelayImportDirectoryEntryRef>;
-using export_directory_iterator = content_iterator<ExportDirectoryEntryRef>;
-using imported_symbol_iterator = content_iterator<ImportedSymbolRef>;
-using base_reloc_iterator = content_iterator<BaseRelocRef>;
+using vpe_import_directory_iterator = content_iterator<VPEImportDirectoryEntryRef>;
+using vpe_delay_import_directory_iterator =
+    content_iterator<VPEDelayImportDirectoryEntryRef>;
+using vpe_export_directory_iterator = content_iterator<VPEExportDirectoryEntryRef>;
+using vpe_imported_symbol_iterator = content_iterator<VPEImportedSymbolRef>;
+using vpe_base_reloc_iterator = content_iterator<VPEBaseRelocRef>;
 
 /// The DOS compatible header at the front of all PE/COFF executables.
-struct dos_header {
+struct vpe_dos_header {
   char                 Magic[2];
   support::ulittle16_t UsedBytesInTheLastPage;
   support::ulittle16_t FileSizeInPages;
@@ -101,7 +101,7 @@ struct vpe_bigobj_file_header {
 };
 
 /// The 32-bit PE header that follows the COFF header.
-struct pe32_header {
+struct vpe_pe32_header {
   support::ulittle16_t Magic;
   uint8_t MajorLinkerVersion;
   uint8_t MinorLinkerVersion;
@@ -137,7 +137,7 @@ struct pe32_header {
 };
 
 /// The 64-bit PE header that follows the COFF header.
-struct pe32plus_header {
+struct vpe_pe32plus_header {
   support::ulittle16_t Magic;
   uint8_t MajorLinkerVersion;
   uint8_t MinorLinkerVersion;
@@ -169,12 +169,12 @@ struct pe32plus_header {
   support::ulittle32_t NumberOfRvaAndSize;
 };
 
-struct data_directory {
+struct vpe_data_directory {
   support::ulittle32_t RelativeVirtualAddress;
   support::ulittle32_t Size;
 };
 
-struct debug_directory {
+struct vpe_debug_directory {
   support::ulittle32_t Characteristics;
   support::ulittle32_t TimeDateStamp;
   support::ulittle16_t MajorVersion;
@@ -186,7 +186,7 @@ struct debug_directory {
 };
 
 template <typename IntTy>
-struct import_lookup_table_entry {
+struct vpe_import_lookup_table_entry {
   IntTy Data;
 
   bool isOrdinal() const { return Data < 0; }
@@ -202,12 +202,12 @@ struct import_lookup_table_entry {
   }
 };
 
-using import_lookup_table_entry32 =
-    import_lookup_table_entry<support::little32_t>;
-using import_lookup_table_entry64 =
-    import_lookup_table_entry<support::little64_t>;
+using vpe_import_lookup_table_entry32 =
+    vpe_import_lookup_table_entry<support::little32_t>;
+using vpe_import_lookup_table_entry64 =
+    vpe_import_lookup_table_entry<support::little64_t>;
 
-struct delay_import_directory_table_entry {
+struct vpe_delay_import_directory_table_entry {
   // dumpbin reports this field as "Characteristics" instead of "Attributes".
   support::ulittle32_t Attributes;
   support::ulittle32_t Name;
@@ -219,7 +219,7 @@ struct delay_import_directory_table_entry {
   support::ulittle32_t TimeStamp;
 };
 
-struct export_directory_table_entry {
+struct vpe_export_directory_table_entry {
   support::ulittle32_t ExportFlags;
   support::ulittle32_t TimeDateStamp;
   support::ulittle16_t MajorVersion;
@@ -233,15 +233,15 @@ struct export_directory_table_entry {
   support::ulittle32_t OrdinalTableRVA;
 };
 
-union export_address_table_entry {
+union vpe_export_address_table_entry {
   support::ulittle32_t ExportRVA;
   support::ulittle32_t ForwarderRVA;
 };
 
-using export_name_pointer_table_entry = support::ulittle32_t;
-using export_ordinal_table_entry = support::ulittle16_t;
+using vpe_export_name_pointer_table_entry = support::ulittle32_t;
+using vpe_export_ordinal_table_entry = support::ulittle16_t;
 
-struct StringTableOffset {
+struct vpe_StringTableOffset {
   support::ulittle32_t Zeroes;
   support::ulittle32_t Offset;
 };
@@ -250,7 +250,7 @@ template <typename SectionNumberType>
 struct vpe_symbol {
   union {
     char ShortName[COFF::NameSize];
-    StringTableOffset Offset;
+    vpe_StringTableOffset Offset;
   } Name;
 
   support::ulittle32_t Value;
@@ -269,7 +269,7 @@ using vpe_symbol32 = vpe_symbol<support::ulittle32_t>;
 struct vpe_symbol_generic {
   union {
     char ShortName[COFF::NameSize];
-    StringTableOffset Offset;
+    vpe_StringTableOffset Offset;
   } Name;
   support::ulittle32_t Value;
 };
@@ -309,7 +309,7 @@ public:
     return CS16 ? CS16->Name.ShortName : CS32->Name.ShortName;
   }
 
-  const StringTableOffset &getStringTableOffset() const {
+  const vpe_StringTableOffset &getStringTableOffset() const {
     assert(isSet() && "VPESymbolRef points to nothing!");
     return CS16 ? CS16->Name.Offset : CS32->Name.Offset;
   }
@@ -593,7 +593,7 @@ enum class vpe_guard_flags : uint32_t {
   FidTableHasFlags = 0x10000000, // Indicates that fid tables are 5 bytes
 };
 
-enum class frame_type : uint16_t { Fpo = 0, Trap = 1, Tss = 2, NonFpo = 3 };
+enum class vpe_frame_type : uint16_t { Fpo = 0, Trap = 1, Tss = 2, NonFpo = 3 };
 
 struct vpe_load_config_code_integrity {
   support::ulittle16_t Flags;
@@ -753,7 +753,7 @@ struct vpe_resource_dir_table {
   support::ulittle16_t NumberOfIDEntries;
 };
 
-struct debug_h_header {
+struct vpe_debug_h_header {
   support::ulittle32_t Magic;
   support::ulittle16_t Version;
   support::ulittle16_t HashAlgorithm;
@@ -761,26 +761,26 @@ struct debug_h_header {
 
 class VPEObjectFile : public ObjectFile {
 private:
-  friend class ImportDirectoryEntryRef;
-  friend class ExportDirectoryEntryRef;
+  friend class VPEImportDirectoryEntryRef;
+  friend class VPEExportDirectoryEntryRef;
   const vpe_file_header *VPEHeader;
   const vpe_bigobj_file_header *VPEBigObjHeader;
-  const pe32_header *PE32Header;
-  const pe32plus_header *PE32PlusHeader;
-  const data_directory *DataDirectory;
+  const vpe_pe32_header *PE32Header;
+  const vpe_pe32plus_header *PE32PlusHeader;
+  const vpe_data_directory *DataDirectory;
   const vpe_section *SectionTable;
   const vpe_symbol16 *SymbolTable16;
   const vpe_symbol32 *SymbolTable32;
   const char *StringTable;
   uint32_t StringTableSize;
   const vpe_import_directory_table_entry *ImportDirectory;
-  const delay_import_directory_table_entry *DelayImportDirectory;
+  const vpe_delay_import_directory_table_entry *DelayImportDirectory;
   uint32_t NumberOfDelayImportDirectory;
-  const export_directory_table_entry *ExportDirectory;
+  const vpe_export_directory_table_entry *ExportDirectory;
   const vpe_base_reloc_block_header *BaseRelocHeader;
   const vpe_base_reloc_block_header *BaseRelocEnd;
-  const debug_directory *DebugDirectoryBegin;
-  const debug_directory *DebugDirectoryEnd;
+  const vpe_debug_directory *DebugDirectoryBegin;
+  const vpe_debug_directory *DebugDirectoryEnd;
   // Either vpe_load_configuration32 or vpe_load_configuration64.
   const void *LoadConfig = nullptr;
 
@@ -941,42 +941,42 @@ public:
   Expected<uint64_t> getStartAddress() const override;
   SubtargetFeatures getFeatures() const override { return SubtargetFeatures(); }
 
-  import_directory_iterator import_directory_begin() const;
-  import_directory_iterator import_directory_end() const;
-  delay_import_directory_iterator delay_import_directory_begin() const;
-  delay_import_directory_iterator delay_import_directory_end() const;
-  export_directory_iterator export_directory_begin() const;
-  export_directory_iterator export_directory_end() const;
-  base_reloc_iterator base_reloc_begin() const;
-  base_reloc_iterator base_reloc_end() const;
-  const debug_directory *debug_directory_begin() const {
+  vpe_import_directory_iterator import_directory_begin() const;
+  vpe_import_directory_iterator import_directory_end() const;
+  vpe_delay_import_directory_iterator delay_import_directory_begin() const;
+  vpe_delay_import_directory_iterator delay_import_directory_end() const;
+  vpe_export_directory_iterator export_directory_begin() const;
+  vpe_export_directory_iterator export_directory_end() const;
+  vpe_base_reloc_iterator base_reloc_begin() const;
+  vpe_base_reloc_iterator base_reloc_end() const;
+  const vpe_debug_directory *debug_directory_begin() const {
     return DebugDirectoryBegin;
   }
-  const debug_directory *debug_directory_end() const {
+  const vpe_debug_directory *debug_directory_end() const {
     return DebugDirectoryEnd;
   }
 
-  iterator_range<import_directory_iterator> import_directories() const;
-  iterator_range<delay_import_directory_iterator>
+  iterator_range<vpe_import_directory_iterator> import_directories() const;
+  iterator_range<vpe_delay_import_directory_iterator>
       delay_import_directories() const;
-  iterator_range<export_directory_iterator> export_directories() const;
-  iterator_range<base_reloc_iterator> base_relocs() const;
-  iterator_range<const debug_directory *> debug_directories() const {
+  iterator_range<vpe_export_directory_iterator> export_directories() const;
+  iterator_range<vpe_base_reloc_iterator> base_relocs() const;
+  iterator_range<const vpe_debug_directory *> debug_directories() const {
     return make_range(debug_directory_begin(), debug_directory_end());
   }
 
-  const dos_header *getDOSHeader() const {
+  const vpe_dos_header *getDOSHeader() const {
     if (!PE32Header && !PE32PlusHeader)
       return nullptr;
-    return reinterpret_cast<const dos_header *>(base());
+    return reinterpret_cast<const vpe_dos_header *>(base());
   }
   std::error_code getVPEHeader(const vpe_file_header *&Res) const;
   std::error_code
   getVPEBigObjHeader(const vpe_bigobj_file_header *&Res) const;
-  std::error_code getPE32Header(const pe32_header *&Res) const;
-  std::error_code getPE32PlusHeader(const pe32plus_header *&Res) const;
+  std::error_code getPE32Header(const vpe_pe32_header *&Res) const;
+  std::error_code getPE32PlusHeader(const vpe_pe32plus_header *&Res) const;
   std::error_code getDataDirectory(uint32_t index,
-                                   const data_directory *&Res) const;
+                                   const vpe_data_directory *&Res) const;
   std::error_code getSection(int32_t index, const vpe_section *&Res) const;
   std::error_code getSection(StringRef SectionName,
                              const vpe_section *&Res) const;
@@ -1052,7 +1052,7 @@ public:
                               StringRef &Name) const;
 
   /// Get PDB information out of a codeview debug directory entry.
-  std::error_code getDebugPDBInfo(const debug_directory *DebugDir,
+  std::error_code getDebugPDBInfo(const vpe_debug_directory *DebugDir,
                                   const codeview::DebugInfo *&Info,
                                   StringRef &PDBFileName) const;
 
@@ -1068,27 +1068,27 @@ public:
 
   StringRef mapDebugSectionName(StringRef Name) const override;
 
-  static bool classof(const Binary *v) { return v->isVPE(); }
+  static bool classof(const Binary *v) { return v->isCOFF(); }
 };
 
 // The iterator for the import directory table.
-class ImportDirectoryEntryRef {
+class VPEImportDirectoryEntryRef {
 public:
-  ImportDirectoryEntryRef() = default;
-  ImportDirectoryEntryRef(const vpe_import_directory_table_entry *Table,
+  VPEImportDirectoryEntryRef() = default;
+  VPEImportDirectoryEntryRef(const vpe_import_directory_table_entry *Table,
                           uint32_t I, const VPEObjectFile *Owner)
       : ImportTable(Table), Index(I), OwningObject(Owner) {}
 
-  bool operator==(const ImportDirectoryEntryRef &Other) const;
+  bool operator==(const VPEImportDirectoryEntryRef &Other) const;
   void moveNext();
 
-  imported_symbol_iterator imported_symbol_begin() const;
-  imported_symbol_iterator imported_symbol_end() const;
-  iterator_range<imported_symbol_iterator> imported_symbols() const;
+  vpe_imported_symbol_iterator imported_symbol_begin() const;
+  vpe_imported_symbol_iterator imported_symbol_end() const;
+  iterator_range<vpe_imported_symbol_iterator> imported_symbols() const;
 
-  imported_symbol_iterator lookup_table_begin() const;
-  imported_symbol_iterator lookup_table_end() const;
-  iterator_range<imported_symbol_iterator> lookup_table_symbols() const;
+  vpe_imported_symbol_iterator lookup_table_begin() const;
+  vpe_imported_symbol_iterator lookup_table_end() const;
+  iterator_range<vpe_imported_symbol_iterator> lookup_table_symbols() const;
 
   std::error_code getName(StringRef &Result) const;
   std::error_code getImportLookupTableRVA(uint32_t &Result) const;
@@ -1103,40 +1103,40 @@ private:
   const VPEObjectFile *OwningObject = nullptr;
 };
 
-class DelayImportDirectoryEntryRef {
+class VPEDelayImportDirectoryEntryRef {
 public:
-  DelayImportDirectoryEntryRef() = default;
-  DelayImportDirectoryEntryRef(const delay_import_directory_table_entry *T,
-                               uint32_t I, const VPEObjectFile *Owner)
+  VPEDelayImportDirectoryEntryRef() = default;
+  VPEDelayImportDirectoryEntryRef(const vpe_delay_import_directory_table_entry *T,
+                                  uint32_t I, const VPEObjectFile *Owner)
       : Table(T), Index(I), OwningObject(Owner) {}
 
-  bool operator==(const DelayImportDirectoryEntryRef &Other) const;
+  bool operator==(const VPEDelayImportDirectoryEntryRef &Other) const;
   void moveNext();
 
-  imported_symbol_iterator imported_symbol_begin() const;
-  imported_symbol_iterator imported_symbol_end() const;
-  iterator_range<imported_symbol_iterator> imported_symbols() const;
+  vpe_imported_symbol_iterator imported_symbol_begin() const;
+  vpe_imported_symbol_iterator imported_symbol_end() const;
+  iterator_range<vpe_imported_symbol_iterator> imported_symbols() const;
 
   std::error_code getName(StringRef &Result) const;
   std::error_code getDelayImportTable(
-      const delay_import_directory_table_entry *&Result) const;
+      const vpe_delay_import_directory_table_entry *&Result) const;
   std::error_code getImportAddress(int AddrIndex, uint64_t &Result) const;
 
 private:
-  const delay_import_directory_table_entry *Table;
+  const vpe_delay_import_directory_table_entry *Table;
   uint32_t Index;
   const VPEObjectFile *OwningObject = nullptr;
 };
 
 // The iterator for the export directory table entry.
-class ExportDirectoryEntryRef {
+class VPEExportDirectoryEntryRef {
 public:
-  ExportDirectoryEntryRef() = default;
-  ExportDirectoryEntryRef(const export_directory_table_entry *Table, uint32_t I,
-                          const VPEObjectFile *Owner)
+  VPEExportDirectoryEntryRef() = default;
+  VPEExportDirectoryEntryRef(const vpe_export_directory_table_entry *Table, uint32_t I,
+                             const VPEObjectFile *Owner)
       : ExportTable(Table), Index(I), OwningObject(Owner) {}
 
-  bool operator==(const ExportDirectoryEntryRef &Other) const;
+  bool operator==(const VPEExportDirectoryEntryRef &Other) const;
   void moveNext();
 
   std::error_code getDllName(StringRef &Result) const;
@@ -1149,22 +1149,22 @@ public:
   std::error_code getForwardTo(StringRef &Result) const;
 
 private:
-  const export_directory_table_entry *ExportTable;
+  const vpe_export_directory_table_entry *ExportTable;
   uint32_t Index;
   const VPEObjectFile *OwningObject = nullptr;
 };
 
-class ImportedSymbolRef {
+class VPEImportedSymbolRef {
 public:
-  ImportedSymbolRef() = default;
-  ImportedSymbolRef(const import_lookup_table_entry32 *Entry, uint32_t I,
-                    const VPEObjectFile *Owner)
+  VPEImportedSymbolRef() = default;
+  VPEImportedSymbolRef(const vpe_import_lookup_table_entry32 *Entry, uint32_t I,
+                       const VPEObjectFile *Owner)
       : Entry32(Entry), Entry64(nullptr), Index(I), OwningObject(Owner) {}
-  ImportedSymbolRef(const import_lookup_table_entry64 *Entry, uint32_t I,
-                    const VPEObjectFile *Owner)
+  VPEImportedSymbolRef(const vpe_import_lookup_table_entry64 *Entry, uint32_t I,
+                       const VPEObjectFile *Owner)
       : Entry32(nullptr), Entry64(Entry), Index(I), OwningObject(Owner) {}
 
-  bool operator==(const ImportedSymbolRef &Other) const;
+  bool operator==(const VPEImportedSymbolRef &Other) const;
   void moveNext();
 
   std::error_code getSymbolName(StringRef &Result) const;
@@ -1173,20 +1173,20 @@ public:
   std::error_code getHintNameRVA(uint32_t &Result) const;
 
 private:
-  const import_lookup_table_entry32 *Entry32;
-  const import_lookup_table_entry64 *Entry64;
+  const vpe_import_lookup_table_entry32 *Entry32;
+  const vpe_import_lookup_table_entry64 *Entry64;
   uint32_t Index;
   const VPEObjectFile *OwningObject = nullptr;
 };
 
-class BaseRelocRef {
+class VPEBaseRelocRef {
 public:
-  BaseRelocRef() = default;
-  BaseRelocRef(const vpe_base_reloc_block_header *Header,
-               const VPEObjectFile *Owner)
+  VPEBaseRelocRef() = default;
+  VPEBaseRelocRef(const vpe_base_reloc_block_header *Header,
+                  const VPEObjectFile *Owner)
       : Header(Header), Index(0) {}
 
-  bool operator==(const BaseRelocRef &Other) const;
+  bool operator==(const VPEBaseRelocRef &Other) const;
   void moveNext();
 
   std::error_code getType(uint8_t &Type) const;
@@ -1197,10 +1197,10 @@ private:
   uint32_t Index;
 };
 
-class ResourceSectionRef {
+class VPEResourceSectionRef {
 public:
-  ResourceSectionRef() = default;
-  explicit ResourceSectionRef(StringRef Ref) : BBS(Ref, support::little) {}
+  VPEResourceSectionRef() = default;
+  explicit VPEResourceSectionRef(StringRef Ref) : BBS(Ref, support::little) {}
 
   Expected<ArrayRef<UTF16>>
   getEntryNameString(const vpe_resource_dir_entry &Entry);
@@ -1216,7 +1216,7 @@ private:
 };
 
 // Corresponds to `_FPO_DATA` structure in the PE/COFF spec.
-struct FpoData {
+struct VPEFpoData {
   support::ulittle32_t Offset; // ulOffStart: Offset 1st byte of function code
   support::ulittle32_t Size;   // cbProcSize: # bytes in function
   support::ulittle32_t NumLocals; // cdwLocals: # bytes in locals/4
@@ -1236,7 +1236,7 @@ struct FpoData {
   bool useBP() const { return (Attributes >> 10) & 1; }
 
   // cbFrame: frame pointer
-  frame_type getFP() const { return static_cast<frame_type>(Attributes >> 14); }
+  vpe_frame_type getFP() const { return static_cast<vpe_frame_type>(Attributes >> 14); }
 };
 
 } // end namespace object

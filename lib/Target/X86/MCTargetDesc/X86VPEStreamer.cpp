@@ -15,7 +15,6 @@
 
 using namespace llvm;
 
-namespace {
 MCStreamer *llvm::createX86VPEStreamer(MCContext &C,
                                            std::unique_ptr<MCAsmBackend> &&AB,
                                            std::unique_ptr<MCObjectWriter> &&OW,
@@ -25,5 +24,4 @@ MCStreamer *llvm::createX86VPEStreamer(MCContext &C,
       new MCVPEStreamer(C, std::move(AB), std::move(CE), std::move(OW));
   S->getAssembler().setRelaxAll(RelaxAll);
   return S;
-}
 }

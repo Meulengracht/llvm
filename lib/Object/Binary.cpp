@@ -68,6 +68,9 @@ Expected<std::unique_ptr<Binary>> object::createBinary(MemoryBufferRef Buffer,
   case file_magic::coff_object:
   case file_magic::coff_import_library:
   case file_magic::pecoff_executable:
+  case file_magic::vpe_object:
+  case file_magic::vpe_import_library:
+  case file_magic::vpe_executable:
   case file_magic::bitcode:
   case file_magic::wasm_object:
     return ObjectFile::createSymbolicFile(Buffer, Type, Context);
