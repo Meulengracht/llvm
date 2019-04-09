@@ -21,9 +21,9 @@ using namespace sys;
 ThreadLocalImpl::ThreadLocalImpl() : data() {
   static_assert(sizeof(tss_t) <= sizeof(data), "size too big");
   tss_t* key = reinterpret_cast<tss_t*>(&data);
-  if (tss_create(key, nullptr) != thrd_success) {
-      // @todo
-  }
+  int errorcode = tss_create(key, nullptr);
+  assert(errorcode == thrd_success);
+  (void)errorcode;
 }
 
 ThreadLocalImpl::~ThreadLocalImpl() {
@@ -33,9 +33,9 @@ ThreadLocalImpl::~ThreadLocalImpl() {
 
 void ThreadLocalImpl::setInstance(const void* d) {
   tss_t* key = reinterpret_cast<tss_t*>(&data);
-  if (tss_set(*key, const_cast<void*>(d)) != thrd_success) {
-      // @todo
-  }
+  int errorcode = tss_set(*key, const_cast<void*>(d));
+  assert(errorcode == thrd_success);
+  (void)errorcode;
 }
 
 void *ThreadLocalImpl::getInstance() {

@@ -14,7 +14,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <os/mollenos.h>
-#include <os/process.h>
+#include <os/services/process.h>
 #include <malloc.h>
 #include <time.h>
 #include <stdio.h>

@@ -860,7 +860,7 @@ private:
       Buckets = nullptr;
       return false;
     }
-
+  
     Buckets = static_cast<BucketT*>(operator new(sizeof(BucketT) * NumBuckets));
     return true;
   }

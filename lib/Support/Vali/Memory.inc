@@ -48,7 +48,7 @@ namespace llvm {
 namespace sys {
 
 //===----------------------------------------------------------------------===//
-//=== WARNING: Implementation here must contain only Win32 specific code
+//=== WARNING: Implementation here must contain only Vali specific code
 //===          and must not be UNIX code
 //===----------------------------------------------------------------------===//
 
@@ -60,19 +60,11 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (NumBytes == 0)
     return MemoryBlock();
 
-  // While we'd be happy to allocate single pages, the Windows allocation
-  // granularity may be larger than a single page (in practice, it is 64K)
-  // so mapping less than that will create an unreachable fragment of memory.
-  // Avoid using one-time initialization of static locals here, since they
-  // aren't thread safe with MSVC.
-  static volatile size_t GranularityCached;
-  size_t Granularity = GranularityCached;
-  if (Granularity == 0) {
-    Granularity = getPageSize();
-    GranularityCached = Granularity;
-  }
+  static size_t DefaultGranularity = getPageSize();
 
-  const size_t NumBlocks = (NumBytes+Granularity-1)/Granularity;
+  size_t Granularity     = DefaultGranularity;
+  Flags_t Protect        = MEMORY_COMMIT;
+  const size_t NumBlocks = (NumBytes + Granularity - 1) / Granularity;
 
   uintptr_t Start = NearBlock ? reinterpret_cast<uintptr_t>(NearBlock->base()) +
                                 NearBlock->size()
@@ -83,17 +75,17 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (Start && Start % Granularity != 0)
     Start += Granularity - Start % Granularity;
 
-  Flags_t Protect = getValiProtectionFlags(Flags);
+  Protect |= getValiProtectionFlags(Flags);
   void *PA = NULL;
   if (::MemoryAllocate(reinterpret_cast<void*>(Start),
-                            NumBlocks*Granularity, MEMORY_COMMIT | Protect, 
-                            &PA, NULL) != OsSuccess) {
+                       NumBlocks*Granularity, Protect, &PA, NULL) != OsSuccess) {
     return MemoryBlock();
   }
 
   MemoryBlock Result;
   Result.Address = PA;
-  Result.Size = NumBlocks*Granularity;
+  Result.Size    = NumBlocks*Granularity;
+  Result.Flags   = Flags;
 
   if (Flags & MF_EXEC)
     Memory::InvalidateInstructionCache(Result.Address, Result.Size);

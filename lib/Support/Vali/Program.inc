@@ -21,7 +21,7 @@
 #include <io.h>
 #include <malloc.h>
 #include <os/mollenos.h>
-#include <os/process.h>
+#include <os/services/process.h>
 
 namespace llvm {
 
@@ -154,7 +154,7 @@ namespace llvm {
 ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
                       bool WaitUntilChildTerminates, std::string *ErrMsg) {
   assert(PI.Pid && "invalid pid to wait on, process not started?");
-  assert(PI.ProcessId != UUID_INVALID &&
+  assert(PI.Pid != UUID_INVALID &&
          "invalid process handle to wait on, process not started?");
   size_t milliSecondsToWait = 0;
   ProcessInfo WaitResult = PI;
