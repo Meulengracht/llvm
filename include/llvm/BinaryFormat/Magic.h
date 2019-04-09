@@ -48,6 +48,9 @@ struct file_magic {
     xcoff_object_32,     ///< 32-bit XCOFF object file
     wasm_object,         ///< WebAssembly Object file
     pdb,                 ///< Windows PDB debug info file
+    vpe_object,          ///< VPE object file
+    vpe_import_library,  ///< VPE import library
+    vpe_executable,      ///< VPE executable file
   };
 
   bool is_object() const { return V != unknown; }

@@ -179,33 +179,6 @@ public:
                                    unsigned &Align) const override;
 };
 
-class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
-  mutable unsigned NextUniqueID = 0;
-
-public:
-  TargetLoweringObjectFileWasm() = default;
-  ~TargetLoweringObjectFileWasm() override = default;
-
-  MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
-                                      const TargetMachine &TM) const override;
-
-  MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
-                                    const TargetMachine &TM) const override;
-
-  bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
-                                           const Function &F) const override;
-
-  void InitializeWasm();
-  MCSection *getStaticCtorSection(unsigned Priority,
-                                  const MCSymbol *KeySym) const override;
-  MCSection *getStaticDtorSection(unsigned Priority,
-                                  const MCSymbol *KeySym) const override;
-
-  const MCExpr *lowerRelativeReference(const GlobalValue *LHS,
-                                       const GlobalValue *RHS,
-                                       const TargetMachine &TM) const override;
-};
-
 class TargetLoweringObjectFileVPE : public TargetLoweringObjectFile {
   mutable unsigned NextUniqueID = 0;
 
@@ -248,6 +221,33 @@ public:
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
                                    const Constant *C,
                                    unsigned &Align) const override;
+};
+
+class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
+  mutable unsigned NextUniqueID = 0;
+
+public:
+  TargetLoweringObjectFileWasm() = default;
+  ~TargetLoweringObjectFileWasm() override = default;
+
+  MCSection *getExplicitSectionGlobal(const GlobalObject *GO, SectionKind Kind,
+                                      const TargetMachine &TM) const override;
+
+  MCSection *SelectSectionForGlobal(const GlobalObject *GO, SectionKind Kind,
+                                    const TargetMachine &TM) const override;
+
+  bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
+                                           const Function &F) const override;
+
+  void InitializeWasm();
+  MCSection *getStaticCtorSection(unsigned Priority,
+                                  const MCSymbol *KeySym) const override;
+  MCSection *getStaticDtorSection(unsigned Priority,
+                                  const MCSymbol *KeySym) const override;
+
+  const MCExpr *lowerRelativeReference(const GlobalValue *LHS,
+                                       const GlobalValue *RHS,
+                                       const TargetMachine &TM) const override;
 };
 
 } // end namespace llvm

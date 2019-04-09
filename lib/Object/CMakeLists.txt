@@ -21,6 +21,9 @@ add_llvm_library(LLVMObject
   RelocationResolver.cpp
   SymbolicFile.cpp
   SymbolSize.cpp
+  VPEImportFile.cpp
+  VPEModuleDefinition.cpp
+  VPEObjectFile.cpp
   WasmObjectFile.cpp
   WindowsResource.cpp
   XCOFFObjectFile.cpp

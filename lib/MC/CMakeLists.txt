@@ -3,6 +3,7 @@ add_llvm_library(LLVMMC
   ELFObjectWriter.cpp
   MCAsmBackend.cpp
   MCAsmInfo.cpp
+  MCAsmInfoVPE.cpp
   MCAsmInfoCOFF.cpp
   MCAsmInfoDarwin.cpp
   MCAsmInfoELF.cpp
@@ -34,6 +35,7 @@ add_llvm_library(LLVMMC
   MCRegisterInfo.cpp
   MCSchedule.cpp
   MCSection.cpp
+  MCSectionVPE.cpp
   MCSectionCOFF.cpp
   MCSectionELF.cpp
   MCSectionMachO.cpp

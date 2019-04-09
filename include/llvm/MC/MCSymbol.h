@@ -45,6 +45,7 @@ protected:
   enum SymbolKind {
     SymbolKindUnset,
     SymbolKindCOFF,
+    SymbolKindVPE,
     SymbolKindELF,
     SymbolKindMachO,
     SymbolKindWasm,
@@ -280,6 +281,8 @@ public:
   bool isELF() const { return Kind == SymbolKindELF; }
 
   bool isCOFF() const { return Kind == SymbolKindCOFF; }
+  
+  bool isVPE() const { return Kind == SymbolKindVPE; }
 
   bool isMachO() const { return Kind == SymbolKindMachO; }
 

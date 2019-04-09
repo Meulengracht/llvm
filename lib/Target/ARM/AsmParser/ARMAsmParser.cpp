@@ -5558,6 +5558,7 @@ bool ARMAsmParser::parsePrefix(ARMMCExpr::VariantKind &RefKind) {
     ELF = (1 << MCObjectFileInfo::IsELF),
     MACHO = (1 << MCObjectFileInfo::IsMachO),
     WASM = (1 << MCObjectFileInfo::IsWasm),
+    VPE = (1 << MCObjectFileInfo::IsVPE)
   };
   static const struct PrefixEntry {
     const char *Spelling;
@@ -5593,6 +5594,9 @@ bool ARMAsmParser::parsePrefix(ARMMCExpr::VariantKind &RefKind) {
     break;
   case MCObjectFileInfo::IsWasm:
     CurrentFormat = WASM;
+    break;
+  case MCObjectFileInfo::IsVPE:
+    CurrentFormat = VPE;
     break;
   case MCObjectFileInfo::IsXCOFF:
     llvm_unreachable("unexpected object format");

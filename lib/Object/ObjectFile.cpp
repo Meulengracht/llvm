@@ -14,6 +14,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Object/Binary.h"
+#include "llvm/Object/VPE.h"
 #include "llvm/Object/COFF.h"
 #include "llvm/Object/Error.h"
 #include "llvm/Object/MachO.h"
@@ -155,6 +156,10 @@ ObjectFile::createObjectFile(MemoryBufferRef Object, file_magic Type) {
     return createXCOFFObjectFile(Object);
   case file_magic::wasm_object:
     return createWasmObjectFile(Object);
+  case file_magic::vpe_object:        
+  case file_magic::vpe_import_library:
+  case file_magic::vpe_executable:
+    return createVPEObjectFile(Object);
   }
   llvm_unreachable("Unexpected Object File Type");
 }

@@ -543,6 +543,8 @@ extern "C" void LLVMInitializeX86TargetMC() {
     TargetRegistry::RegisterAsmTargetStreamer(*T, createX86AsmTargetStreamer);
 
     TargetRegistry::RegisterCOFFStreamer(*T, createX86WinCOFFStreamer);
+    
+    TargetRegistry::RegisterVPEStreamer(*T, createX86VPEStreamer);
 
     // Register the MCInstPrinter.
     TargetRegistry::RegisterMCInstPrinter(*T, createX86MCInstPrinter);

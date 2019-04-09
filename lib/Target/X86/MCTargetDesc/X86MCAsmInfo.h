@@ -14,6 +14,7 @@
 #define LLVM_LIB_TARGET_X86_MCTARGETDESC_X86MCASMINFO_H
 
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCAsmInfoVPE.h"
 #include "llvm/MC/MCAsmInfoCOFF.h"
 #include "llvm/MC/MCAsmInfoDarwin.h"
 #include "llvm/MC/MCAsmInfoELF.h"
@@ -42,7 +43,7 @@ public:
   explicit X86ELFMCAsmInfo(const Triple &Triple);
 };
 
-class X86VPEMCAsmInfo : public MCAsmInfoCOFF {
+class X86VPEMCAsmInfo : public MCAsmInfoVPE {
   void anchor() override;
 
 public:

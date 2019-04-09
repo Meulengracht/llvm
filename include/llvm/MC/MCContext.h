@@ -45,6 +45,7 @@ namespace llvm {
   class MCObjectFileInfo;
   class MCRegisterInfo;
   class MCSection;
+  class MCSectionVPE;
   class MCSectionCOFF;
   class MCSectionELF;
   class MCSectionMachO;
@@ -87,6 +88,7 @@ namespace llvm {
     /// objects.
     BumpPtrAllocator Allocator;
 
+    SpecificBumpPtrAllocator<MCSectionVPE> VPEAllocator;
     SpecificBumpPtrAllocator<MCSectionCOFF> COFFAllocator;
     SpecificBumpPtrAllocator<MCSectionELF> ELFAllocator;
     SpecificBumpPtrAllocator<MCSectionMachO> MachOAllocator;
@@ -226,6 +228,28 @@ namespace llvm {
         return UniqueID < Other.UniqueID;
       }
     };
+    
+    struct VPESectionKey {
+      std::string SectionName;
+      StringRef GroupName;
+      int SelectionKey;
+      unsigned UniqueID;
+
+      VPESectionKey(StringRef SectionName, StringRef GroupName,
+                     int SelectionKey, unsigned UniqueID)
+          : SectionName(SectionName), GroupName(GroupName),
+            SelectionKey(SelectionKey), UniqueID(UniqueID) {}
+
+      bool operator<(const VPESectionKey &Other) const {
+        if (SectionName != Other.SectionName)
+          return SectionName < Other.SectionName;
+        if (GroupName != Other.GroupName)
+          return GroupName < Other.GroupName;
+        if (SelectionKey != Other.SelectionKey)
+          return SelectionKey < Other.SelectionKey;
+        return UniqueID < Other.UniqueID;
+      }
+    };
 
     struct WasmSectionKey {
       std::string SectionName;
@@ -249,6 +273,7 @@ namespace llvm {
     StringMap<MCSectionMachO *> MachOUniquingMap;
     std::map<ELFSectionKey, MCSectionELF *> ELFUniquingMap;
     std::map<COFFSectionKey, MCSectionCOFF *> COFFUniquingMap;
+    std::map<VPESectionKey, MCSectionVPE *> VPEUniquingMap;
     std::map<WasmSectionKey, MCSectionWasm *> WasmUniquingMap;
     StringMap<bool> RelSecNames;
 
@@ -448,6 +473,26 @@ namespace llvm {
     /// as Sec and the function symbol as KeySym.
     MCSectionCOFF *
     getAssociativeCOFFSection(MCSectionCOFF *Sec, const MCSymbol *KeySym,
+                              unsigned UniqueID = GenericSectionID);
+                              
+    MCSectionVPE *getVPESection(StringRef Section, unsigned Characteristics,
+                                  SectionKind Kind, StringRef COMDATSymName,
+                                  int Selection,
+                                  unsigned UniqueID = GenericSectionID,
+                                  const char *BeginSymName = nullptr);
+
+    MCSectionVPE *getVPESection(StringRef Section, unsigned Characteristics,
+                                  SectionKind Kind,
+                                  const char *BeginSymName = nullptr);
+
+    MCSectionVPE *getVPESection(StringRef Section);
+
+    /// Gets or creates a section equivalent to Sec that is associated with the
+    /// section containing KeySym. For example, to create a debug info section
+    /// associated with an inline function, pass the normal debug info section
+    /// as Sec and the function symbol as KeySym.
+    MCSectionVPE *
+    getAssociativeVPESection(MCSectionVPE *Sec, const MCSymbol *KeySym,
                               unsigned UniqueID = GenericSectionID);
 
     MCSectionWasm *getWasmSection(const Twine &Section, SectionKind K) {
