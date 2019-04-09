@@ -121,6 +121,13 @@ def WWM : PseudoInstSI <(outs unknown:$vdst), (ins unknown:$src0)>;
 
 } // End let hasSideEffects = 0, mayLoad = 0, mayStore = 0, Uses = [EXEC]
 
+def ENTER_WWM : SPseudoInstSI <(outs SReg_64:$sdst), (ins i64imm:$src0)> {
+  let Defs = [EXEC];
+  let hasSideEffects = 0;
+  let mayLoad = 0;
+  let mayStore = 0;
+}
+
 def EXIT_WWM : SPseudoInstSI <(outs SReg_64:$sdst), (ins SReg_64:$src0)> {
   let hasSideEffects = 0;
   let mayLoad = 0;
@@ -168,27 +175,23 @@ def GET_GROUPSTATICSIZE : SPseudoInstSI <(outs SReg_32:$sdst), (ins),
   [(set SReg_32:$sdst, (int_amdgcn_groupstaticsize))]>;
 } // End let usesCustomInserter = 1, SALU = 1
 
-def S_MOV_B64_term : SPseudoInstSI<(outs SReg_64:$dst),
-   (ins SSrc_b64:$src0)> {
-  let isAsCheapAsAMove = 1;
+// Wrap an instruction by duplicating it, except for setting isTerminator.
+class WrapTerminatorInst<SOP_Pseudo base_inst> : SPseudoInstSI<
+      base_inst.OutOperandList,
+      base_inst.InOperandList> {
+  let Uses = base_inst.Uses;
+  let Defs = base_inst.Defs;
   let isTerminator = 1;
-  let hasSideEffects = 0;
+  let isAsCheapAsAMove = base_inst.isAsCheapAsAMove;
+  let hasSideEffects = base_inst.hasSideEffects;
+  let UseNamedOperandTable = base_inst.UseNamedOperandTable;
+  let CodeSize = base_inst.CodeSize;
 }
 
-def S_XOR_B64_term : SPseudoInstSI<(outs SReg_64:$dst),
-   (ins SSrc_b64:$src0, SSrc_b64:$src1)> {
-  let isAsCheapAsAMove = 1;
-  let isTerminator = 1;
-  let hasSideEffects = 0;
-  let Defs = [SCC];
-}
-
-def S_ANDN2_B64_term : SPseudoInstSI<(outs SReg_64:$dst),
-   (ins SSrc_b64:$src0, SSrc_b64:$src1)> {
-  let isAsCheapAsAMove = 1;
-  let isTerminator = 1;
-  let hasSideEffects = 0;
-}
+def S_MOV_B64_term : WrapTerminatorInst<S_MOV_B64>;
+def S_OR_B64_term : WrapTerminatorInst<S_OR_B64>;
+def S_XOR_B64_term : WrapTerminatorInst<S_XOR_B64>;
+def S_ANDN2_B64_term : WrapTerminatorInst<S_ANDN2_B64>;
 
 def WAVE_BARRIER : SPseudoInstSI<(outs), (ins),
   [(int_amdgcn_wave_barrier)]> {
@@ -197,7 +200,6 @@ def WAVE_BARRIER : SPseudoInstSI<(outs), (ins),
   let hasSideEffects = 1;
   let mayLoad = 1;
   let mayStore = 1;
-  let isBarrier = 1;
   let isConvergent = 1;
   let FixedSize = 1;
   let Size = 0;
@@ -1612,7 +1614,7 @@ def : GCNPat <
 // Fract Patterns
 //===----------------------------------------------------------------------===//
 
-let SubtargetPredicate = isSI in {
+let SubtargetPredicate = isGFX6 in {
 
 // V_FRACT is buggy on SI, so the F32 version is never used and (x-floor(x)) is
 // used instead. However, SI doesn't have V_FLOOR_F64, so the most efficient
@@ -1639,7 +1641,7 @@ def : GCNPat <
       DSTCLAMP.NONE, DSTOMOD.NONE)
 >;
 
-} // End SubtargetPredicates = isSI
+} // End SubtargetPredicates = isGFX6
 
 //============================================================================//
 // Miscellaneous Optimization Patterns
@@ -1723,8 +1725,8 @@ multiclass Int16Med3Pat<Instruction med3Inst,
 
 def : FPMed3Pat<f32, V_MED3_F32>;
 
-let OtherPredicates = [isGFX9] in {
+let OtherPredicates = [isGFX9Plus] in {
 def : FP16Med3Pat<f16, V_MED3_F16>;
 defm : Int16Med3Pat<V_MED3_I16, smin, smax, smax_oneuse, smin_oneuse>;
 defm : Int16Med3Pat<V_MED3_U16, umin, umax, umax_oneuse, umin_oneuse>;
-} // End Predicates = [isGFX9]
+} // End Predicates = [isGFX9Plus]

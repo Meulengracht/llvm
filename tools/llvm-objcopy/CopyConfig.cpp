@@ -8,7 +8,6 @@
 
 #include "CopyConfig.h"
 
-#include "llvm/ADT/BitmaskEnum.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -91,43 +90,26 @@ public:
   StripOptTable() : OptTable(StripInfoTable) {}
 };
 
-enum SectionFlag {
-  SecNone = 0,
-  SecAlloc = 1 << 0,
-  SecLoad = 1 << 1,
-  SecNoload = 1 << 2,
-  SecReadonly = 1 << 3,
-  SecDebug = 1 << 4,
-  SecCode = 1 << 5,
-  SecData = 1 << 6,
-  SecRom = 1 << 7,
-  SecMerge = 1 << 8,
-  SecStrings = 1 << 9,
-  SecContents = 1 << 10,
-  SecShare = 1 << 11,
-  LLVM_MARK_AS_BITMASK_ENUM(/* LargestValue = */ SecShare)
-};
-
 } // namespace
 
 static SectionFlag parseSectionRenameFlag(StringRef SectionName) {
   return llvm::StringSwitch<SectionFlag>(SectionName)
-      .Case("alloc", SectionFlag::SecAlloc)
-      .Case("load", SectionFlag::SecLoad)
-      .Case("noload", SectionFlag::SecNoload)
-      .Case("readonly", SectionFlag::SecReadonly)
-      .Case("debug", SectionFlag::SecDebug)
-      .Case("code", SectionFlag::SecCode)
-      .Case("data", SectionFlag::SecData)
-      .Case("rom", SectionFlag::SecRom)
-      .Case("merge", SectionFlag::SecMerge)
-      .Case("strings", SectionFlag::SecStrings)
-      .Case("contents", SectionFlag::SecContents)
-      .Case("share", SectionFlag::SecShare)
+      .CaseLower("alloc", SectionFlag::SecAlloc)
+      .CaseLower("load", SectionFlag::SecLoad)
+      .CaseLower("noload", SectionFlag::SecNoload)
+      .CaseLower("readonly", SectionFlag::SecReadonly)
+      .CaseLower("debug", SectionFlag::SecDebug)
+      .CaseLower("code", SectionFlag::SecCode)
+      .CaseLower("data", SectionFlag::SecData)
+      .CaseLower("rom", SectionFlag::SecRom)
+      .CaseLower("merge", SectionFlag::SecMerge)
+      .CaseLower("strings", SectionFlag::SecStrings)
+      .CaseLower("contents", SectionFlag::SecContents)
+      .CaseLower("share", SectionFlag::SecShare)
       .Default(SectionFlag::SecNone);
 }
 
-static Expected<uint64_t>
+static Expected<SectionFlag>
 parseSectionFlagSet(ArrayRef<StringRef> SectionFlags) {
   SectionFlag ParsedFlags = SectionFlag::SecNone;
   for (StringRef Flag : SectionFlags) {
@@ -142,18 +124,7 @@ parseSectionFlagSet(ArrayRef<StringRef> SectionFlags) {
     ParsedFlags |= ParsedFlag;
   }
 
-  uint64_t NewFlags = 0;
-  if (ParsedFlags & SectionFlag::SecAlloc)
-    NewFlags |= ELF::SHF_ALLOC;
-  if (!(ParsedFlags & SectionFlag::SecReadonly))
-    NewFlags |= ELF::SHF_WRITE;
-  if (ParsedFlags & SectionFlag::SecCode)
-    NewFlags |= ELF::SHF_EXECINSTR;
-  if (ParsedFlags & SectionFlag::SecMerge)
-    NewFlags |= ELF::SHF_MERGE;
-  if (ParsedFlags & SectionFlag::SecStrings)
-    NewFlags |= ELF::SHF_STRINGS;
-  return NewFlags;
+  return ParsedFlags;
 }
 
 static Expected<SectionRename> parseRenameSectionValue(StringRef FlagValue) {
@@ -172,7 +143,7 @@ static Expected<SectionRename> parseRenameSectionValue(StringRef FlagValue) {
   SR.NewName = NameAndFlags[0];
 
   if (NameAndFlags.size() > 1) {
-    Expected<uint64_t> ParsedFlagSet =
+    Expected<SectionFlag> ParsedFlagSet =
         parseSectionFlagSet(makeArrayRef(NameAndFlags).drop_front());
     if (!ParsedFlagSet)
       return ParsedFlagSet.takeError();
@@ -196,7 +167,7 @@ parseSetSectionFlagValue(StringRef FlagValue) {
   // Flags split: "f1" "f2" ...
   SmallVector<StringRef, 6> SectionFlags;
   Section2Flags.second.split(SectionFlags, ',');
-  Expected<uint64_t> ParsedFlagSet = parseSectionFlagSet(SectionFlags);
+  Expected<SectionFlag> ParsedFlagSet = parseSectionFlagSet(SectionFlags);
   if (!ParsedFlagSet)
     return ParsedFlagSet.takeError();
   SFU.NewFlags = *ParsedFlagSet;
@@ -625,6 +596,10 @@ Expected<DriverConfig> parseObjcopyOptions(ArrayRef<const char *> ArgsArr) {
       return std::move(E);
   for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbol))
     Config.SymbolsToKeep.emplace_back(Arg->getValue(), UseRegex);
+  for (auto Arg : InputArgs.filtered(OBJCOPY_keep_symbols))
+    if (Error E = addSymbolsFromFile(Config.SymbolsToKeep, DC.Alloc,
+                                     Arg->getValue(), UseRegex))
+      return std::move(E);
   for (auto Arg : InputArgs.filtered(OBJCOPY_add_symbol)) {
     Expected<NewSymbolInfo> NSI = parseNewSymbolInfo(Arg->getValue());
     if (!NSI)

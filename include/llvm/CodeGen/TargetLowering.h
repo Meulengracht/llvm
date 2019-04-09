@@ -953,12 +953,10 @@ public:
   /// getEstimatedNumberOfCaseClusters() in BasicTTIImpl.
   virtual bool isSuitableForJumpTable(const SwitchInst *SI, uint64_t NumCases,
                                       uint64_t Range) const {
-    const bool OptForSize = SI->getParent()->getParent()->optForSize();
+    const bool OptForSize = SI->getParent()->getParent()->hasOptSize();
     const unsigned MinDensity = getMinimumJumpTableDensity(OptForSize);
     const unsigned MaxJumpTableSize =
-        OptForSize || getMaximumJumpTableSize() == 0
-            ? UINT_MAX
-            : getMaximumJumpTableSize();
+        OptForSize ? UINT_MAX : getMaximumJumpTableSize();
     // Check whether a range of clusters is dense enough for a jump table.
     if (Range <= MaxJumpTableSize &&
         (NumCases * 100 >= Range * MinDensity)) {
@@ -2440,6 +2438,14 @@ public:
   /// Try to convert an extract element of a vector binary operation into an
   /// extract element followed by a scalar operation.
   virtual bool shouldScalarizeBinop(SDValue VecOp) const {
+    return false;
+  }
+
+  /// Return true if extraction of a scalar element from the given vector type
+  /// at the given index is cheap. For example, if scalar operations occur on
+  /// the same register file as vector operations, then an extract element may
+  /// be a sub-register rename rather than an actual instruction.
+  virtual bool isExtractVecEltCheap(EVT VT, unsigned Index) const {
     return false;
   }
 

@@ -187,7 +187,8 @@ private:
   DynRegionInfo checkDRI(DynRegionInfo DRI) {
     const ELFFile<ELFT> *Obj = ObjF->getELFFile();
     if (DRI.Addr < Obj->base() ||
-        (const uint8_t *)DRI.Addr + DRI.Size > Obj->base() + Obj->getBufSize())
+        reinterpret_cast<const uint8_t *>(DRI.Addr) + DRI.Size >
+            Obj->base() + Obj->getBufSize())
       error(llvm::object::object_error::parse_failed);
     return DRI;
   }
@@ -228,9 +229,9 @@ private:
   StringRef DynSymtabName;
   ArrayRef<Elf_Word> ShndxTable;
 
-  const Elf_Shdr *dot_gnu_version_sec = nullptr;   // .gnu.version
-  const Elf_Shdr *dot_gnu_version_r_sec = nullptr; // .gnu.version_r
-  const Elf_Shdr *dot_gnu_version_d_sec = nullptr; // .gnu.version_d
+  const Elf_Shdr *SymbolVersionSection = nullptr;   // .gnu.version
+  const Elf_Shdr *SymbolVersionNeedSection = nullptr; // .gnu.version_r
+  const Elf_Shdr *SymbolVersionDefSection = nullptr; // .gnu.version_d
 
   // Records for each version index the corresponding Verdef or Vernaux entry.
   // This is filled the first time LoadVersionMap() is called.
@@ -274,6 +275,9 @@ public:
                            StringRef &SectionName,
                            unsigned &SectionIndex) const;
   std::string getStaticSymbolName(uint32_t Index) const;
+  StringRef getSymbolVersionByIndex(StringRef StrTab,
+                                    uint32_t VersionSymbolIndex,
+                                    bool &IsDefault) const;
 
   void printSymbolsHelper(bool IsDynamic) const;
   const Elf_Shdr *getDotSymtabSec() const { return DotSymtabSec; }
@@ -452,6 +456,8 @@ private:
   void printRelocHeader(unsigned SType);
   void printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                        const Elf_Rela &R, bool IsRela);
+  void printRelocation(const ELFO *Obj, const Elf_Sym *Sym,
+                       StringRef SymbolName, const Elf_Rela &R, bool IsRela);
   void printSymbol(const ELFO *Obj, const Elf_Sym *Symbol, const Elf_Sym *First,
                    StringRef StrTable, bool IsDynamic) override;
   std::string getSymbolSectionNdx(const ELFO *Obj, const Elf_Sym *Symbol,
@@ -551,7 +557,8 @@ template <class ELFT>
 void ELFDumper<ELFT>::LoadVersionNeeds(const Elf_Shdr *sec) const {
   unsigned vn_size = sec->sh_size;  // Size of section in bytes
   unsigned vn_count = sec->sh_info; // Number of Verneed entries
-  const char *sec_start = (const char *)ObjF->getELFFile()->base() + sec->sh_offset;
+  const char *sec_start = reinterpret_cast<const char *>(
+      ObjF->getELFFile()->base() + sec->sh_offset);
   const char *sec_end = sec_start + vn_size;
   // The first Verneed entry is at the start of the section.
   const char *p = sec_start;
@@ -585,7 +592,8 @@ template <class ELFT>
 void ELFDumper<ELFT>::LoadVersionDefs(const Elf_Shdr *sec) const {
   unsigned vd_size = sec->sh_size;  // Size of section in bytes
   unsigned vd_count = sec->sh_info; // Number of Verdef entries
-  const char *sec_start = (const char *)ObjF->getELFFile()->base() + sec->sh_offset;
+  const char *sec_start = reinterpret_cast<const char *>(
+      ObjF->getELFFile()->base() + sec->sh_offset);
   const char *sec_end = sec_start + vd_size;
   // The first Verdef entry is at the start of the section.
   const char *p = sec_start;
@@ -606,7 +614,7 @@ void ELFDumper<ELFT>::LoadVersionDefs(const Elf_Shdr *sec) const {
 
 template <class ELFT> void ELFDumper<ELFT>::LoadVersionMap() const {
   // If there is no dynamic symtab or version table, there is nothing to do.
-  if (!DynSymRegion.Addr || !dot_gnu_version_sec)
+  if (!DynSymRegion.Addr || !SymbolVersionSection)
     return;
 
   // Has the VersionMap already been loaded?
@@ -618,60 +626,34 @@ template <class ELFT> void ELFDumper<ELFT>::LoadVersionMap() const {
   VersionMap.push_back(VersionMapEntry());
   VersionMap.push_back(VersionMapEntry());
 
-  if (dot_gnu_version_d_sec)
-    LoadVersionDefs(dot_gnu_version_d_sec);
+  if (SymbolVersionDefSection)
+    LoadVersionDefs(SymbolVersionDefSection);
 
-  if (dot_gnu_version_r_sec)
-    LoadVersionNeeds(dot_gnu_version_r_sec);
+  if (SymbolVersionNeedSection)
+    LoadVersionNeeds(SymbolVersionNeedSection);
 }
 
 template <typename ELFT>
 StringRef ELFDumper<ELFT>::getSymbolVersion(StringRef StrTab,
-                                            const Elf_Sym *symb,
+                                            const Elf_Sym *Sym,
                                             bool &IsDefault) const {
   // This is a dynamic symbol. Look in the GNU symbol version table.
-  if (!dot_gnu_version_sec) {
+  if (!SymbolVersionSection) {
     // No version table.
     IsDefault = false;
-    return StringRef("");
+    return "";
   }
 
   // Determine the position in the symbol table of this entry.
-  size_t entry_index = (reinterpret_cast<uintptr_t>(symb) -
+  size_t EntryIndex = (reinterpret_cast<uintptr_t>(Sym) -
                         reinterpret_cast<uintptr_t>(DynSymRegion.Addr)) /
                        sizeof(Elf_Sym);
 
-  // Get the corresponding version index entry
-  const Elf_Versym *vs = unwrapOrError(
-      ObjF->getELFFile()->template getEntry<Elf_Versym>(dot_gnu_version_sec, entry_index));
-  size_t version_index = vs->vs_index & ELF::VERSYM_VERSION;
-
-  // Special markers for unversioned symbols.
-  if (version_index == ELF::VER_NDX_LOCAL ||
-      version_index == ELF::VER_NDX_GLOBAL) {
-    IsDefault = false;
-    return StringRef("");
-  }
-
-  // Lookup this symbol in the version table
-  LoadVersionMap();
-  if (version_index >= VersionMap.size() || VersionMap[version_index].isNull())
-    reportError("Invalid version entry");
-  const VersionMapEntry &entry = VersionMap[version_index];
-
-  // Get the version name string
-  size_t name_offset;
-  if (entry.isVerdef()) {
-    // The first Verdaux entry holds the name.
-    name_offset = entry.getVerdef()->getAux()->vda_name;
-    IsDefault = !(vs->vs_index & ELF::VERSYM_HIDDEN);
-  } else {
-    name_offset = entry.getVernaux()->vna_name;
-    IsDefault = false;
-  }
-  if (name_offset >= StrTab.size())
-    reportError("Invalid string offset");
-  return StringRef(StrTab.data() + name_offset);
+  // Get the corresponding version index entry.
+  const Elf_Versym *Versym =
+      unwrapOrError(ObjF->getELFFile()->template getEntry<Elf_Versym>(
+          SymbolVersionSection, EntryIndex));
+  return this->getSymbolVersionByIndex(StrTab, Versym->vs_index, IsDefault);
 }
 
 static std::string maybeDemangle(StringRef Name) {
@@ -687,6 +669,39 @@ std::string ELFDumper<ELFT>::getStaticSymbolName(uint32_t Index) const {
     reportError("Invalid symbol index");
   const Elf_Sym *Sym = &Syms[Index];
   return maybeDemangle(unwrapOrError(Sym->getName(StrTable)));
+}
+
+template <typename ELFT>
+StringRef ELFDumper<ELFT>::getSymbolVersionByIndex(
+    StringRef StrTab, uint32_t SymbolVersionIndex, bool &IsDefault) const {
+  size_t VersionIndex = SymbolVersionIndex & VERSYM_VERSION;
+
+  // Special markers for unversioned symbols.
+  if (VersionIndex == VER_NDX_LOCAL ||
+      VersionIndex == VER_NDX_GLOBAL) {
+    IsDefault = false;
+    return "";
+  }
+
+  // Lookup this symbol in the version table.
+  LoadVersionMap();
+  if (VersionIndex >= VersionMap.size() || VersionMap[VersionIndex].isNull())
+    reportError("Invalid version entry");
+  const VersionMapEntry &Entry = VersionMap[VersionIndex];
+
+  // Get the version name string.
+  size_t NameOffset;
+  if (Entry.isVerdef()) {
+    // The first Verdaux entry holds the name.
+    NameOffset = Entry.getVerdef()->getAux()->vda_name;
+    IsDefault = !(SymbolVersionIndex & VERSYM_HIDDEN);
+  } else {
+    NameOffset = Entry.getVernaux()->vna_name;
+    IsDefault = false;
+  }
+  if (NameOffset >= StrTab.size())
+    reportError("Invalid string offset");
+  return StrTab.data() + NameOffset;
 }
 
 template <typename ELFT>
@@ -1341,19 +1356,19 @@ ELFDumper<ELFT>::ELFDumper(const object::ELFObjectFile<ELFT> *ObjF,
       ShndxTable = unwrapOrError(Obj->getSHNDXTable(Sec));
       break;
     case ELF::SHT_GNU_versym:
-      if (dot_gnu_version_sec != nullptr)
+      if (SymbolVersionSection != nullptr)
         reportError("Multiple SHT_GNU_versym");
-      dot_gnu_version_sec = &Sec;
+      SymbolVersionSection = &Sec;
       break;
     case ELF::SHT_GNU_verdef:
-      if (dot_gnu_version_d_sec != nullptr)
+      if (SymbolVersionDefSection != nullptr)
         reportError("Multiple SHT_GNU_verdef");
-      dot_gnu_version_d_sec = &Sec;
+      SymbolVersionDefSection = &Sec;
       break;
     case ELF::SHT_GNU_verneed:
-      if (dot_gnu_version_r_sec != nullptr)
+      if (SymbolVersionNeedSection != nullptr)
         reportError("Multiple SHT_GNU_verneed");
-      dot_gnu_version_r_sec = &Sec;
+      SymbolVersionNeedSection = &Sec;
       break;
     case ELF::SHT_LLVM_CALL_GRAPH_PROFILE:
       if (DotCGProfileSec != nullptr)
@@ -1400,7 +1415,8 @@ void ELFDumper<ELFT>::parseDynamicTable(
           reinterpret_cast<const Elf_GnuHash *>(toMappedAddr(Dyn.getPtr()));
       break;
     case ELF::DT_STRTAB:
-      StringTableBegin = (const char *)toMappedAddr(Dyn.getPtr());
+      StringTableBegin =
+          reinterpret_cast<const char *>(toMappedAddr(Dyn.getPtr()));
       break;
     case ELF::DT_STRSZ:
       StringTableSize = Dyn.getVal();
@@ -1505,15 +1521,15 @@ void ELFDumper<ELFT>::printProgramHeaders(
 template <typename ELFT> void ELFDumper<ELFT>::printVersionInfo() {
   // Dump version symbol section.
   ELFDumperStyle->printVersionSymbolSection(ObjF->getELFFile(),
-                                            dot_gnu_version_sec);
+                                            SymbolVersionSection);
 
   // Dump version definition section.
   ELFDumperStyle->printVersionDefinitionSection(ObjF->getELFFile(),
-                                                dot_gnu_version_d_sec);
+                                                SymbolVersionDefSection);
 
   // Dump version dependency section.
   ELFDumperStyle->printVersionDependencySection(ObjF->getELFFile(),
-                                                dot_gnu_version_r_sec);
+                                                SymbolVersionNeedSection);
 }
 
 template <class ELFT> void ELFDumper<ELFT>::printDynamicRelocations() {
@@ -2592,12 +2608,6 @@ template <class ELFT> void GNUStyle<ELFT>::printGroupSections(const ELFO *Obj) {
 template <class ELFT>
 void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
                                      const Elf_Rela &R, bool IsRela) {
-  // First two fields are bit width dependent. The rest of them are after are
-  // fixed width.
-  unsigned Bias = ELFT::Is64Bits ? 8 : 0;
-  Field Fields[5] = {0, 10 + Bias, 19 + 2 * Bias, 42 + 2 * Bias, 53 + 2 * Bias};
-  SmallString<32> RelocName;
-  Obj->getRelocationTypeName(R.getType(Obj->isMips64EL()), RelocName);
   const Elf_Sym *Sym = unwrapOrError(Obj->getRelocationSymbol(&R, SymTab));
   std::string TargetName;
   if (Sym && Sym->getType() == ELF::STT_SECTION) {
@@ -2609,21 +2619,36 @@ void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Shdr *SymTab,
     TargetName = this->dumper()->getFullSymbolName(
         Sym, StrTable, SymTab->sh_type == SHT_DYNSYM /* IsDynamic */);
   }
+  printRelocation(Obj, Sym, TargetName, R, IsRela);
+}
 
+template <class ELFT>
+void GNUStyle<ELFT>::printRelocation(const ELFO *Obj, const Elf_Sym *Sym,
+                                     StringRef SymbolName, const Elf_Rela &R,
+                                     bool IsRela) {
+  // First two fields are bit width dependent. The rest of them are fixed width.
+  unsigned Bias = ELFT::Is64Bits ? 8 : 0;
+  Field Fields[5] = {0, 10 + Bias, 19 + 2 * Bias, 42 + 2 * Bias, 53 + 2 * Bias};
   unsigned Width = ELFT::Is64Bits ? 16 : 8;
+
   Fields[0].Str = to_string(format_hex_no_prefix(R.r_offset, Width));
   Fields[1].Str = to_string(format_hex_no_prefix(R.r_info, Width));
-  Fields[2].Str = RelocName.str();
-  if (Sym)
+
+  SmallString<32> RelocName;
+  Obj->getRelocationTypeName(R.getType(Obj->isMips64EL()), RelocName);
+  Fields[2].Str = RelocName.c_str();
+
+  if (Sym && (!SymbolName.empty() || Sym->getValue() != 0))
     Fields[3].Str = to_string(format_hex_no_prefix(Sym->getValue(), Width));
-  Fields[4].Str = TargetName;
-  for (auto &F : Fields)
+
+  Fields[4].Str = SymbolName;
+  for (const Field &F : Fields)
     printField(F);
 
   std::string Addend;
   if (IsRela) {
     int64_t RelAddend = R.r_addend;
-    if (Sym) {
+    if (!SymbolName.empty()) {
       if (R.r_addend < 0) {
         Addend = " - ";
         RelAddend = std::abs(RelAddend);
@@ -3257,44 +3282,11 @@ void GNUStyle<ELFT>::printSectionMapping(const ELFO *Obj) {
 template <class ELFT>
 void GNUStyle<ELFT>::printDynamicRelocation(const ELFO *Obj, Elf_Rela R,
                                             bool IsRela) {
-  unsigned Bias = ELFT::Is64Bits ? 8 : 0;
-  // First two fields are bit width dependent. The rest of them are after are
-  // fixed width.
-  Field Fields[5] = {0, 10 + Bias, 19 + 2 * Bias, 42 + 2 * Bias, 53 + 2 * Bias};
-
-  unsigned Width = ELFT::Is64Bits ? 16 : 8;
-  Fields[0].Str = to_string(format_hex_no_prefix(R.r_offset, Width));
-  Fields[1].Str = to_string(format_hex_no_prefix(R.r_info, Width));
-
   uint32_t SymIndex = R.getSymbol(Obj->isMips64EL());
   const Elf_Sym *Sym = this->dumper()->dynamic_symbols().begin() + SymIndex;
-  SmallString<32> RelocName;
-  Obj->getRelocationTypeName(R.getType(Obj->isMips64EL()), RelocName);
-  Fields[2].Str = RelocName.c_str();
-
   std::string SymbolName = maybeDemangle(
       unwrapOrError(Sym->getName(this->dumper()->getDynamicStringTable())));
-
-  if (!SymbolName.empty() || Sym->getValue() != 0)
-    Fields[3].Str = to_string(format_hex_no_prefix(Sym->getValue(), Width));
-
-  Fields[4].Str = SymbolName;
-  for (auto &Field : Fields)
-    printField(Field);
-
-  std::string Addend;
-  if (IsRela) {
-    int64_t RelAddend = R.r_addend;
-    if (!SymbolName.empty()) {
-      if (R.r_addend < 0) {
-        Addend = " - ";
-        RelAddend = std::abs(RelAddend);
-      } else
-        Addend = " + ";
-    }
-    Addend += to_string(format_hex_no_prefix(RelAddend, 1));
-  }
-  OS << Addend << "\n";
+  printRelocation(Obj, Sym, SymbolName, R, IsRela);
 }
 
 template <class ELFT>
@@ -3367,7 +3359,57 @@ void GNUStyle<ELFT>::printVersionSymbolSection(const ELFFile<ELFT> *Obj,
     return;
 
   StringRef SecName = unwrapOrError(Obj->getSectionName(Sec));
-  OS << "Dumper for " << SecName << " is not implemented\n";
+  uint64_t Entries = Sec->sh_size / sizeof(Elf_Versym);
+
+  OS << "Version symbols section '" << SecName << "' "
+     << "contains " << Entries << " entries:\n";
+
+  const Elf_Shdr *SymTab = unwrapOrError(Obj->getSection(Sec->sh_link));
+  StringRef SymTabName = unwrapOrError(Obj->getSectionName(SymTab));
+  OS << " Addr: " << format_hex_no_prefix(Sec->sh_addr, 16)
+     << "  Offset: " << format_hex(Sec->sh_offset, 8)
+     << "  Link: " << Sec->sh_link << " (" << SymTabName << ")\n";
+
+  const uint8_t *VersymBuf =
+      reinterpret_cast<const uint8_t *>(Obj->base() + Sec->sh_offset);
+  const ELFDumper<ELFT> *Dumper = this->dumper();
+  StringRef StrTable = Dumper->getDynamicStringTable();
+
+  // readelf prints 4 entries per line.
+  for (uint64_t VersymRow = 0; VersymRow < Entries; VersymRow += 4) {
+    OS << "  " << format_hex_no_prefix(VersymRow, 3) << ":";
+
+    for (uint64_t VersymIndex = 0;
+         (VersymIndex < 4) && (VersymIndex + VersymRow) < Entries;
+         ++VersymIndex) {
+      const Elf_Versym *Versym =
+          reinterpret_cast<const Elf_Versym *>(VersymBuf);
+      switch (Versym->vs_index) {
+      case 0:
+        OS << "   0 (*local*)    ";
+        break;
+      case 1:
+        OS << "   1 (*global*)   ";
+        break;
+      default:
+        OS << format("%4x%c", Versym->vs_index & VERSYM_VERSION,
+                     Versym->vs_index & VERSYM_HIDDEN ? 'h' : ' ');
+
+        bool IsDefault = true;
+        std::string VersionName = Dumper->getSymbolVersionByIndex(
+            StrTable, Versym->vs_index, IsDefault);
+
+        if (!VersionName.empty())
+          VersionName = "(" + VersionName + ")";
+        else
+          VersionName = "(*invalid*)";
+        OS << left_justify(VersionName, 13);
+      }
+      VersymBuf += sizeof(Elf_Versym);
+    }
+    OS << '\n';
+  }
+  OS << '\n';
 }
 
 template <class ELFT>
@@ -3499,6 +3541,24 @@ void GNUStyle<ELFT>::printCGProfile(const ELFFile<ELFT> *Obj) {
 template <class ELFT>
 void GNUStyle<ELFT>::printAddrsig(const ELFFile<ELFT> *Obj) {
     OS << "GNUStyle::printAddrsig not implemented\n";
+}
+
+static StringRef getGenericNoteTypeName(const uint32_t NT) {
+  static const struct {
+    uint32_t ID;
+    const char *Name;
+  } Notes[] = {
+      {ELF::NT_VERSION, "NT_VERSION (version)"},
+      {ELF::NT_ARCH, "NT_ARCH (architecture)"},
+      {ELF::NT_GNU_BUILD_ATTRIBUTE_OPEN, "OPEN"},
+      {ELF::NT_GNU_BUILD_ATTRIBUTE_FUNC, "func"},
+  };
+
+  for (const auto &Note : Notes)
+    if (Note.ID == NT)
+      return Note.Name;
+
+  return "";
 }
 
 static std::string getGNUNoteTypeName(const uint32_t NT) {
@@ -3889,7 +3949,11 @@ void GNUStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
       if (!N.Type.empty())
         OS << "    " << N.Type << ":\n        " << N.Value << '\n';
     } else {
-      OS << "Unknown note type: (" << format_hex(Type, 10) << ')';
+      StringRef NoteType = getGenericNoteTypeName(Type);
+      if (!NoteType.empty())
+        OS << NoteType;
+      else
+        OS << "Unknown note type: (" << format_hex(Type, 10) << ')';
     }
     OS << '\n';
   };
@@ -4302,8 +4366,9 @@ void LLVMStyle<ELFT>::printSectionHeaders(const ELFO *Obj) {
 
     if (opts::SectionData && Sec.sh_type != ELF::SHT_NOBITS) {
       ArrayRef<uint8_t> Data = unwrapOrError(Obj->getSectionContents(&Sec));
-      W.printBinaryBlock("SectionData",
-                         StringRef((const char *)Data.data(), Data.size()));
+      W.printBinaryBlock(
+          "SectionData",
+          StringRef(reinterpret_cast<const char *>(Data.data()), Data.size()));
     }
   }
 }
@@ -4481,7 +4546,8 @@ void LLVMStyle<ELFT>::printVersionSymbolSection(const ELFFile<ELFT> *Obj,
   W.printHex("Offset", Sec->sh_offset);
   W.printNumber("Link", Sec->sh_link);
 
-  const uint8_t *VersymBuf = (const uint8_t *)Obj->base() + Sec->sh_offset;
+  const uint8_t *VersymBuf =
+      reinterpret_cast<const uint8_t *>(Obj->base() + Sec->sh_offset);
   const ELFDumper<ELFT> *Dumper = this->dumper();
   StringRef StrTable = Dumper->getDynamicStringTable();
 
@@ -4506,7 +4572,7 @@ void LLVMStyle<ELFT>::printVersionDefinitionSection(const ELFFile<ELFT> *Obj,
     return;
 
   const uint8_t *SecStartAddress =
-      (const uint8_t *)Obj->base() + Sec->sh_offset;
+      reinterpret_cast<const uint8_t *>(Obj->base() + Sec->sh_offset);
   const uint8_t *SecEndAddress = SecStartAddress + Sec->sh_size;
   const uint8_t *VerdefBuf = SecStartAddress;
   const Elf_Shdr *StrTab = unwrapOrError(Obj->getSection(Sec->sh_link));
@@ -4524,9 +4590,9 @@ void LLVMStyle<ELFT>::printVersionDefinitionSection(const ELFFile<ELFT> *Obj,
     W.printEnum("Flags", Verdef->vd_flags, makeArrayRef(SymVersionFlags));
     W.printNumber("Index", Verdef->vd_ndx);
     W.printNumber("Hash", Verdef->vd_hash);
-    W.printString("Name",
-                  StringRef((const char *)(Obj->base() + StrTab->sh_offset +
-                                           Verdef->getAux()->vda_name)));
+    W.printString("Name", StringRef(reinterpret_cast<const char *>(
+                              Obj->base() + StrTab->sh_offset +
+                              Verdef->getAux()->vda_name)));
     if (!Verdef->vd_cnt)
       report_fatal_error("at least one definition string must exist");
     if (Verdef->vd_cnt > 2)
@@ -4538,8 +4604,8 @@ void LLVMStyle<ELFT>::printVersionDefinitionSection(const ELFFile<ELFT> *Obj,
       const Elf_Verdaux *Verdaux =
           reinterpret_cast<const Elf_Verdaux *>(VerdauxBuf);
       W.printString("Predecessor",
-                    StringRef((const char *)(Obj->base() + StrTab->sh_offset +
-                                             Verdaux->vda_name)));
+                    StringRef(reinterpret_cast<const char *>(
+                        Obj->base() + StrTab->sh_offset + Verdaux->vda_name)));
     }
     VerdefBuf += Verdef->vd_next;
   }
@@ -4552,7 +4618,8 @@ void LLVMStyle<ELFT>::printVersionDependencySection(const ELFFile<ELFT> *Obj,
   if (!Sec)
     return;
 
-  const uint8_t *SecData = (const uint8_t *)Obj->base() + Sec->sh_offset;
+  const uint8_t *SecData =
+      reinterpret_cast<const uint8_t *>(Obj->base() + Sec->sh_offset);
   const Elf_Shdr *StrTab = unwrapOrError(Obj->getSection(Sec->sh_link));
 
   const uint8_t *VerneedBuf = SecData;
@@ -4564,8 +4631,8 @@ void LLVMStyle<ELFT>::printVersionDependencySection(const ELFFile<ELFT> *Obj,
     W.printNumber("Version", Verneed->vn_version);
     W.printNumber("Count", Verneed->vn_cnt);
     W.printString("FileName",
-                  StringRef((const char *)(Obj->base() + StrTab->sh_offset +
-                                           Verneed->vn_file)));
+                  StringRef(reinterpret_cast<const char *>(
+                      Obj->base() + StrTab->sh_offset + Verneed->vn_file)));
 
     const uint8_t *VernauxBuf = VerneedBuf + Verneed->vn_aux;
     for (unsigned J = 0; J < Verneed->vn_cnt; ++J) {
@@ -4576,8 +4643,8 @@ void LLVMStyle<ELFT>::printVersionDependencySection(const ELFFile<ELFT> *Obj,
       W.printEnum("Flags", Vernaux->vna_flags, makeArrayRef(SymVersionFlags));
       W.printNumber("Index", Vernaux->vna_other);
       W.printString("Name",
-                    StringRef((const char *)(Obj->base() + StrTab->sh_offset +
-                                             Vernaux->vna_name)));
+                    StringRef(reinterpret_cast<const char *>(
+                        Obj->base() + StrTab->sh_offset + Vernaux->vna_name)));
       VernauxBuf += Vernaux->vna_next;
     }
     VerneedBuf += Verneed->vn_next;
@@ -4694,7 +4761,12 @@ void LLVMStyle<ELFT>::printNotes(const ELFFile<ELFT> *Obj) {
       if (!N.Type.empty())
         W.printString(N.Type, N.Value);
     } else {
-      W.getOStream() << "Unknown note type: (" << format_hex(Type, 10) << ')';
+      StringRef NoteType = getGenericNoteTypeName(Type);
+      if (!NoteType.empty())
+        W.printString("Type", NoteType);
+      else
+        W.printString("Type",
+                      "Unknown (" + to_string(format_hex(Type, 10)) + ")");
     }
   };
 

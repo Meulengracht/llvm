@@ -226,6 +226,8 @@ private:
   /// multi-case switch statements.
   struct CaseBlock {
     // The condition code to use for the case block's setcc node.
+    // Besides the integer condition codes, this can also be SETTRUE, in which
+    // case no comparison gets emitted.
     ISD::CondCode CC;
 
     // The LHS/MHS/RHS of the comparison to emit.
@@ -278,11 +280,12 @@ private:
     const Value *SValue;
     MachineBasicBlock *HeaderBB;
     bool Emitted;
+    bool OmitRangeCheck;
 
     JumpTableHeader(APInt F, APInt L, const Value *SV, MachineBasicBlock *H,
                     bool E = false)
         : First(std::move(F)), Last(std::move(L)), SValue(SV), HeaderBB(H),
-          Emitted(E) {}
+          Emitted(E), OmitRangeCheck(false) {}
   };
   using JumpTableBlock = std::pair<JumpTableHeader, JumpTable>;
 

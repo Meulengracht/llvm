@@ -729,6 +729,18 @@ WebAssemblyTargetLowering::LowerCall(CallLoweringInfo &CLI,
     FINode = DAG.getIntPtrConstant(0, DL);
   }
 
+  if (Callee->getOpcode() == ISD::GlobalAddress) {
+    // If the callee is a GlobalAddress node (quite common, every direct call
+    // is) turn it into a TargetGlobalAddress node so that LowerGlobalAddress
+    // doesn't at MO_GOT which is not needed for direct calls.
+    GlobalAddressSDNode* GA = cast<GlobalAddressSDNode>(Callee);
+    Callee = DAG.getTargetGlobalAddress(GA->getGlobal(), DL,
+                                        getPointerTy(DAG.getDataLayout()),
+                                        GA->getOffset());
+    Callee = DAG.getNode(WebAssemblyISD::Wrapper, DL,
+                         getPointerTy(DAG.getDataLayout()), Callee);
+  }
+
   // Compute the operands for the CALLn node.
   SmallVector<SDValue, 16> Ops;
   Ops.push_back(Chain);
@@ -983,9 +995,40 @@ SDValue WebAssemblyTargetLowering::LowerGlobalAddress(SDValue Op,
          "Unexpected target flags on generic GlobalAddressSDNode");
   if (GA->getAddressSpace() != 0)
     fail(DL, DAG, "WebAssembly only expects the 0 address space");
-  return DAG.getNode(
-      WebAssemblyISD::Wrapper, DL, VT,
-      DAG.getTargetGlobalAddress(GA->getGlobal(), DL, VT, GA->getOffset()));
+
+  unsigned OperandFlags = 0;
+  if (isPositionIndependent()) {
+    const GlobalValue *GV = GA->getGlobal();
+    if (getTargetMachine().shouldAssumeDSOLocal(*GV->getParent(), GV)) {
+      MachineFunction &MF = DAG.getMachineFunction();
+      MVT PtrVT = getPointerTy(MF.getDataLayout());
+      const char *BaseName;
+      if (GV->getValueType()->isFunctionTy()) {
+        BaseName = MF.createExternalSymbolName("__table_base");
+        OperandFlags = WebAssemblyII::MO_TABLE_BASE_REL;
+      }
+      else {
+        BaseName = MF.createExternalSymbolName("__memory_base");
+        OperandFlags = WebAssemblyII::MO_MEMORY_BASE_REL;
+      }
+      SDValue BaseAddr =
+          DAG.getNode(WebAssemblyISD::Wrapper, DL, PtrVT,
+                      DAG.getTargetExternalSymbol(BaseName, PtrVT));
+
+      SDValue SymAddr = DAG.getNode(
+          WebAssemblyISD::WrapperPIC, DL, VT,
+          DAG.getTargetGlobalAddress(GA->getGlobal(), DL, VT, GA->getOffset(),
+                                     OperandFlags));
+
+      return DAG.getNode(ISD::ADD, DL, VT, BaseAddr, SymAddr);
+    } else {
+      OperandFlags = WebAssemblyII::MO_GOT;
+    }
+  }
+
+  return DAG.getNode(WebAssemblyISD::Wrapper, DL, VT,
+                     DAG.getTargetGlobalAddress(GA->getGlobal(), DL, VT,
+                                                GA->getOffset(), OperandFlags));
 }
 
 SDValue
@@ -996,15 +1039,8 @@ WebAssemblyTargetLowering::LowerExternalSymbol(SDValue Op,
   EVT VT = Op.getValueType();
   assert(ES->getTargetFlags() == 0 &&
          "Unexpected target flags on generic ExternalSymbolSDNode");
-  // Set the TargetFlags to MO_SYMBOL_FUNCTION which indicates that this is a
-  // "function" symbol rather than a data symbol. We do this unconditionally
-  // even though we don't know anything about the symbol other than its name,
-  // because all external symbols used in target-independent SelectionDAG code
-  // are for functions.
-  return DAG.getNode(
-      WebAssemblyISD::Wrapper, DL, VT,
-      DAG.getTargetExternalSymbol(ES->getSymbol(), VT,
-                                  WebAssemblyII::MO_SYMBOL_FUNCTION));
+  return DAG.getNode(WebAssemblyISD::Wrapper, DL, VT,
+                     DAG.getTargetExternalSymbol(ES->getSymbol(), VT));
 }
 
 SDValue WebAssemblyTargetLowering::LowerJumpTable(SDValue Op,
@@ -1098,10 +1134,8 @@ SDValue WebAssemblyTargetLowering::LowerIntrinsic(SDValue Op,
     const TargetLowering &TLI = DAG.getTargetLoweringInfo();
     MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
     const char *SymName = MF.createExternalSymbolName("__cpp_exception");
-    SDValue SymNode =
-        DAG.getNode(WebAssemblyISD::Wrapper, DL, PtrVT,
-                    DAG.getTargetExternalSymbol(
-                        SymName, PtrVT, WebAssemblyII::MO_SYMBOL_EVENT));
+    SDValue SymNode = DAG.getNode(WebAssemblyISD::Wrapper, DL, PtrVT,
+                                  DAG.getTargetExternalSymbol(SymName, PtrVT));
     return DAG.getNode(WebAssemblyISD::THROW, DL,
                        MVT::Other, // outchain type
                        {

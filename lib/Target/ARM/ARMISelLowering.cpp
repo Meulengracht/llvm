@@ -2074,7 +2074,7 @@ ARMTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     auto *GV = cast<GlobalAddressSDNode>(Callee)->getGlobal();
     auto *BB = CLI.CS.getParent();
     bool PreferIndirect =
-        Subtarget->isThumb() && Subtarget->optForMinSize() &&
+        Subtarget->isThumb() && Subtarget->hasMinSize() &&
         count_if(GV->users(), [&BB](const User *U) {
           return isa<Instruction>(U) && cast<Instruction>(U)->getParent() == BB;
         }) > 2;
@@ -2146,7 +2146,7 @@ ARMTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       CallOpc = ARMISD::CALL_NOLINK;
     else if (doesNotRet && isDirect && Subtarget->hasRetAddrStack() &&
              // Emit regular call when code size is the priority
-             !Subtarget->optForMinSize())
+             !Subtarget->hasMinSize())
       // "mov lr, pc; b _foo" to avoid confusing the RSP
       CallOpc = ARMISD::CALL_NOLINK;
     else
@@ -7818,7 +7818,7 @@ ARMTargetLowering::BuildSDIVPow2(SDNode *N, const APInt &Divisor,
     return SDValue();
 
   const auto &ST = static_cast<const ARMSubtarget&>(DAG.getSubtarget());
-  const bool MinSize = ST.optForMinSize();
+  const bool MinSize = ST.hasMinSize();
   const bool HasDivide = ST.isThumb() ? ST.hasDivideInThumbMode()
                                       : ST.hasDivideInARMMode();
 
@@ -12866,15 +12866,21 @@ ARMTargetLowering::PerformCMOVCombine(SDNode *N, SelectionDAG &DAG) const {
   // On Thumb1, the DAG above may be further combined if z is a power of 2
   // (z == 2 ^ K).
   // CMOV (SUBS x, y), z, !=, (SUBS x, y):1 ->
-  //       merge t3, t4
-  // where t1 = (SUBCARRY (SUB x, y), z, 0)
-  //       t2 = (SUBCARRY (SUB x, y), t1:0, t1:1)
-  //       t3 = if K != 0 then (SHL t2:0, K) else t2:0
-  //       t4 = (SUB 1, t2:1)   [ we want a carry, not a borrow ]
+  // t1 = (USUBO (SUB x, y), 1)
+  // t2 = (SUBCARRY (SUB x, y), t1:0, t1:1)
+  // Result = if K != 0 then (SHL t2:0, K) else t2:0
+  //
+  // This also handles the special case of comparing against zero; it's
+  // essentially, the same pattern, except there's no SUBS:
+  // CMOV x, z, !=, (CMPZ x, 0) ->
+  // t1 = (USUBO x, 1)
+  // t2 = (SUBCARRY x, t1:0, t1:1)
+  // Result = if K != 0 then (SHL t2:0, K) else t2:0
   const APInt *TrueConst;
   if (Subtarget->isThumb1Only() && CC == ARMCC::NE &&
-      (FalseVal.getOpcode() == ARMISD::SUBS) &&
-      (FalseVal.getOperand(0) == LHS) && (FalseVal.getOperand(1) == RHS) &&
+      ((FalseVal.getOpcode() == ARMISD::SUBS &&
+        FalseVal.getOperand(0) == LHS && FalseVal.getOperand(1) == RHS) ||
+       (FalseVal == LHS && isNullConstant(RHS))) &&
       (TrueConst = isPowerOf2Constant(TrueVal))) {
     SDVTList VTs = DAG.getVTList(VT, MVT::i32);
     unsigned ShiftAmount = TrueConst->logBase2();
@@ -12882,10 +12888,6 @@ ARMTargetLowering::PerformCMOVCombine(SDNode *N, SelectionDAG &DAG) const {
       TrueVal = DAG.getConstant(1, dl, VT);
     SDValue Subc = DAG.getNode(ISD::USUBO, dl, VTs, FalseVal, TrueVal);
     Res = DAG.getNode(ISD::SUBCARRY, dl, VTs, FalseVal, Subc, Subc.getValue(1));
-    // Make it a carry, not a borrow.
-    SDValue Carry = DAG.getNode(
-        ISD::SUB, dl, VT, DAG.getConstant(1, dl, MVT::i32), Res.getValue(1));
-    Res = DAG.getNode(ISD::MERGE_VALUES, dl, VTs, Res, Carry);
 
     if (ShiftAmount)
       Res = DAG.getNode(ISD::SHL, dl, VT, Res,
@@ -14824,7 +14826,7 @@ bool ARMTargetLowering::isCheapToSpeculateCtlz() const {
 }
 
 bool ARMTargetLowering::shouldExpandShift(SelectionDAG &DAG, SDNode *N) const {
-  return !Subtarget->optForMinSize();
+  return !Subtarget->hasMinSize();
 }
 
 Value *ARMTargetLowering::emitLoadLinked(IRBuilder<> &Builder, Value *Addr,

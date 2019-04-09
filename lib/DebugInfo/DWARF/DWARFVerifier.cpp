@@ -178,21 +178,11 @@ unsigned DWARFVerifier::verifyUnitContents(DWARFUnit &Unit) {
     if (Die.getTag() == DW_TAG_null)
       continue;
 
-    bool HasTypeAttr = false;
     for (auto AttrValue : Die.attributes()) {
       NumUnitErrors += verifyDebugInfoAttribute(Die, AttrValue);
       NumUnitErrors += verifyDebugInfoForm(Die, AttrValue);
-      HasTypeAttr |= (AttrValue.Attr == DW_AT_type);
     }
 
-    if (!HasTypeAttr && (Die.getTag() == DW_TAG_formal_parameter ||
-                         Die.getTag() == DW_TAG_variable ||
-                         Die.getTag() == DW_TAG_array_type)) {
-      error() << "DIE with tag " << TagString(Die.getTag())
-              << " is missing type attribute:\n";
-      dump(Die) << '\n';
-      NumUnitErrors++;
-    }
     NumUnitErrors += verifyDebugInfoCallSite(Die);
   }
 
@@ -280,19 +270,12 @@ bool DWARFVerifier::handleDebugAbbrev() {
   OS << "Verifying .debug_abbrev...\n";
 
   const DWARFObject &DObj = DCtx.getDWARFObj();
-  bool noDebugAbbrev = DObj.getAbbrevSection().empty();
-  bool noDebugAbbrevDWO = DObj.getAbbrevDWOSection().empty();
-
-  if (noDebugAbbrev && noDebugAbbrevDWO) {
-    return true;
-  }
-
   unsigned NumErrors = 0;
-  if (!noDebugAbbrev)
+  if (!DObj.getAbbrevSection().empty())
     NumErrors += verifyAbbrevSection(DCtx.getDebugAbbrev());
-
-  if (!noDebugAbbrevDWO)
+  if (!DObj.getAbbrevDWOSection().empty())
     NumErrors += verifyAbbrevSection(DCtx.getDebugAbbrevDWO());
+
   return NumErrors == 0;
 }
 
@@ -628,7 +611,7 @@ unsigned DWARFVerifier::verifyDebugInfoForm(const DWARFDie &Die,
       dump(Die) << '\n';
       break;
     }
-    // Check that the index is within the bounds of the section. 
+    // Check that the index is within the bounds of the section.
     unsigned ItemSize = DieCU->getDwarfStringOffsetsByteSize();
     // Use a 64-bit type to calculate the offset to guard against overflow.
     uint64_t Offset =

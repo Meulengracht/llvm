@@ -710,46 +710,20 @@ static Value *simplifyX86movmsk(const IntrinsicInst &II,
   if (!ArgTy->isVectorTy())
     return nullptr;
 
-  if (auto *C = dyn_cast<Constant>(Arg)) {
-    // Extract signbits of the vector input and pack into integer result.
-    APInt Result(ResTy->getPrimitiveSizeInBits(), 0);
-    for (unsigned I = 0, E = ArgTy->getVectorNumElements(); I != E; ++I) {
-      auto *COp = C->getAggregateElement(I);
-      if (!COp)
-        return nullptr;
-      if (isa<UndefValue>(COp))
-        continue;
+  // Expand MOVMSK to compare/bitcast/zext:
+  // e.g. PMOVMSKB(v16i8 x):
+  // %cmp = icmp slt <16 x i8> %x, zeroinitializer
+  // %int = bitcast <16 x i1> %cmp to i16
+  // %res = zext i16 %int to i32
+  unsigned NumElts = ArgTy->getVectorNumElements();
+  Type *IntegerVecTy = VectorType::getInteger(cast<VectorType>(ArgTy));
+  Type *IntegerTy = Builder.getIntNTy(NumElts);
 
-      auto *CInt = dyn_cast<ConstantInt>(COp);
-      auto *CFp = dyn_cast<ConstantFP>(COp);
-      if (!CInt && !CFp)
-        return nullptr;
-
-      if ((CInt && CInt->isNegative()) || (CFp && CFp->isNegative()))
-        Result.setBit(I);
-    }
-    return Constant::getIntegerValue(ResTy, Result);
-  }
-
-  // Look for a sign-extended boolean source vector as the argument to this
-  // movmsk. If the argument is bitcast, look through that, but make sure the
-  // source of that bitcast is still a vector with the same number of elements.
-  // TODO: We can also convert a bitcast with wider elements, but that requires
-  // duplicating the bool source sign bits to match the number of elements
-  // expected by the movmsk call.
-  Arg = peekThroughBitcast(Arg);
-  Value *X;
-  if (Arg->getType()->isVectorTy() &&
-      Arg->getType()->getVectorNumElements() == ArgTy->getVectorNumElements() &&
-      match(Arg, m_SExt(m_Value(X))) && X->getType()->isIntOrIntVectorTy(1)) {
-    // call iM movmsk(sext <N x i1> X) --> zext (bitcast <N x i1> X to iN) to iM
-    unsigned NumElts = X->getType()->getVectorNumElements();
-    Type *ScalarTy = Type::getIntNTy(Arg->getContext(), NumElts);
-    Value *BC = Builder.CreateBitCast(X, ScalarTy);
-    return Builder.CreateZExtOrTrunc(BC, ResTy);
-  }
-
-  return nullptr;
+  Value *Res = Builder.CreateBitCast(Arg, IntegerVecTy);
+  Res = Builder.CreateICmpSLT(Res, Constant::getNullValue(IntegerVecTy));
+  Res = Builder.CreateBitCast(Res, IntegerTy);
+  Res = Builder.CreateZExtOrTrunc(Res, ResTy);
+  return Res;
 }
 
 static Value *simplifyX86addcarry(const IntrinsicInst &II,
@@ -1324,12 +1298,20 @@ static Instruction *foldCttzCtlz(IntrinsicInst &II, InstCombiner &IC) {
   assert((II.getIntrinsicID() == Intrinsic::cttz ||
           II.getIntrinsicID() == Intrinsic::ctlz) &&
          "Expected cttz or ctlz intrinsic");
+  bool IsTZ = II.getIntrinsicID() == Intrinsic::cttz;
   Value *Op0 = II.getArgOperand(0);
+  Value *X;
+  // ctlz(bitreverse(x)) -> cttz(x)
+  // cttz(bitreverse(x)) -> ctlz(x)
+  if (match(Op0, m_BitReverse(m_Value(X)))) {
+    Intrinsic::ID ID = IsTZ ? Intrinsic::ctlz : Intrinsic::cttz;
+    Function *F = Intrinsic::getDeclaration(II.getModule(), ID, II.getType());
+    return CallInst::Create(F, {X, II.getArgOperand(1)});
+  }
 
   KnownBits Known = IC.computeKnownBits(Op0, 0, &II);
 
   // Create a mask for bits above (ctlz) or below (cttz) the first known one.
-  bool IsTZ = II.getIntrinsicID() == Intrinsic::cttz;
   unsigned PossibleZeros = IsTZ ? Known.countMaxTrailingZeros()
                                 : Known.countMaxLeadingZeros();
   unsigned DefiniteZeros = IsTZ ? Known.countMinTrailingZeros()
@@ -1375,6 +1357,14 @@ static Instruction *foldCtpop(IntrinsicInst &II, InstCombiner &IC) {
   assert(II.getIntrinsicID() == Intrinsic::ctpop &&
          "Expected ctpop intrinsic");
   Value *Op0 = II.getArgOperand(0);
+  Value *X;
+  // ctpop(bitreverse(x)) -> ctpop(x)
+  // ctpop(bswap(x)) -> ctpop(x)
+  if (match(Op0, m_BitReverse(m_Value(X))) || match(Op0, m_BSwap(m_Value(X)))) {
+    II.setOperand(0, X);
+    return &II;
+  }
+
   // FIXME: Try to simplify vectors of integers.
   auto *IT = dyn_cast<IntegerType>(Op0->getType());
   if (!IT)

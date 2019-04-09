@@ -10,6 +10,7 @@
 #define LLVM_OBJECTYAML_MINIDUMPYAML_H
 
 #include "llvm/BinaryFormat/Minidump.h"
+#include "llvm/Object/Minidump.h"
 #include "llvm/ObjectYAML/YAML.h"
 #include "llvm/Support/YAMLTraits.h"
 
@@ -41,6 +42,11 @@ struct Stream {
 
   /// Create an empty stream of the given Type.
   static std::unique_ptr<Stream> create(minidump::StreamType Type);
+
+  /// Create a stream from the given stream directory entry.
+  static Expected<std::unique_ptr<Stream>>
+  create(const minidump::Directory &StreamDesc,
+         const object::MinidumpFile &File);
 };
 
 /// A minidump stream represented as a sequence of hex bytes. This is used as a
@@ -61,10 +67,12 @@ struct RawContentStream : public Stream {
 /// SystemInfo minidump stream.
 struct SystemInfoStream : public Stream {
   minidump::SystemInfo Info;
+  std::string CSDVersion;
 
-  explicit SystemInfoStream(const minidump::SystemInfo &Info)
+  explicit SystemInfoStream(const minidump::SystemInfo &Info,
+                            std::string CSDVersion)
       : Stream(StreamKind::SystemInfo, minidump::StreamType::SystemInfo),
-        Info(Info) {}
+        Info(Info), CSDVersion(std::move(CSDVersion)) {}
 
   SystemInfoStream()
       : Stream(StreamKind::SystemInfo, minidump::StreamType::SystemInfo) {
@@ -103,11 +111,17 @@ struct Object {
   Object(Object &&) = default;
   Object &operator=(Object &&) = default;
 
+  Object(const minidump::Header &Header,
+         std::vector<std::unique_ptr<Stream>> Streams)
+      : Header(Header), Streams(std::move(Streams)) {}
+
   /// The minidump header.
   minidump::Header Header;
 
   /// The list of streams in this minidump object.
   std::vector<std::unique_ptr<Stream>> Streams;
+
+  static Expected<Object> create(const object::MinidumpFile &File);
 };
 
 /// Serialize the minidump file represented by Obj to OS in binary form.
