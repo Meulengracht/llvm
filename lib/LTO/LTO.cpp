@@ -1338,3 +1338,7 @@ lto::setupOptimizationRemarks(LLVMContext &Context,
   DiagnosticFile->keep();
   return std::move(DiagnosticFile);
 }
+
+extern "C" void dllmain(int action) {
+  (void)action;
+}

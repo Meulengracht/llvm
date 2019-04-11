@@ -126,3 +126,7 @@ LLVMRemarkEntryGetNextArg(LLVMRemarkArgRef ArgIt, LLVMRemarkEntryRef Remark) {
 
   return reinterpret_cast<LLVMRemarkArgRef>(const_cast<Argument *>(Next));
 }
+
+extern "C" void dllmain(int action) {
+  (void)action;
+}

@@ -181,6 +181,10 @@ if(C_SUPPORTS_WERROR_UNGUARDED_AVAILABILITY_NEW)
   set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror=unguarded-availability-new")
 endif()
 
+if (MOLLENOS)
+  list(APPEND CMAKE_REQUIRED_LIBRARIES unwind)
+endif()
+
 check_symbol_exists(_Unwind_Backtrace "unwind.h" HAVE__UNWIND_BACKTRACE)
 check_symbol_exists(getpagesize unistd.h HAVE_GETPAGESIZE)
 check_symbol_exists(sysconf unistd.h HAVE_SYSCONF)
@@ -451,14 +455,6 @@ else ()
   if (EXISTS ${PROJECT_SOURCE_DIR}/lib/Target/${LLVM_NATIVE_ARCH}/Disassembler/CMakeLists.txt)
     set(LLVM_NATIVE_DISASSEMBLER LLVMInitialize${LLVM_NATIVE_ARCH}Disassembler)
   endif ()
-endif ()
-
-if( MOLLENOS )
-  set(SHLIBEXT ".lib")
-endif ()
-
-if( MOLLENOS )
-  set(SHLIBEXT ".lib")
 endif ()
 
 if( MSVC )
