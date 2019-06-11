@@ -181,7 +181,7 @@ static const int KillSigs[] = {
 
 static std::atomic<unsigned> NumRegisteredSignals = ATOMIC_VAR_INIT(0);
 static struct {
-  __signalhandler_t SA;
+  __sa_handler_t SA;
   int SigNo;
 } RegisteredSignalInfo[array_lengthof(IntSigs) + array_lengthof(KillSigs)];
 

@@ -278,7 +278,7 @@ static void uninstallExceptionOrSignalHandlers() {
 static const int Signals[] =
     { SIGABRT, SIGBUS, SIGFPE, SIGILL, SIGSEGV, SIGTRAP };
 static const unsigned NumSignals = array_lengthof(Signals);
-static __signalhandler_t PrevActions[NumSignals];
+static __sa_handler_t PrevActions[NumSignals];
 
 static void CrashRecoverySignalHandler(int Signal) {
   // Lookup the current thread local recovery object.
