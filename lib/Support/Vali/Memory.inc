@@ -78,7 +78,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   Protect |= getValiProtectionFlags(Flags);
   void *PA = NULL;
   if (::MemoryAllocate(reinterpret_cast<void*>(Start),
-                       NumBlocks*Granularity, Protect, &PA, NULL) != OsSuccess) {
+                       NumBlocks*Granularity, Protect, &PA) != OsSuccess) {
     return MemoryBlock();
   }
 
