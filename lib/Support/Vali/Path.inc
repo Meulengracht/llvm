@@ -196,7 +196,7 @@ std::error_code access(const Twine &Path, AccessMode Mode) {
     OsFileDescriptor_t Descriptor;
     SmallString<256> path_storage;
     StringRef f = Path.toNullTerminatedStringRef(path_storage);
-    if (GetFileInformationFromPath(f.begin(), &Descriptor) != FsOk) {
+    if (GetFileInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
         return errc::no_such_file_or_directory;
     }
     if (Mode == AccessMode::Write && !(Descriptor.Permissions & FILE_PERMISSION_WRITE)) {
@@ -258,7 +258,7 @@ std::error_code status(const Twine &path, file_status &result, bool Follow) {
     OsFileDescriptor_t Descriptor;
     SmallString<256> path_storage;
     StringRef f = path.toNullTerminatedStringRef(path_storage);
-    if (GetFileInformationFromPath(f.begin(), &Descriptor) != FsOk) {
+    if (GetFileInformationFromPath(f.begin(), &Descriptor) != OsSuccess) {
         return errc::no_such_file_or_directory;
     }
     result = file_status(
@@ -271,7 +271,7 @@ std::error_code status(const Twine &path, file_status &result, bool Follow) {
 // Implemented
 std::error_code status(int FD, file_status &Result) {
     OsFileDescriptor_t Descriptor;
-    if (GetFileInformationFromFd(FD, &Descriptor) != FsOk) {
+    if (GetFileInformationFromFd(FD, &Descriptor) != OsSuccess) {
         return errc::no_such_file_or_directory;
     }
     Result = file_status(

@@ -10,7 +10,7 @@
 // This file provides the Vali specific implementation of DynamicLibrary.
 //
 //===----------------------------------------------------------------------===//
-#include <os/services/sharedobject.h>
+#include <os/sharedobject.h>
 
 DynamicLibrary::HandleSet::~HandleSet() {
   for (void *Handle : llvm::reverse(Handles))

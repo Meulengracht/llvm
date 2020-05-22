@@ -24,7 +24,7 @@
 #elif defined(_WIN32)
 #include <windows.h>
 #elif LLVM_ON_VALI
-#include <os/services/process.h>
+#include <os/process.h>
 #endif
 
 using namespace llvm;

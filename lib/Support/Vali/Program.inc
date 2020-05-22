@@ -21,7 +21,7 @@
 #include <io.h>
 #include <malloc.h>
 #include <os/mollenos.h>
-#include <os/services/process.h>
+#include <os/process.h>
 
 namespace llvm {
 
@@ -142,8 +142,8 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
   // process.  We have to concatenate them all, while quoting the args that
   // have embedded spaces (or are empty).
   std::string Command = flattenArgs(Args);
-  PI.Pid = ProcessSpawn(Program.begin(), Command.c_str());
-  if (PI.Pid == UUID_INVALID) {
+  OsStatus_t status = ProcessSpawn(Program.begin(), Command.c_str(), &PI.Pid);
+  if (status != OsSuccess) {
       return false;
   }
   return true;
