@@ -237,12 +237,12 @@ std::error_code equivalent(const Twine &A, const Twine &B, bool &result) {
 }
 
 // Implemented
-static file_type file_type_from_flags(Flags_t Flags) {
+static file_type file_type_from_flags(unsigned int Flags) {
     return (Flags & FILE_FLAG_DIRECTORY) ? file_type::directory_file : file_type::regular_file;
 }
 
 // Implemented
-static perms perms_from_flags(Flags_t Permissions) {
+static perms perms_from_flags(unsigned int Permissions) {
     perms result;
     if (Permissions & FILE_PERMISSION_READ) {
         result = all_read | all_exe;

@@ -19,8 +19,8 @@
 
 namespace {
 
-Flags_t getValiProtectionFlags(unsigned Flags) {
-    Flags_t Result = 0;
+unsigned int getValiProtectionFlags(unsigned int Flags) {
+    unsigned int Result = 0;
     if (Flags & llvm::sys::Memory::MF_READ) {
         Result |= MEMORY_READ;
     }
@@ -63,7 +63,7 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   static size_t DefaultGranularity = getPageSize();
 
   size_t Granularity     = DefaultGranularity;
-  Flags_t Protect        = MEMORY_COMMIT;
+  unsigned int Protect   = MEMORY_COMMIT;
   const size_t NumBlocks = (NumBytes + Granularity - 1) / Granularity;
 
   uintptr_t Start = NearBlock ? reinterpret_cast<uintptr_t>(NearBlock->base()) +
@@ -111,8 +111,8 @@ MemoryBlock Memory::allocateMappedMemory(size_t NumBytes,
   if (M.Address == 0 || M.Size == 0)
     return std::error_code();
 
-  Flags_t Protect = getValiProtectionFlags(Flags);
-  Flags_t Previous = 0;
+  unsigned int Protect = getValiProtectionFlags(Flags);
+  unsigned int Previous = 0;
   if (MemoryProtect(M.Address, M.Size, Protect, &Previous) != OsSuccess)
     return std::error_code();
 
