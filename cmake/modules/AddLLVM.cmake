@@ -528,6 +528,10 @@ function(llvm_add_library name)
     if (LLVM_EXPORTED_SYMBOL_FILE)
       add_llvm_symbol_exports( ${name} ${LLVM_EXPORTED_SYMBOL_FILE} )
     endif()
+
+    if(${LLVM_BOOTSTRAP_RUNTIME})
+      target_link_libraries(${name} PRIVATE unwind_shared cxxabi_static cxx_static)
+    endif()
   endif()
 
   if(ARG_SHARED AND UNIX)
@@ -784,6 +788,9 @@ macro(add_llvm_executable name)
     # executable must be linked with it in order to provide consistent
     # API for all shared libaries loaded by this executable.
     target_link_libraries(${name} PRIVATE ${LLVM_PTHREAD_LIB})
+  endif()
+  if(${LLVM_BOOTSTRAP_RUNTIME})
+    target_link_libraries(${name} PRIVATE unwind_shared cxxabi_static cxx_static)
   endif()
 
   llvm_codesign(${name} ENTITLEMENTS ${ARG_ENTITLEMENTS})

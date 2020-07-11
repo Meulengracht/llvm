@@ -136,11 +136,11 @@ if (LLVM_ENABLE_PROJECTS_USED OR NOT LLVM_ENABLE_PROJECTS STREQUAL "")
     if ("${proj}" IN_LIST LLVM_ENABLE_PROJECTS)
       message(STATUS "${proj} project is enabled")
       set(SHOULD_ENABLE_PROJECT TRUE)
-      set(PROJ_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../${proj}")
+      set(PROJ_DIR "${CMAKE_CURRENT_SOURCE_DIR}/projects/${proj}")
       if(NOT EXISTS "${PROJ_DIR}" OR NOT IS_DIRECTORY "${PROJ_DIR}")
         message(FATAL_ERROR "LLVM_ENABLE_PROJECTS requests ${proj} but directory not found: ${PROJ_DIR}")
       endif()
-      set(LLVM_EXTERNAL_${upper_proj}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../${proj}" CACHE STRING "")
+      set(LLVM_EXTERNAL_${upper_proj}_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/projects/${proj}" CACHE STRING "")
     else()
       message(STATUS "${proj} project is disabled")
       set(SHOULD_ENABLE_PROJECT FALSE)
@@ -563,6 +563,8 @@ option(LLVM_BUILD_RUNTIMES
 
 option(LLVM_BUILD_RUNTIME
   "Build the LLVM runtime libraries." ON)
+option(LLVM_BOOTSTRAP_RUNTIME
+    "Build and link against the LLVM runtime libraries." OFF)
 option(LLVM_BUILD_EXAMPLES
   "Build the LLVM example programs. If OFF, just generate build targets." OFF)
 option(LLVM_INCLUDE_EXAMPLES "Generate build targets for the LLVM examples" ON)

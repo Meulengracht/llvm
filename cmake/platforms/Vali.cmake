@@ -14,7 +14,7 @@
 #
 
 # Setup environment stuff for cmake configuration
-set(CMAKE_SYSTEM_NAME Vali)
+set(CMAKE_SYSTEM_NAME vali-cross)
 set(CMAKE_CROSSCOMPILING OFF CACHE BOOL "")
 set(CMAKE_C_COMPILER "$ENV{CROSS}/bin/clang" CACHE FILEPATH "")
 set(CMAKE_CXX_COMPILER "$ENV{CROSS}/bin/clang++" CACHE FILEPATH "")
