@@ -53,7 +53,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
       message(FATAL_ERROR "Host Clang must have at least -fms-compatibility-version=${MSVC_MIN}, your version is ${CMAKE_CXX_COMPILER_VERSION}.")
     endif()
     set(CLANG_CL 1)
-  elseif(NOT LLVM_ENABLE_LIBCXX)
+  elseif(NOT LLVM_ENABLE_LIBCXX AND NOT LLVM_BOOTSTRAP_RUNTIME)
     # Test that we aren't using too old of a version of libstdc++.
     set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
     set(OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})

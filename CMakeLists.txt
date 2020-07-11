@@ -861,6 +861,10 @@ if(APPLE AND DARWIN_LTO_LIBRARY)
     "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-lto_library -Wl,${DARWIN_LTO_LIBRARY}")
 endif()
 
+if (LLVM_BOOTSTRAP_RUNTIME)
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/projects/libcxx/include")
+endif()
+
 # Work around a broken bfd ld behavior. When linking a binary with a
 # foo.so library, it will try to find any library that foo.so uses and
 # check its symbols. This is wasteful (the check was done when foo.so
