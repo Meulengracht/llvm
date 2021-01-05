@@ -1241,6 +1241,13 @@ static int computeHostNumPhysicalCores() {
   }
   return count;
 }
+#elif defined(MOLLENOS)
+#include <os/mollenos.h>
+static int computeHostNumPhysicalCores() {
+  SystemDescriptor_t descriptor;
+  SystemQuery(&descriptor);
+  return (int)descriptor.NumberOfActiveCores;
+}
 #else
 // On other systems, return -1 to indicate unknown.
 static int computeHostNumPhysicalCores() { return -1; }
