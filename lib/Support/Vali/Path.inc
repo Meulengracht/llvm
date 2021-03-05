@@ -299,7 +299,7 @@ std::error_code mapped_file_region::init(int FD, uint64_t Offset, mapmode Mode) 
   int Flags = (Mode == readonly) ? FILE_MAPPING_READ : (FILE_MAPPING_READ | FILE_MAPPING_WRITE);
   this->Mode = Mode;
   assert(Size != 0);
-  if (::CreateFileMapping(FD, Flags, Offset, Size, &Mapping, &FileHandle) != OsSuccess)
+  if (::CreateFileMapping(FD, Flags, Offset, Size, &Mapping) != OsSuccess)
     return std::error_code(errno, std::generic_category());
   return std::error_code();
 }
@@ -316,7 +316,7 @@ mapped_file_region::mapped_file_region(int fd, mapmode mode, size_t length,
 // Implemented
 mapped_file_region::~mapped_file_region() {
   if (Mapping)
-    ::DestroyFileMapping(FileHandle);
+    ::DestroyFileMapping(Mapping);
 }
 
 // Implemented
